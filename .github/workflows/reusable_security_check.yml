@@ -1,0 +1,22 @@
+name: Leaked Secrets Scan
+on:
+  workflow_call:
+    inputs:
+      path:
+        default: ./
+        required: false
+        type: string
+jobs:
+  TruffleHog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@v3.59.0
+        with:
+          path: ${{ inputs.path }}
+          extra_args: --debug --only-verified
