@@ -1,0 +1,5 @@
+name: Security Check
+on: [push]
+jobs:
+  security-check:
+    uses: gpo/gpo/.github/workflows/reusable_security_check.yml@main
