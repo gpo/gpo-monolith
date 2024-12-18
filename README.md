@@ -1,5 +1,3 @@
-# Green Party of Ontario
-
 ### Adding access to Google Drive
 1. Go to the Google Cloud Console. https://console.cloud.google.com/
 1. Create a new project or select an existing project.
