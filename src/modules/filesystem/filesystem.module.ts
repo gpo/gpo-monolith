@@ -1,9 +1,8 @@
-import {Module} from '@nestjs/common';
-import {FilesystemService} from "./filesystem.service";
+import { Module } from '@nestjs/common';
+import { FilesystemService } from './filesystem.service';
 
 @Module({
-    providers: [FilesystemService],
-    exports: [FilesystemService],
+  providers: [FilesystemService],
+  exports: [FilesystemService],
 })
-export class FilesystemModule {
-}
+export class FilesystemModule {}
