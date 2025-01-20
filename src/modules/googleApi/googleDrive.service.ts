@@ -1,6 +1,6 @@
 import {google} from "googleapis";
 import {GoogleAuthService} from "./googleAuth.service";
-import fs from "fs";
+import * as fs from "fs";
 import {Injectable, Logger} from "@nestjs/common";
 
 @Injectable()
@@ -31,7 +31,7 @@ export class GoogleDriveService {
             fields: "id",
         });
 
-        this.logger.debug("File uploaded successfully! File ID:", response.data.id);
+        this.logger.debug("File uploaded successfully! File ID: " + response.data.id);
         return response.data.id;
     }
 }

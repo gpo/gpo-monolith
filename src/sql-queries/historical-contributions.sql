@@ -1,7 +1,7 @@
 -- Set max exec time
-SET max_statement_time = 0;
+-- SET max_statement_time = 0;
 
-use gpo_secure_crm;
+-- use gpo_secure_crm;
 
 WITH
     -- Filter contributions (completed, non-G&S, Agency Contribution, Event Fee, Member Dues, Other Non-deductible, or Party Contribution)

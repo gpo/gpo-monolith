@@ -4,7 +4,7 @@ import {DatabaseModule} from './modules/database/database.module';
 import {ConfigModule} from "@nestjs/config";
 
 @Module({
-    imports: [awConfigModule.forRoot({
+    imports: [ConfigModule.forRoot({
         isGlobal: true, // Makes the config available globally
     }), TasksModule, DatabaseModule,],
 })

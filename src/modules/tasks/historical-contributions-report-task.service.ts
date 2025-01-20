@@ -1,4 +1,3 @@
-import fs from "fs";
 import {Injectable, Logger} from "@nestjs/common";
 import {GoogleDriveService} from "../googleApi/googleDrive.service";
 import {DatabaseService} from "../database/database.service";
@@ -23,8 +22,8 @@ export class HistoricalContributionsReportTask {
 
         const sqlQuery = await this.filesystem.readSqlFile(this.SQL_QUERY_FILENAME);
         const rows = await this.db.query(sqlQuery);
-        const writeStream = fs.createWriteStream(filePath);
-        await this.csvService.exportQueryToCsv(rows, writeStream);
+        const writeStream = this.filesystem.createTempWriteStream(filePath);
+        await this.csvService.exportQueryToCsv((<object[]>rows), writeStream);
         await this.googleDrive.uploadFile(filePath, folderId);
     }
 

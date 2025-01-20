@@ -2,67 +2,102 @@ import {Test, TestingModule} from '@nestjs/testing';
 import {INestApplication} from '@nestjs/common';
 import {AppModule} from '../src/app.module';
 import {HistoricalContributionsReportTask} from "../src/modules/tasks/historical-contributions-report-task.service";
-import {ConfigModule, ConfigService} from "@nestjs/config";
+import {Pool, QueryResult} from "mysql2/promise";
+import {drive_v3, google} from "googleapis";
+import {OAuth2Client} from "google-auth-library/build/src/auth/oauth2client";
+import * as fs from "node:fs";
+import * as readline from "node:readline";
+import {Interface} from "readline";
 
-describe('AppController (e2e)', () => {
+
+describe('App (e2e)', () => {
     let app: INestApplication;
+    let pool: Pool;
+    let drive: drive_v3.Drive;
 
-    beforeEach(async () => {
-        // const mockConfigService = {
-        //     get: jest.fn((key: string) => {
-        //         switch (key) {
-        //             case `SQL_FILES_PATH`:
-        //                 return 'src/sql-queries';
-        //         }
-        //     }),
-        // };
-        // const moduleFixture: TestingModule = await Test.createTestingModule({
-        //     imports: [AppModule],
-        // })
-        //     .overrideModule(ConfigModule)
-        //     .useModule(ConfigModule.forRoot({
-        //         isGlobal: true,
-        //         load: [() => ({
-        //             SQL_FILES_PATH: 'src/sql-queries',
-        //         })],
-        //     }))
-        //     .compile();
-        //
-        // app = moduleFixture.createNestApplication();
-        // await app.init();
+    const credentialsJson = JSON.stringify({
+        installed: {
+            client_secret: '',
+            client_id: '',
+            redirect_uris: ''
+        }
     });
 
-    it('Should run task', async () => {
-
+    beforeEach(async () => {
+        //Given
         const moduleFixture: TestingModule = await Test.createTestingModule({
             imports: [AppModule],
-        })
-            .overrideModule(ConfigModule)
-            .useModule(await ConfigModule.forRoot({
-                isGlobal: true,
-                load: [() => ({
-                    SQL_FILES_PATH: 'src/sql-queries',
-                    sqlFilesPath: 'src/sql-queries'
-                })],
-                ignoreEnvFile: true,
-                ignoreEnvVars:  true,
-                cache: false
-            }))
-            .compile();
+
+        }).compile();
 
         app = moduleFixture.createNestApplication();
         await app.init();
+        pool = moduleFixture.get('POOL');
 
-        const configService = app.get(ConfigService);
-        // const configService = await app.resolve(ConfigService);
+        const mockQueryResult = [{id: 1, name: 'test1'}];
 
-        // const sqlFilesPath = configService.get<string>('SQL_FILES_PATH');
-        // expect(sqlFilesPath).toBe('src/sql-queries');
+        jest.spyOn(pool, 'query').mockResolvedValue([(<QueryResult>mockQueryResult), null]);
 
-        const sqlFilesPath = configService.get<string>('sqlFilesPath');
-        expect(sqlFilesPath).toBe('src/sql-queries');
+        drive = {
+            files: {
+                create: jest.fn().mockResolvedValue({data: {id: 'mockFileId'}})
+            } as Partial<drive_v3.Resource$Files> as drive_v3.Resource$Files
+        } as drive_v3.Drive;
+        jest.spyOn(google, 'drive').mockImplementation(() => drive);
 
-        const task = app.get(HistoricalContributionsReportTask);
-        return await task.execute();
+        const googleOAuth2 = {
+            setCredentials: jest.fn(),
+            generateAuthUrl: jest.fn().mockReturnValue('mockAuthUrl'),
+            getToken: jest.fn().mockResolvedValue({tokens: {}})
+        } as Partial<OAuth2Client> as OAuth2Client;
+        jest.spyOn(google.auth, 'OAuth2').mockImplementation(() => googleOAuth2);
+
+        jest.spyOn(readline, 'createInterface').mockReturnValue({
+            question: (_query: string, callback: (answer: string) => void) => {
+                callback('mock-auth-code');
+                return this;
+            },
+            close: jest.fn()
+        } as Partial<Interface> as Interface);
+    });
+
+    it('Should run task when there is token file', async () => {
+        //Given
+        jest.spyOn(fs.promises, 'readFile').mockImplementation((path: string) => {
+            const fileContents = {
+                'credentials.json': credentialsJson,
+                'token.json': {},
+                'src/sql-queries/historical-contributions.sql': 'SELECT * FROM users'
+            };
+            return Promise.resolve(JSON.stringify(fileContents[path] ?? Promise.reject(new Error('File not found'))));
+        });
+        //When
+        await app.get(HistoricalContributionsReportTask).execute();
+
+        //Then
+        expect(pool.query).toHaveBeenCalled();
+        expect(drive.files.create).toHaveBeenCalled();
+    });
+
+    it('Should authenticate and run task when there is no token file', async () => {
+        //Given
+        jest.spyOn(fs.promises, 'readFile').mockImplementation((path: string) => {
+            const fileContents = {
+                'credentials.json': credentialsJson,
+                'src/sql-queries/historical-contributions.sql': 'SELECT * FROM users'
+            };
+            return Promise.resolve(fileContents[path]) ?? Promise.reject(new Error('File not found'));
+        });
+        //When
+        await app.get(HistoricalContributionsReportTask).execute();
+
+        //Then
+        expect(pool.query).toHaveBeenCalled();
+        expect(drive.files.create).toHaveBeenCalled();
+    });
+
+    afterEach(async () => {
+        await app.close();
+        jest.clearAllMocks();
     });
 });

@@ -1,5 +1,4 @@
 import {google} from "googleapis";
-import fs from "fs";
 import {Injectable, Logger} from "@nestjs/common";
 import * as readline from "node:readline";
 import * as process from "node:process";
@@ -16,7 +15,7 @@ export class GoogleAuthService {
     }
 
     public async authenticate() {
-        const credentials = JSON.parse(fs.readFileSync("credentials.json", "utf-8"));
+        const credentials = JSON.parse(await this.filesystem.readWorkdirFile("credentials.json"));
         const {client_secret, client_id, redirect_uris} = credentials.installed;
         const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
 
