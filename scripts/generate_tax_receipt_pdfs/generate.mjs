@@ -58,7 +58,7 @@ createPDF().catch(console.error);
 
 function drawRow(position, newPage, row, width, height) {
     newPage.drawText(
-        `Issue Date: 2025-01-31
+        `Issue Date: ${row.Receipt_Issuance_Date}
 Received on: ${row.Acceptance_Date}
 Eligible Amount: $${row.Contribution_Amount}
 Contribution Type: ${row.Contribution_Type === 'MO' ? 'Monetary' : 'Goods and Services'}
