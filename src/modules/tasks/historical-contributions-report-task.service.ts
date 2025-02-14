@@ -3,20 +3,26 @@ import {GoogleDriveService} from "../googleApi/googleDrive.service";
 import {DatabaseService} from "../database/database.service";
 import {FilesystemService} from "../filesystem/filesystem.service";
 import {CsvService} from "../csv/csv.service";
+import { SlackService } from "../slack/slack.service";
 
 @Injectable()
 export class HistoricalContributionsReportTask {
     private readonly logger = new Logger(HistoricalContributionsReportTask.name);
 
 
-    constructor(private readonly googleDrive: GoogleDriveService, private readonly db: DatabaseService,
-                private readonly filesystem: FilesystemService, private readonly csvService: CsvService) {
-    }
+    constructor(
+        private readonly googleDrive: GoogleDriveService,
+        private readonly db: DatabaseService,
+        private readonly filesystem: FilesystemService,
+        private readonly csvService: CsvService,
+        private readonly slackService: SlackService,
+    ) {}
 
     private readonly SQL_QUERY_FILENAME = "historical-contributions.sql";
 
     public async execute(): Promise<void> {
         this.logger.debug("Executing the Job...");
+        await this.slackService.sendMessage('#dev-infra', 'This is a scheduled message from NestJS!');
         const filePath = "testfile.csv";
         const folderId = "1wWN4940ZG0lUTCK2nCDIzNhn7xZ5N5RP"; // Replace with Google Drive folder ID
 
