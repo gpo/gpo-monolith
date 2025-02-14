@@ -22,7 +22,6 @@ export class HistoricalContributionsReportTask {
 
     public async execute(): Promise<void> {
         this.logger.debug("Executing the Job...");
-        await this.slackService.sendMessage('#dev-infra', 'This is a scheduled message from NestJS!');
         const filePath = "testfile.csv";
         const folderId = "1wWN4940ZG0lUTCK2nCDIzNhn7xZ5N5RP"; // Replace with Google Drive folder ID
 
@@ -31,6 +30,8 @@ export class HistoricalContributionsReportTask {
         const writeStream = this.filesystem.createTempWriteStream(filePath);
         await this.csvService.exportQueryToCsv((<object[]>rows), writeStream);
         await this.googleDrive.uploadFile(filePath, folderId);
+        // TODO: #data-notifications needs to be switched out between staging and prod
+        await this.slackService.sendMessage('#data-notifications', 'The Historical Contributions data has been updated. You can find the updated file here: ');
     }
 
 }
