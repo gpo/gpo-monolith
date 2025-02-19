@@ -18,7 +18,7 @@ export class HistoricalContributionsReportTask {
     public async execute(): Promise<void> {
         this.logger.debug("Executing the Job...");
         const filePath = "testfile.csv";
-        const folderId = "1wWN4940ZG0lUTCK2nCDIzNhn7xZ5N5RP"; // Replace with Google Drive folder ID
+        const folderId = "1rNQFtVRQ8hT67H524HSvpCIe6YRYkGll"; // Replace with Google Drive folder ID
 
         const sqlQuery = await this.filesystem.readSqlFile(this.SQL_QUERY_FILENAME);
         const rows = await this.db.query(sqlQuery);
