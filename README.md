@@ -1,5 +1,5 @@
 ![Monolith](docs/readme-images/monolith.png)
-# Green Party of Ontario Monolith
+# The Green Party of Ontario Monolith
 
 ## Description
 
