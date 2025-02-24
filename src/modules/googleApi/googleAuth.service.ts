@@ -15,45 +15,15 @@ export class GoogleAuthService {
     }
 
     public async authenticate() {
-        const credentials = JSON.parse(await this.filesystem.readWorkdirFile("credentials.json"));
-        const {client_secret, client_id, redirect_uris} = credentials.installed;
-        const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
-
-        // Check if we have a previously stored token
-        const token = await this.filesystem.tryReadingTokenFile();
-        if (token) {
-            this.logger.debug("Reusing existing token");
-            oAuth2Client.setCredentials(JSON.parse(token));
-            return oAuth2Client;
-        }
-
-        // Generate a new token if not available
-        const authUrl = oAuth2Client.generateAuthUrl({
-            access_type: "offline",
-            scope: this.SCOPES,
-        });
-        this.logger.warn("Authorize this app by visiting this URL:", authUrl);
-
-        const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
+        const keyFile = await this.filesystem.readWorkdirFile("credentials.json");
+        const auth = new google.auth.GoogleAuth({
+            keyFile,
+            scopes: this.SCOPES,
         });
 
-        const getAccessToken = () =>
-            new Promise<string>((resolve) =>
-                rl.question("Enter the code from that page here: ", (code) => {
-                    rl.close();
-                    resolve(code);
-                })
-            );
+        const authClient = await auth.getClient();
+        this.logger.debug("Authenticated using service account");
 
-        const code = await getAccessToken();
-        const tokenResponse = await oAuth2Client.getToken(code);
-        oAuth2Client.setCredentials(tokenResponse.tokens);
-
-        // Save the token for future use
-        await this.filesystem.writeTokenFile(JSON.stringify(tokenResponse.tokens));
-
-        return oAuth2Client;
+        return authClient;
     }
 }
