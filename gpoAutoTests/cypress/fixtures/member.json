@@ -1,26 +1,29 @@
 { 
-    "first_name" : "John", 
-    "last_name" : "Test",
-    "email": "test@test.test",
-    "street": "unexisted 12",
-    "city": "Toronto",
-    "postal_code": "N2G0C8",
-    "one_year_card_number": "5111111111111118",
-    "one_year_expected_card_number": "************1118",
-    "three_years_card_number": "4222222222222220",
-    "three_years_expected_card_number": "************2220",
-    "security_code": "234",
-    "expiration_month": "Dec",
-    "expiration_year": "2028",
-    "expected_expiration_date": "December 2028",
-    "billing_first_name": "billing john",
-    "billing_middle_name": "billing middle",
-    "billing_last_name": "billing test",
-    "billing_street": "billing street 12",
-    "billing_city": "Waterloo",
-    "billing_country": "Canada",
-    "expected_billing_country": "CA",
-    "expected_billing_state": "ON",
-    "billling_state": "Ontario",
-    "billing_postal_code": "N3G0C8"
+    "personalInfo": {
+        "firstName" : "John", 
+        "lastName" : "Test",
+        "email": "test@test.test",
+        "street": "unexisted 12",
+        "city": "Toronto",
+        "postalCode": "N2G0C8"
+    },
+    "card": {
+        "oneYearCardNumber": "5111111111111118",
+        "threeYearsCardNumber": "4222222222222220",
+        "securityCode": "234",
+        "expirationMonth": "Dec",
+        "expirationYear": "2028",
+        "expectedExpirationDate": "December 2028"
+    },
+    "billingInfo" : {
+        "firstName": "billing john",
+        "lastName": "billing test",
+        "street": "billing street 12",
+        "city": "Waterloo",
+        "country": "Canada",
+        "expectedCountry": "CA",
+        "state": "Ontario",
+        "expectedState": "ON",
+        "postalCode": "N3G0C6"
+    }
 }  

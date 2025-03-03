@@ -8,9 +8,6 @@ get logo() {return cy.get('img[alt="Green Party of Ontario Logo"]')}
 get successfulSubscription() {return cy.contains('You have been subscribed to our newsletter')}
 get becomeMemberMenuItem() {return cy.contains('Become a Member')}
 
-public logoIsVisible() {
-    this.logo.should("be.visible")
-}
 
 public becomeMemberClick() {
     this.becomeMemberMenuItem.click()
@@ -29,10 +26,6 @@ public join(email: string, postalCode: string) {
     this.emailFieldFooter.type(email)
     this.postalCodeFooter.type(postalCode)
     this.joinButton.click()
-}
-
-public subscriptionSuccessful() {
-    this.successfulSubscription.should('be.visible')
 }
 }
 

@@ -1,4 +1,5 @@
-class JoinPartyPersonalInfoScreen {
+import { PersonalInfo } from "../tests/join.party.smoke.tests"
+class PersonalInfoTabComponent {
     private get firstName() {return cy.get('#first_name')}
     private get lastName() {return cy.get('#last_name')}
     private get email() {return cy.get('#email-Primary')}
@@ -37,14 +38,14 @@ class JoinPartyPersonalInfoScreen {
         this.postalCode.click().clear()
     }
 
-    public fillPersonalInfo(firstName: string, lastName: string, email:string, street:string, city:string, postalCode:string) {
-        this.firstName.click().clear().type(firstName);
-        this.lastName.click().clear().type(lastName)
-        this.email.click().clear().type(email)
-        this.street.click().clear().type(street)
-        this.city.click().clear().type(city)
-        this.postalCode.click().clear().type(postalCode)
+    public enterPersonalInfo(personalInfo: PersonalInfo) {
+        this.firstName.click().clear().type(personalInfo.firstName);
+        this.lastName.click().clear().type(personalInfo.lastName)
+        this.email.click().clear().type(personalInfo.email)
+        this.street.click().clear().type(personalInfo.street)
+        this.city.click().clear().type(personalInfo.city)
+        this.postalCode.click().clear().type(personalInfo.postalCode)
     }
 }
 
-export const personalInfoScreen: JoinPartyPersonalInfoScreen = new JoinPartyPersonalInfoScreen()
+export const personalInfoTab: PersonalInfoTabComponent = new PersonalInfoTabComponent()

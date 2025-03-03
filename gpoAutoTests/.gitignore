@@ -1,6 +1,7 @@
 *.iml
 .idea/
 credentials.json
+/screenshots
 
 # compiled output
 /dist
