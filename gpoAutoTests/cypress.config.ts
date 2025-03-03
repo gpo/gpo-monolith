@@ -5,6 +5,7 @@ export default defineConfig({
     baseUrl: 'https://staging.gpo.ca/',
     'testIsolation': false,
     'watchForFileChanges': false,
+    // eslint-disable-next-line  @typescript-eslint/no-unused-vars
       setupNodeEvents(on, config) {
         // e2e testing node events setup code
     },

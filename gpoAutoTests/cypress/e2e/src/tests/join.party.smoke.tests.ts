@@ -35,7 +35,7 @@ export {BillingInfo}
 
 describe('Join party (Become a Member), smoke tests', () => {
 
-    let personalInfo: PersonalInfo = {
+    const personalInfo: PersonalInfo = {
         firstName: member.personalInfo.firstName,
         lastName: member.personalInfo.lastName,
         email: member.personalInfo.email,
@@ -44,7 +44,7 @@ describe('Join party (Become a Member), smoke tests', () => {
         postalCode: member.personalInfo.postalCode
     }
 
-    let billingInfo: BillingInfo = {
+    const billingInfo: BillingInfo = {
         personalInfo : {
             firstName: member.billingInfo.firstName,
             lastName: member.billingInfo.lastName,
@@ -59,7 +59,7 @@ describe('Join party (Become a Member), smoke tests', () => {
         expectedState: member.billingInfo.expectedState
     }
 
-    let oneYearCard: Card = {
+    const oneYearCard: Card = {
         oneYearNumber: member.card.oneYearCardNumber,
         securityCode: member.card.securityCode,
         expirationMonth: member.card.expirationMonth,
@@ -67,7 +67,7 @@ describe('Join party (Become a Member), smoke tests', () => {
         expectedExpirationDate: member.card.expectedExpirationDate
     }
 
-    let threeYearsCard: Card = {
+    const threeYearsCard: Card = {
         oneYearNumber: member.card.threeYearsCardNumber,
         securityCode: member.card.securityCode,
         expirationMonth: member.card.expirationMonth,
@@ -111,7 +111,7 @@ describe('Join party (Become a Member), smoke tests', () => {
         Transaction is successful, all information is as entered`, () => {
 
         joinPartyPage.amountTab.chooseStandartMembership()
-        let dollar = joinPartyPage.amountTab.chooseFirstDollarOption();
+        const dollar = joinPartyPage.amountTab.chooseFirstDollarOption();
         joinPartyPage.continue()
         joinPartyPage.personalInfoTab.enterPersonalInfo(personalInfo);
         joinPartyPage.continue()
@@ -139,7 +139,7 @@ describe('Join party (Become a Member), smoke tests', () => {
         joinPartyPage.billingTab.enterCreditCard(threeYearsCard);
         joinPartyPage.billingTab.checkBillingAddressTheSame()
         joinPartyPage.continue();
-        let expectedBillingInfo: BillingInfo = {
+        const expectedBillingInfo: BillingInfo = {
             personalInfo: personalInfo,
             expectedCountry: consts.default_country,
             expectedState: consts.default_state,
@@ -159,7 +159,7 @@ describe('Join party (Become a Member), smoke tests', () => {
         after step 4: Transaction is successful, all information is as entered`, () => {
 
             joinPartyPage.amountTab.chooseThreeYearsMembership()
-        let amount = Math.floor(consts.min_additionlal_contribution + Math.random()*(300 - consts.min_additionlal_contribution + 1))
+        const amount = Math.floor(consts.min_additionlal_contribution + Math.random()*(300 - consts.min_additionlal_contribution + 1))
         joinPartyPage.amountTab.enterOtherAmount(amount.toString());
         joinPartyPage.continue()
         joinPartyPage.personalInfoTab.enterPersonalInfo(personalInfo);
@@ -167,7 +167,7 @@ describe('Join party (Become a Member), smoke tests', () => {
         joinPartyPage.billingTab.enterCreditCard(threeYearsCard);
         joinPartyPage.billingTab.checkBillingAddressTheSame()
         joinPartyPage.continue();
-        let expectedBillingInfo: BillingInfo = {
+        const expectedBillingInfo: BillingInfo = {
             personalInfo: personalInfo,
             expectedCountry: consts.default_country,
             expectedState: consts.default_state,
@@ -224,7 +224,7 @@ function validatePersonalInfo(personalInfo: PersonalInfo) {
 }
 
 function validateBillingInfo(billingInfo: BillingInfo) {
-    let fullName: string = `${billingInfo.personalInfo.firstName} ${billingInfo.personalInfo.lastName}`
+    const fullName: string = `${billingInfo.personalInfo.firstName} ${billingInfo.personalInfo.lastName}`
     thankYouPage.getBillingName().should('eq', fullName)
     thankYouPage.getBillingAddress().should('contain', billingInfo.personalInfo.city)
     thankYouPage.getBillingAddress().should('contain', billingInfo.personalInfo.street)
@@ -240,7 +240,7 @@ function validateCard(card: Card) {
     } else if (card.threeYearsNumber !== undefined){
         cardNumber=card.threeYearsNumber
     }
-    let expectedCardNumber = cardNumber.slice(-4).padStart(cardNumber.length, '*');
+    const expectedCardNumber = cardNumber.slice(-4).padStart(cardNumber.length, '*');
     thankYouPage.getCardNumber().should('eq', expectedCardNumber)
     thankYouPage.getCardExpirationDate().should('contain', card.expectedExpirationDate)
 }

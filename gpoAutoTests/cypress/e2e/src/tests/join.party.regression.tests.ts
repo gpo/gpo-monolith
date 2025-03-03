@@ -5,7 +5,7 @@ import { BillingInfo } from './join.party.smoke.tests'
 
 import member from '../../../fixtures/member.json'
 
-let personalInfo: PersonalInfo = {
+const personalInfo: PersonalInfo = {
     firstName: member.personalInfo.firstName,
     lastName: member.personalInfo.lastName,
     email: member.personalInfo.email,
@@ -14,7 +14,7 @@ let personalInfo: PersonalInfo = {
     postalCode: member.personalInfo.postalCode
 }
 
-let card: Card = {
+const card: Card = {
     oneYearNumber: member.card.oneYearCardNumber,
     securityCode: member.card.securityCode,
     expirationMonth: member.card.expirationMonth,
@@ -22,7 +22,7 @@ let card: Card = {
     expectedExpirationDate: member.card.expectedExpirationDate
 }
 
-let billingInfo: BillingInfo = {
+const billingInfo: BillingInfo = {
     personalInfo : {
         firstName: member.billingInfo.firstName,
         lastName: member.billingInfo.lastName,
