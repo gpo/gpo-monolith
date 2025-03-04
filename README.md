@@ -72,3 +72,10 @@ Check out a few resources that may come in handy when working with NestJS:
 1. Configure the consent screen (if required).
 1. Choose Desktop App as the application type.
 1. Download the JSON file for the credentials and save it as `credentials.json` in your project root folder.
+
+## Dockerization
+
+### Build
+`docker build -t gpo-scripts .`
+### Run
+`docker run gpo-scripts`

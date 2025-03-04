@@ -1,0 +1,32 @@
+# values.yaml
+
+app:
+  name: gpo-scripts
+  image:
+    repository: gpo/gpo-tasks
+    tag: latest
+    pullPolicy: IfNotPresent
+
+schedule:
+  cron: "0 0 * * *" # Schedule for the CronJob (e.g., daily at midnight)
+  concurrencyPolicy: Forbid # Prevent overlapping jobs
+  restartPolicy: OnFailure # Restart only on failure
+
+env:
+  variables:
+    - name: TASK_NAME
+      value: HistoricalContributionsReportTask # Default task name
+    - name: NODE_ENV
+      value: production
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+volumeMounts: []
+volumes: []
+

@@ -1,0 +1,36 @@
+# templates/cronjob.yaml
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Values.app.name }}-job
+  labels:
+    app: {{ .Values.app.name }}
+spec:
+  schedule: "{{ .Values.schedule.cron }}"
+  concurrencyPolicy: {{ .Values.schedule.concurrencyPolicy }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: {{ .Values.schedule.restartPolicy }}
+          containers:
+            - name: {{ .Values.app.name }}
+              image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
+              imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+              env:
+                {{- range .Values.env.variables }}
+                - name: {{ .name }}
+                  value: {{ .value | quote }}
+                {{- end }}
+              resources:
+                limits:
+                  cpu: {{ .Values.resources.limits.cpu }}
+                  memory: {{ .Values.resources.limits.memory }}
+                requests:
+                  cpu: {{ .Values.resources.requests.cpu }}
+                  memory: {{ .Values.resources.requests.memory }}
+              volumeMounts:
+                {{- toYaml .Values.volumeMounts | nindent 14 }}
+          volumes:
+            {{- toYaml .Values.volumes | nindent 12 }}

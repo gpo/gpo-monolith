@@ -7,8 +7,11 @@ import {CsvModule} from "../csv/csv.module";
 
 @Module({
     imports: [GoogleApiModule, DatabaseModule, FilesystemModule, CsvModule],
-    providers: [HistoricalContributionsReportTask],
-    exports: [HistoricalContributionsReportTask]
+    providers: [{
+        provide: 'HistoricalContributionsReportTask', // Register using a string token
+        useClass: HistoricalContributionsReportTask,
+    }],
+    exports: ['HistoricalContributionsReportTask']
 })
 export class TasksModule {
 }

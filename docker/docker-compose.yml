@@ -3,6 +3,7 @@ services:
     image: mysql:8.0
     container_name: mysql_container
     restart: always
+    command: --sql-mode="STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION"
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: testdb
@@ -13,6 +14,13 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init-scripts:/docker-entrypoint-initdb.d
-
+      - ./my.cnf:/etc/mysql/conf.d/my.cnf
+  app:
+    build: ..
+    restart: always
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
 volumes:
   mysql_data:

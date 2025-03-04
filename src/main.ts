@@ -1,18 +1,26 @@
 import {NestFactory} from '@nestjs/core';
 import {AppModule} from './app.module';
-import {HistoricalContributionsReportTask} from "./modules/tasks/historical-contributions-report-task.service";
+import {ConfigService} from "@nestjs/config";
 
 async function bootstrap() {
-    // await CommandFactory.run(AppModule, new ConsoleLogger());
+
+
+// await CommandFactory.run(AppModule, new ConsoleLogger());
     try {
         const app = await NestFactory.create(AppModule);
-        const exampleJob = app.get(HistoricalContributionsReportTask);
-        await exampleJob.execute();
+
+        const configService = app.get(ConfigService);
+        const taskName = configService.get<string>('TASK_NAME'); // Retrieves TASK_NAME
+        console.log('Task Name:', taskName);
+
+        const task = app.get(taskName);
+        await task.execute();
         await app.close()
     } catch (error) {
         console.trace('Application failed to start:', error);
         process.exit(1);
     }
+    process.exit(0);
 }
 
 bootstrap().catch(err => {
