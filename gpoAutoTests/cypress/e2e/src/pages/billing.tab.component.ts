@@ -1,5 +1,23 @@
-import { Card } from "../tests/join.party.smoke.tests"
-import { BillingInfo } from "../tests/join.party.smoke.tests"
+import { PersonalInfo } from "./personal.info.tab.component";
+
+interface Card {
+    // oneYearNumber: string;
+    // threeYearsNumber: string;
+    number: string;
+    securityCode: string; 
+    expirationYear: string; 
+    expirationMonth: string;
+    expectedExpirationDate: string;
+}
+
+interface BillingInfo {
+    personalInfo: PersonalInfo,
+    country: string,
+    state: string,
+    expectedCountry: string,
+    expectedState: string
+}
+
 class BillingTabComponent {
    
     private get cardNumber() {return cy.get('#credit_card_number')}
@@ -25,6 +43,7 @@ class BillingTabComponent {
     public get postalCodeError() {return cy.get('#billing_postal_code-5-error')}
     private get provinceDown() {return cy.get('#s2id_billing_state_province_id-5 > .select2-choice > .select2-arrow')}
     private get countryDown() {return cy.get('#s2id_billing_country_id-5')}
+
 
     public clearFirstName() {
         this.firstName.clear()
@@ -80,11 +99,12 @@ class BillingTabComponent {
 
     public enterCreditCard(card: Card) {
         let cardNumber: string = ""
-        if (card.oneYearNumber!== undefined) {
+        if (card.oneYearNumber!== "") {
             cardNumber = card.oneYearNumber
-        } else if (card.threeYearsNumber !== undefined){
+        } else if (card.threeYearsNumber !== ""){
             cardNumber=card.threeYearsNumber
         }
+        console.log(cardNumber)
         this.cardNumber.click().type(cardNumber)
         this.securityCode.click().type(card.securityCode)
         this.expirationMonth.select(card.expirationMonth)
@@ -113,3 +133,5 @@ class BillingTabComponent {
 }
 
 export const billingTab: BillingTabComponent = new BillingTabComponent()
+export {Card}
+export {BillingInfo}

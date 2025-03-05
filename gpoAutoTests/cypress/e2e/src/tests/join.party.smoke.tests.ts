@@ -3,80 +3,38 @@ import { joinPartyPage } from '../pages/join.party.page'
 
 import member from '../../../fixtures/member.json'
 import consts from '../../../fixtures/consts.json'
-
-interface PersonalInfo {
-    firstName: string;
-    lastName: string;
-    email: string;
-    street: string;
-    city: string;
-    postalCode: string
-}
-
-interface Card {
-    oneYearNumber?: string;
-    threeYearsNumber?: string;
-    securityCode: string; 
-    expirationYear: string; 
-    expirationMonth: string;
-    expectedExpirationDate: string;
-}
-
-interface BillingInfo {
-    personalInfo: PersonalInfo,
-    country: string,
-    state: string,
-    expectedCountry: string,
-    expectedState: string
-}
-export {PersonalInfo};
-export {Card}
-export {BillingInfo}
+import { PersonalInfo } from '../pages/personal.info.tab.component'
+import { Card } from '../pages/billing.tab.component'
+import { BillingInfo } from '../pages/billing.tab.component'
 
 describe('Join party (Become a Member), smoke tests', () => {
 
-    const personalInfo: PersonalInfo = {
-        firstName: member.personalInfo.firstName,
-        lastName: member.personalInfo.lastName,
-        email: member.personalInfo.email,
-        street: member.personalInfo.street,
-        city: member.personalInfo.city,
-        postalCode: member.personalInfo.postalCode
-    }
+    const personalInfo: PersonalInfo = member.personalInfo 
 
-    const billingInfo: BillingInfo = {
-        personalInfo : {
-            firstName: member.billingInfo.firstName,
-            lastName: member.billingInfo.lastName,
-            street: member.billingInfo.street,
-            city: member.billingInfo.city,
-            postalCode: member.billingInfo.postalCode,
-            email: ""
-        },
-        country: member.billingInfo.country,
-        state: member.billingInfo.state,
-        expectedCountry: member.billingInfo.expectedCountry,
-        expectedState: member.billingInfo.expectedState
-    }
+    const billingInfo: BillingInfo = member.billingInfo 
 
-    const oneYearCard: Card = {
-        oneYearNumber: member.card.oneYearCardNumber,
-        securityCode: member.card.securityCode,
-        expirationMonth: member.card.expirationMonth,
-        expirationYear: member.card.expirationYear,
-        expectedExpirationDate: member.card.expectedExpirationDate
-    }
+    const oneYearCard: Card = {...member.card, number: member.card.oneYearNumber}
+    const threeYearsCard = member.card
 
-    const threeYearsCard: Card = {
-        oneYearNumber: member.card.threeYearsCardNumber,
-        securityCode: member.card.securityCode,
-        expirationMonth: member.card.expirationMonth,
-        expirationYear: member.card.expirationYear,
-        expectedExpirationDate: member.card.expectedExpirationDate
-    }
+
+    // const oneYearCard: Card = {
+    //     oneYearNumber: member.card.oneYearCardNumber,
+    //     securityCode: member.card.securityCode,
+    //     expirationMonth: member.card.expirationMonth,
+    //     expirationYear: member.card.expirationYear,
+    //     expectedExpirationDate: member.card.expectedExpirationDate
+    // }
+
+    // const threeYearsCard: Card = {
+    //     oneYearNumber: member.card.threeYearsCardNumber,
+    //     securityCode: member.card.securityCode,
+    //     expirationMonth: member.card.expirationMonth,
+    //     expirationYear: member.card.expirationYear,
+    //     expectedExpirationDate: member.card.expectedExpirationDate
+    // }
 
     beforeEach(() => {
-        cy.fixture('member.json').as('member')
+      //  cy.fixture('member.json').as('member')
         cy.openNewMembershipPage();
     })
 

@@ -1,4 +1,13 @@
-import { PersonalInfo } from "../tests/join.party.smoke.tests"
+interface PersonalInfo {
+    firstName: string;
+    lastName: string;
+    email: string;
+    street: string;
+    city: string;
+    postalCode: string
+}
+export {PersonalInfo};
+
 class PersonalInfoTabComponent {
     private get firstName() {return cy.get('#first_name')}
     private get lastName() {return cy.get('#last_name')}

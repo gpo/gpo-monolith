@@ -11,6 +11,8 @@
 22. POSTAL Code
 23. Monthly amount > ~$283.33
 24. amount > $3400 a year
+25. other amount <$3
+26. 
 
 **Expected results:**
 
