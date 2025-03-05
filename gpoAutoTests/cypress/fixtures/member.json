@@ -1,0 +1,29 @@
+{ 
+    "personalInfo": {
+        "firstName" : "John", 
+        "lastName" : "Test",
+        "email": "test@test.test",
+        "street": "unexisted 12",
+        "city": "Toronto",
+        "postalCode": "N2G0C8"
+    },
+    "card": {
+        "oneYearCardNumber": "5111111111111118",
+        "threeYearsCardNumber": "4222222222222220",
+        "securityCode": "234",
+        "expirationMonth": "Dec",
+        "expirationYear": "2028",
+        "expectedExpirationDate": "December 2028"
+    },
+    "billingInfo" : {
+        "firstName": "billing john",
+        "lastName": "billing test",
+        "street": "billing street 12",
+        "city": "Waterloo",
+        "country": "Canada",
+        "expectedCountry": "CA",
+        "state": "Ontario",
+        "expectedState": "ON",
+        "postalCode": "N3G0C6"
+    }
+}  

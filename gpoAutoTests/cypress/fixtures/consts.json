@@ -1,0 +1,7 @@
+{
+    "one_year_membership_fee": 10,
+    "three_years_memership_fee": 25,
+    "min_additionlal_contribution": 3,
+    "default_country": "CA",
+    "default_state": "ON"
+}
