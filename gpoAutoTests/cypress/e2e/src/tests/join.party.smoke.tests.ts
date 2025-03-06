@@ -1,40 +1,19 @@
-import {thankYouPage} from '../pages/thank.you.page'
-import { joinPartyPage } from '../pages/join.party.page'
+import { thankYouPage } from '../components/thank.you.page'
+import { joinPartyPage } from '../components/join.party.page'
 
-import member from '../../../fixtures/member.json'
-import consts from '../../../fixtures/consts.json'
-import { PersonalInfo } from '../pages/personal.info.tab.component'
-import { Card } from '../pages/billing.tab.component'
-import { BillingInfo } from '../pages/billing.tab.component'
+import consts from '../../../consts.json'
+import { personalInfo } from '../../testData/test.data'
+import { billingInfo } from '../../testData/test.data'
+import { BillingInfo } from '../../testData/test.data'
+import { PersonalInfo } from '../../testData/test.data'
+import { Card } from '../../testData/test.data'
+import { oneYearCard } from '../../testData/test.data'
+import { threeYearsCard } from '../../testData/test.data'
+
 
 describe('Join party (Become a Member), smoke tests', () => {
 
-    const personalInfo: PersonalInfo = member.personalInfo 
-
-    const billingInfo: BillingInfo = member.billingInfo 
-
-    const oneYearCard: Card = {...member.card, number: member.card.oneYearNumber}
-    const threeYearsCard = member.card
-
-
-    // const oneYearCard: Card = {
-    //     oneYearNumber: member.card.oneYearCardNumber,
-    //     securityCode: member.card.securityCode,
-    //     expirationMonth: member.card.expirationMonth,
-    //     expirationYear: member.card.expirationYear,
-    //     expectedExpirationDate: member.card.expectedExpirationDate
-    // }
-
-    // const threeYearsCard: Card = {
-    //     oneYearNumber: member.card.threeYearsCardNumber,
-    //     securityCode: member.card.securityCode,
-    //     expirationMonth: member.card.expirationMonth,
-    //     expirationYear: member.card.expirationYear,
-    //     expectedExpirationDate: member.card.expectedExpirationDate
-    // }
-
     beforeEach(() => {
-      //  cy.fixture('member.json').as('member')
         cy.openNewMembershipPage();
     })
 
@@ -77,7 +56,7 @@ describe('Join party (Become a Member), smoke tests', () => {
         joinPartyPage.billingTab.uncheckBillingAddressTheSame()
         joinPartyPage.billingTab.enterBillingInfo(billingInfo);
         joinPartyPage.continue();
-        validateThankYouPage(personalInfo, oneYearCard, billingInfo, consts.one_year_membership_fee, dollar) 
+        validateThankYouPage(personalInfo, oneYearCard, billingInfo, consts.one_year_membership_fee, dollar)
     })
 
     it(`Three-Year Membership, No additional contribution, billing address is the same
@@ -104,7 +83,7 @@ describe('Join party (Become a Member), smoke tests', () => {
             country: "",
             state: ""
         }
-        validateThankYouPage(personalInfo, threeYearsCard, expectedBillingInfo, consts.three_years_memership_fee, cy.wrap(NaN)) 
+        validateThankYouPage(personalInfo, threeYearsCard, expectedBillingInfo, consts.three_years_memership_fee, cy.wrap(NaN))
     })
 
     it(`Three-Year Membership, Other amount>min amount
@@ -116,8 +95,8 @@ describe('Join party (Become a Member), smoke tests', () => {
         after step 3: Billing information fields are filled with the personal info automatically
         after step 4: Transaction is successful, all information is as entered`, () => {
 
-            joinPartyPage.amountTab.chooseThreeYearsMembership()
-        const amount = Math.floor(consts.min_additionlal_contribution + Math.random()*(300 - consts.min_additionlal_contribution + 1))
+        joinPartyPage.amountTab.chooseThreeYearsMembership()
+        const amount = Math.floor(consts.min_additionlal_contribution + Math.random() * (300 - consts.min_additionlal_contribution + 1))
         joinPartyPage.amountTab.enterOtherAmount(amount.toString());
         joinPartyPage.continue()
         joinPartyPage.personalInfoTab.enterPersonalInfo(personalInfo);
@@ -132,10 +111,10 @@ describe('Join party (Become a Member), smoke tests', () => {
             country: "",
             state: ""
         }
-        validateThankYouPage(personalInfo, threeYearsCard, expectedBillingInfo, consts.three_years_memership_fee, cy.wrap(amount)) 
+        validateThankYouPage(personalInfo, threeYearsCard, expectedBillingInfo, consts.three_years_memership_fee, cy.wrap(amount))
     })
 
-    const costOptions = [1, 2, 3, 4, 5 ,6]
+    const costOptions = [1, 2, 3, 4, 5, 6]
     costOptions.forEach((option) => {
         it(`Validation of the "Your contribution"
             1. Choose standart membership
@@ -143,11 +122,11 @@ describe('Join party (Become a Member), smoke tests', () => {
             3. Verify the "Your contribution" number
             4. Repeat steps 2-3 for all dollar options
         Expected result:
-            "Your contribution" number equals dollar option plus standart membership`, ()=> {
+            "Your contribution" number equals dollar option plus standart membership`, () => {
             joinPartyPage.amountTab.chooseStandartMembership()
             joinPartyPage.amountTab.chooseDollarOption(option).then((amount) => {
                 joinPartyPage.amountTab.getYourContribution().should('eq', consts.one_year_membership_fee + amount)
-            })   
+            })
         })
     })
 })
@@ -158,14 +137,14 @@ function validateThankYouPage(personalInfo: PersonalInfo, card: Card, billingInf
         validateAmount(expectedMembershipAmount, expectedAdditionalContributionAmount)
         validatePersonalInfo(personalInfo)
         validateBillingInfo(billingInfo)
-        validateCard(card) 
+        validateCard(card)
     })
 }
-function validateAmount(expectedMembershipAmount: number, expectedAdditionalContributionAmount: Cypress.Chainable<number>) {      
-    thankYouPage.getTransactionAmount().then(transactionAmount =>{
-        expectedAdditionalContributionAmount.then(expectedAdditionContribution=>{
-        expect(transactionAmount).to.deep.equal({
-                membershipAmount: expectedMembershipAmount, 
+function validateAmount(expectedMembershipAmount: number, expectedAdditionalContributionAmount: Cypress.Chainable<number>) {
+    thankYouPage.getTransactionAmount().then(transactionAmount => {
+        expectedAdditionalContributionAmount.then(expectedAdditionContribution => {
+            expect(transactionAmount).to.deep.equal({
+                membershipAmount: expectedMembershipAmount,
                 additionalContributionAmount: expectedAdditionContribution,
                 totalContribution: expectedMembershipAmount + expectedAdditionContribution
             })
@@ -191,14 +170,8 @@ function validateBillingInfo(billingInfo: BillingInfo) {
     thankYouPage.getBillingAddress().should('contain', billingInfo.expectedState)
 }
 
-function validateCard(card: Card) { 
-    let cardNumber: string = ""
-    if (card.oneYearNumber!== undefined) {
-        cardNumber = card.oneYearNumber
-    } else if (card.threeYearsNumber !== undefined){
-        cardNumber=card.threeYearsNumber
-    }
-    const expectedCardNumber = cardNumber.slice(-4).padStart(cardNumber.length, '*');
+function validateCard(card: Card) {
+    const expectedCardNumber = card.number.slice(-4).padStart(card.number.length, '*');
     thankYouPage.getCardNumber().should('eq', expectedCardNumber)
     thankYouPage.getCardExpirationDate().should('contain', card.expectedExpirationDate)
 }
