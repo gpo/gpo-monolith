@@ -1,19 +1,20 @@
-import { PersonalInfo } from "../tests/join.party.smoke.tests"
-class PersonalInfoTabComponent {
-    private get firstName() {return cy.get('#first_name')}
-    private get lastName() {return cy.get('#last_name')}
-    private get email() {return cy.get('#email-Primary')}
-    private get street() {return cy.get('#street_address-Primary')}
-    private get city() {return cy.get('#city-Primary')}
-    private get postalCode() {return cy.get('#postal_code-Primary')}
-    public get firstNameError() {return cy.get('#first_name-error')}
-    public get lastNameError() {return cy.get('#last_name-error')}
-    public get emailError() {return cy.get('#email-Primary-error')}
-    public get streetError() {return cy.get('#street_address-Primary-error')}
-    public get cityError() {return cy.get('#city-Primary-error')}
-    public get postalCodeError() {return cy.get('#postal_code-Primary-error')}
+import { PersonalInfo } from "../../testData/test.data"
 
-   
+class PersonalInfoTabComponent {
+    private get firstName() { return cy.get('#first_name') }
+    private get lastName() { return cy.get('#last_name') }
+    private get email() { return cy.get('#email-Primary') }
+    private get street() { return cy.get('#street_address-Primary') }
+    private get city() { return cy.get('#city-Primary') }
+    private get postalCode() { return cy.get('#postal_code-Primary') }
+    public get firstNameError() { return cy.get('#first_name-error') }
+    public get lastNameError() { return cy.get('#last_name-error') }
+    public get emailError() { return cy.get('#email-Primary-error') }
+    public get streetError() { return cy.get('#street_address-Primary-error') }
+    public get cityError() { return cy.get('#city-Primary-error') }
+    public get postalCodeError() { return cy.get('#postal_code-Primary-error') }
+
+
     public clearFirstName() {
         this.firstName.click().clear()
     }
@@ -34,7 +35,7 @@ class PersonalInfoTabComponent {
         this.city.click().clear()
     }
 
-    public clearPostalCode(){
+    public clearPostalCode() {
         this.postalCode.click().clear()
     }
 
