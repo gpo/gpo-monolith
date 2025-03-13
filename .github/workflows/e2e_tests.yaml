@@ -9,8 +9,8 @@ jobs:
 
       - name: Cypress run
         uses: cypress-io/github-action@v6
-		with:
+    with:
           spec: |
-		        cypress/e2e/src/tests/join.party.smoke.tests.ts
-		        cypress/e2e/src/tests/join.party.regression.tests.ts
-		      browser: chrome
+            cypress/e2e/src/tests/join.party.smoke.tests.ts
+            cypress/e2e/src/tests/join.party.regression.tests.ts
+          browser: chrome
