@@ -1,6 +1,6 @@
 name: End-to-end tests
 on: 
-  workflow_dispatch
+  workflow_dispatch:
 jobs:
   cypress-run:
     runs-on: windows-latest
