@@ -1,5 +1,6 @@
 name: End-to-end tests
-on: workflow_dispatch
+on: 
+  workflow_dispatch
 jobs:
   cypress-run:
     runs-on: windows-latest
@@ -9,7 +10,7 @@ jobs:
 
       - name: Cypress run
         uses: cypress-io/github-action@v6
-    with:
+        with:
           spec: |
             cypress/e2e/src/tests/join.party.smoke.tests.ts
             cypress/e2e/src/tests/join.party.regression.tests.ts
