@@ -19,3 +19,4 @@ jobs:
             cypress/e2e/src/tests/join.party.smoke.tests.ts
             cypress/e2e/src/tests/join.party.regression.tests.ts
           browser: chrome
+          working-directory: ./gpoAutoTests/
