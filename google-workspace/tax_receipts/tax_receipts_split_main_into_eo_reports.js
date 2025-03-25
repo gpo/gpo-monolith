@@ -12,20 +12,43 @@
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Custom Scripts')
-    .addItem('Generate Reports as CSVs', 'exportFilteredCSVs')
+    .addItem('Generate EO Reports', 'generateEOReports')
     .addToUi();
 }
 
+function generateEOReports() {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000); // wait 10 seconds for lock
+    exportFilteredCSVs();
+  } catch (e) {
+    throwAndDisplayError(
+      'The script is already running. Please try again later.',
+    );
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function exportFilteredCSVs() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  const generatedFilesFolder = getOrCreateExportFolder(ss);
+    const generatedFilesFolder = getOrCreateExportFolder(ss);
 
-  const { headers, reports } = segmentReports(ss);
+    const { headers, reports } = segmentReports(ss);
 
-  const reportingPeriodNamesMap = getPeriodNames(ss);
+    const reportingPeriodNamesMap = getPeriodNames(ss);
 
-  saveReports(headers, reports, reportingPeriodNamesMap, generatedFilesFolder);
+    saveReports(
+      headers,
+      reports,
+      reportingPeriodNamesMap,
+      generatedFilesFolder,
+    );
+  } catch (e) {
+    throwAndDisplayError('Something went wrong. Please try again later');
+  }
 }
 
 function getOrCreateExportFolder(ss) {
@@ -85,13 +108,13 @@ function segmentReports(ss) {
     }
 
     reports[reportingPeriod].all.push(row);
+    reports[reportingPeriod].entityReports[politicalEntity].push(row);
 
     const amount = Number(row[7]);
     if (amount >= 200.01) {
+      reports[reportingPeriod].entityS2P2Reports[politicalEntity].push(row);
       reports[reportingPeriod].s2p2.push(row);
     }
-
-    reports[reportingPeriod].entityReports[politicalEntity].push(row);
   });
 
   return { headers, reports };
@@ -146,10 +169,19 @@ function saveReports(
 
     for (const politicalEntity in report.entityReports) {
       // Save the file with the following naming convention: Party + ED + Event + ALL (ie. ABC 123 2023 Annual ALL)
-      const fileName = `GPO ${reportingPeriodName} ${politicalEntity}.csv`;
+      const fileName = `GPO ${politicalEntity} ${reportingPeriodName} ALL.csv`;
 
       const csvContent = convertToCSV(
         [headers].concat(report.entityReports[politicalEntity]),
+      );
+      saveCSV(fileName, csvContent, entityReportsFolder);
+    }
+    for (const politicalEntity in report.entityReports) {
+      // Save the file with the following naming convention: Party + ED + Event + ALL (ie. ABC 123 2023 Annual ALL)
+      const fileName = `GPO ${politicalEntity} ${reportingPeriodName} S2P2.csv`;
+
+      const csvContent = convertToCSV(
+        [headers].concat(report.entityS2P2Reports[politicalEntity]),
       );
       saveCSV(fileName, csvContent, entityReportsFolder);
     }
@@ -217,6 +249,7 @@ class ReportingPeriod {
     this.all = [];
     this.s2p2 = [];
     this.entityReports = mapWithDefaultArray();
+    this.entityS2P2Reports = mapWithDefaultArray();
   }
 }
 
