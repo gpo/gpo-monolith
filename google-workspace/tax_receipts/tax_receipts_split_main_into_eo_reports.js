@@ -1,10 +1,10 @@
 /**
- *
- *
- * If you need to
+ * This AppScript is designed to be used on a full callendar version of a tax receipt report.
+ * example: https://docs.google.com/spreadsheets/d/1jeMiZ2uQQSA5UkNliFgiUg9bkSifIQNH4MnlJZwcVdg/edit
  */
 
-// TODO: filter out Receipt_Status = C & L only I (Issued) should be kept
+const GENERATED_EO_REPORT_PREFIX = 'Generated EO Contribution Reports';
+const ss = SpreadsheetApp.getActiveSpreadsheet();
 
 /**
  * Add a menu to the spreadsheet so the Admin team can run this task
@@ -19,9 +19,12 @@ function onOpen() {
 function generateEOReports() {
   const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(10000); // wait 10 seconds for lock
+    lock.waitLock(100);
+    renameEOReportsFolder('PROCESSING');
     exportFilteredCSVs();
+    renameEOReportsFolder('DONE');
   } catch (e) {
+    renameEOReportsFolder('ERROR');
     throwAndDisplayError(
       'The script is already running. Please try again later.',
     );
@@ -32,9 +35,8 @@ function generateEOReports() {
 
 function exportFilteredCSVs() {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-    const generatedFilesFolder = getOrCreateExportFolder(ss);
+    const generatedFilesFolder = getOrCreateEOReportFolder();
+    deleteContents(generatedFilesFolder); // Delete the folder and all its contents
 
     const { headers, reports } = segmentReports(ss);
 
@@ -51,23 +53,55 @@ function exportFilteredCSVs() {
   }
 }
 
-function getOrCreateExportFolder(ss) {
-  const folderName = 'EO Contribution Reports (Generated)';
-  const mainFile = DriveApp.getFileById(ss.getId());
-  const parentFolder = mainFile.getParents().next();
+let eoReportFolderCache = false;
+function getOrCreateEOReportFolder() {
+  if (eoReportFolderCache) return eoReportFolderCache;
 
-  // Check if the folder exists
-  const folders = parentFolder.getFoldersByName(folderName);
+  const mainSpreadSheet = DriveApp.getFileById(ss.getId());
+  const parentFolder = mainSpreadSheet.getParents().next();
+
+  const folders = parentFolder.getFolders();
   while (folders.hasNext()) {
     const folder = folders.next();
-    deleteFolderAndContents(folder); // Delete the folder and all its contents
+    if (folder.getName().startsWith(GENERATED_EO_REPORT_PREFIX)) {
+      eoReportFolderCache = folder;
+      return folder;
+    }
   }
-
-  // Create a new folder
-  return parentFolder.createFolder(folderName);
+  eoReportFolderCache = parentFolder.createFolder(GENERATED_EO_REPORT_PREFIX);
+  return eoReportFolderCache;
 }
 
-function deleteFolderAndContents(folder) {
+const startTime = new Date();
+const dateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+});
+function renameEOReportsFolder(status) {
+  const eoReportFolder = getOrCreateEOReportFolder();
+  const timestamp = dateTimeFormatter.format(startTime).replace(',', '');
+
+  let statusName;
+  switch (status) {
+    case 'PROCESSING':
+      statusName = `PROCESSING`;
+      break;
+    case 'DONE':
+      statusName = `DONE`;
+      break;
+    case 'ERROR':
+      statusName = `ERROR`;
+      break;
+    default:
+      throw new Error(`Unknown status: ${status}`);
+  }
+
+  eoReportFolder.setName(
+    `${GENERATED_EO_REPORT_PREFIX} (${statusName} ${timestamp})`,
+  );
+}
+
+function deleteContents(folder) {
   const files = folder.getFiles();
   while (files.hasNext()) {
     files.next().setTrashed(true); // Move files to trash
@@ -75,13 +109,11 @@ function deleteFolderAndContents(folder) {
 
   const subfolders = folder.getFolders();
   while (subfolders.hasNext()) {
-    deleteFolderAndContents(subfolders.next()); // Recursively delete subfolders
+    deleteContents(subfolders.next()); // Recursively delete subfolders
   }
-
-  folder.setTrashed(true); // Finally, delete the folder itself
 }
 
-function segmentReports(ss) {
+function segmentReports() {
   const sheetName = 'FINAL';
   const data = ss.getSheetByName(sheetName).getDataRange().getValues();
   if (data.length < 2) {
@@ -120,7 +152,7 @@ function segmentReports(ss) {
   return { headers, reports };
 }
 
-function getPeriodNames(ss) {
+function getPeriodNames() {
   const data = ss
     .getSheetByName('Reporting_Periods')
     .getDataRange()
