@@ -84,20 +84,20 @@ function renameEOReportsFolder(status) {
   let statusName;
   switch (status) {
     case 'PROCESSING':
-      statusName = `(PROCESSING`;
+      statusName = `PROCESSING`;
       break;
     case 'DONE':
-      statusName = `(DONE`;
+      statusName = `DONE`;
       break;
     case 'ERROR':
-      statusName = `(ERROR`;
+      statusName = `ERROR`;
       break;
     default:
       throw new Error(`Unknown status: ${status}`);
   }
 
   eoReportFolder.setName(
-    `${GENERATED_EO_REPORT_PREFIX} ${statusName} ${timestamp} )`,
+    `${GENERATED_EO_REPORT_PREFIX} (${statusName} ${timestamp})`,
   );
 }
 
