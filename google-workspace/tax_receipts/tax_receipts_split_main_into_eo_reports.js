@@ -19,7 +19,7 @@ function onOpen() {
 function generateEOReports() {
   const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(1);
+    lock.waitLock(100);
     renameEOReportsFolder('PROCESSING');
     exportFilteredCSVs();
     renameEOReportsFolder('DONE');
