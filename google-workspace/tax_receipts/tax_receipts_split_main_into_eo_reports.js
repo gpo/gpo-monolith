@@ -20,37 +20,38 @@ function generateEOReports() {
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(100);
+  } catch (e) {
+    throwAndDisplayError(
+      'The script is already running. Please try again later.',
+    );
+  }
+
+  try {
     renameEOReportsFolder('PROCESSING');
     exportFilteredCSVs();
     renameEOReportsFolder('DONE');
   } catch (e) {
     renameEOReportsFolder('ERROR');
-    throwAndDisplayError(
-      'The script is already running. Please try again later.',
-    );
+
+    if (!e.hasWarned) {
+      SpreadsheetApp.getUi().alert(
+        'Something went wrong. Please try again later',
+      );
+    }
   } finally {
     lock.releaseLock();
   }
 }
 
 function exportFilteredCSVs() {
-  try {
-    const generatedFilesFolder = getOrCreateEOReportFolder();
-    deleteContents(generatedFilesFolder); // Delete the folder and all its contents
+  const generatedFilesFolder = getOrCreateEOReportFolder();
+  deleteContents(generatedFilesFolder);
 
-    const { headers, reports } = segmentReports(ss);
+  const reports = segmentReports(ss);
 
-    const reportingPeriodNamesMap = getPeriodNames(ss);
+  const reportingPeriodNamesMap = getPeriodNames(ss);
 
-    saveReports(
-      headers,
-      reports,
-      reportingPeriodNamesMap,
-      generatedFilesFolder,
-    );
-  } catch (e) {
-    throwAndDisplayError('Something went wrong. Please try again later');
-  }
+  saveReports(reports, reportingPeriodNamesMap, generatedFilesFolder);
 }
 
 let eoReportFolderCache = false;
@@ -81,30 +82,19 @@ function renameEOReportsFolder(status) {
   const eoReportFolder = getOrCreateEOReportFolder();
   const timestamp = dateTimeFormatter.format(startTime).replace(',', '');
 
-  let statusName;
-  switch (status) {
-    case 'PROCESSING':
-      statusName = `PROCESSING`;
-      break;
-    case 'DONE':
-      statusName = `DONE`;
-      break;
-    case 'ERROR':
-      statusName = `ERROR`;
-      break;
-    default:
-      throw new Error(`Unknown status: ${status}`);
+  if (!/^(PROCESSING|DONE|ERROR)$/.test(status)) {
+    throwAndDisplayError(`Unknown status: ${status}`);
   }
 
   eoReportFolder.setName(
-    `${GENERATED_EO_REPORT_PREFIX} (${statusName} ${timestamp})`,
+    `${GENERATED_EO_REPORT_PREFIX} (${status} ${timestamp})`,
   );
 }
 
 function deleteContents(folder) {
   const files = folder.getFiles();
   while (files.hasNext()) {
-    files.next().setTrashed(true); // Move files to trash
+    files.next().setTrashed(true);
   }
 
   const subfolders = folder.getFolders();
@@ -114,22 +104,22 @@ function deleteContents(folder) {
 }
 
 function segmentReports() {
-  const sheetName = 'FINAL';
-  const data = ss.getSheetByName(sheetName).getDataRange().getValues();
+  const sheet = ss.getSheetByName('FINAL');
+  if (!sheet) {
+    throwAndDisplayError(
+      'The "FINAL" sheet is missing. Please add it and try again.',
+    );
+  }
+  const data = sheet.getDataRange().getValues();
   if (data.length < 2) {
-    throwAndDisplayError(`No data found in sheet ${sheetName}`);
+    throwAndDisplayError(`No data found in sheet FINAL`);
   }
 
-  const reports = reportsObject();
+  const reports = mapWithDefault(() => new ReportingPeriod());
 
-  const headers = data[0]; // First row as headers
-
-  const records = data.slice(1); // Data excluding headers
-  records.forEach((row) => {
-    let politicalEntity = row[6]; // Column G
-    if (politicalEntity.startsWith('GPO ')) {
-      politicalEntity = politicalEntity.substring(4);
-    }
+  // process all records excluding headers
+  data.slice(1).forEach((row) => {
+    const politicalEntity = extractPoliticalEntity(row[6]);
     const reportingPeriod = row[11]; // Column L
 
     if (!politicalEntity || !reportingPeriod) {
@@ -139,24 +129,47 @@ function segmentReports() {
       );
     }
 
-    reports[reportingPeriod].all.push(row);
-    reports[reportingPeriod].entityReports[politicalEntity].push(row);
+    const allRow = AllRow.newFromRow(row);
+    reports[reportingPeriod].all.push(allRow);
+    reports[reportingPeriod].entityReports[politicalEntity].push(allRow);
 
-    const amount = Number(row[7]);
-    if (amount >= 200.01) {
-      reports[reportingPeriod].entityS2P2Reports[politicalEntity].push(row);
-      reports[reportingPeriod].s2p2.push(row);
-    }
+    addToS2p2Report(reports[reportingPeriod].s2p2, row);
+    addToS2p2Report(
+      reports[reportingPeriod].entityS2P2Reports[politicalEntity],
+      row,
+    );
   });
 
-  return { headers, reports };
+  return reports;
+}
+
+function addToS2p2Report(s2p2Report, row) {
+  const contributorID = row[1];
+  const amount = Number(row[7]);
+
+  const s2p2Row = s2p2Report[contributorID];
+  if (s2p2Row) {
+    s2p2Row.AggregateContributionAmount += amount;
+  } else {
+    s2p2Report[contributorID] = S2P2Row.newFromRow(row);
+  }
+}
+
+function extractPoliticalEntity(politicalEntity) {
+  if (politicalEntity.startsWith('GPO ')) {
+    return politicalEntity.substring(4);
+  }
+  return politicalEntity;
 }
 
 function getPeriodNames() {
-  const data = ss
-    .getSheetByName('Reporting_Periods')
-    .getDataRange()
-    .getValues();
+  const sheet = ss.getSheetByName('Reporting Periods');
+  if (!sheet) {
+    throwAndDisplayError(
+      'The "Reporting Periods" sheet is missing. Please add it and try again.',
+    );
+  }
+  const data = sheet.getDataRange().getValues();
   const records = data.slice(1); // Data excluding headers
 
   return records.reduce((map, row) => {
@@ -168,12 +181,7 @@ function getPeriodNames() {
   }, {});
 }
 
-function saveReports(
-  headers,
-  reports,
-  reportingPeriodNamesMap,
-  generatedFilesFolder,
-) {
+function saveReports(reports, reportingPeriodNamesMap, generatedFilesFolder) {
   for (const reportingPeriod in reports) {
     const report = reports[reportingPeriod];
     const reportingPeriodName = reportingPeriodNamesMap[reportingPeriod];
@@ -182,17 +190,21 @@ function saveReports(
       `${reportingPeriod} - ${reportingPeriodName}`,
     );
 
-    // Save the file with the following naming convention: Party + ED + Event + ALL (ie. ABC 123 2023 Annual ALL)
-    const allReportFileName = `GPO ${reportingPeriodName} ALL.csv`;
+    saveAllCsv(
+      reportingPeriodFolder,
+      // Save the file with the following naming convention:
+      // Party + ED + Event + ALL (ie. ABC 123 2023 Annual ALL)
+      `GPO ${reportingPeriodName} ALL.csv`,
+      report.all,
+    );
 
-    const allReportCsvContent = convertToCSV([headers].concat(report.all));
-    saveCSV(allReportFileName, allReportCsvContent, reportingPeriodFolder);
-
-    // Save the file with the following naming convention: Party + ED + Event + S2P2 (ie. ABC 123 2023 Annual S2P2)
-    const s2p2ReportFileName = `GPO ${reportingPeriodName} S2P2.csv`;
-
-    const s2p2CsvContent = convertToCSV([headers].concat(report.s2p2));
-    saveCSV(s2p2ReportFileName, s2p2CsvContent, reportingPeriodFolder);
+    saveS2p2Csv(
+      reportingPeriodFolder,
+      // Save the file with the following naming convention:
+      // Party + ED + Event + S2P2 (ie. ABC 123 2023 Annual S2P2)
+      `GPO ${reportingPeriodName} S2P2.csv`,
+      report.s2p2,
+    );
 
     const entityReportsFolder = findOrCreateFolder(
       reportingPeriodFolder,
@@ -200,24 +212,42 @@ function saveReports(
     );
 
     for (const politicalEntity in report.entityReports) {
-      // Save the file with the following naming convention: Party + ED + Event + ALL (ie. ABC 123 2023 Annual ALL)
-      const fileName = `GPO ${politicalEntity} ${reportingPeriodName} ALL.csv`;
-
-      const csvContent = convertToCSV(
-        [headers].concat(report.entityReports[politicalEntity]),
+      saveAllCsv(
+        entityReportsFolder,
+        // Please save the file with the following naming convention:
+        // `Party + ED + Event + ALL` (ie. ABC 123 2023 Annual ALL)
+        `GPO ${politicalEntity} ${reportingPeriodName} ALL.csv`,
+        report.entityReports[politicalEntity],
       );
-      saveCSV(fileName, csvContent, entityReportsFolder);
-    }
-    for (const politicalEntity in report.entityReports) {
-      // Save the file with the following naming convention: Party + ED + Event + ALL (ie. ABC 123 2023 Annual ALL)
-      const fileName = `GPO ${politicalEntity} ${reportingPeriodName} S2P2.csv`;
 
-      const csvContent = convertToCSV(
-        [headers].concat(report.entityS2P2Reports[politicalEntity]),
+      saveS2p2Csv(
+        entityReportsFolder,
+        // Please save the file with the following naming convention:
+        // `Party + ED + Event + S2P2` (ie. ABC 123 2023 Annual S2P2)
+        `GPO ${politicalEntity} ${reportingPeriodName} S2P2.csv`,
+        report.entityS2P2Reports[politicalEntity],
       );
-      saveCSV(fileName, csvContent, entityReportsFolder);
     }
   }
+}
+
+function saveAllCsv(folder, fileName, report) {
+  const csvContent = convertToCSV(
+    [AllRow.headers()].concat(report.getValues()),
+  );
+  saveCSV(folder, fileName, csvContent);
+}
+
+function saveS2p2Csv(folder, fileName, report) {
+  const contactIds = Object.keys(report).sort();
+
+  const rows = contactIds
+    .map((contactId) => report[contactId])
+    .filter((s2p2Row) => s2p2Row.AggregateContributionAmount >= 200.01)
+    .map((s2p2Row) => s2p2Row.getValues());
+
+  const csvContent = convertToCSV([S2P2Row.headers()].concat(rows));
+  saveCSV(folder, fileName, csvContent);
 }
 
 function findOrCreateFolder(parentFolder, folderName) {
@@ -233,11 +263,7 @@ function convertToCSV(dataArray) {
     .map((row) =>
       row
         .map((value) => {
-          if (value instanceof Date) {
-            return formatDateToMMDDYYYY(value);
-          }
-
-          return `"${value}"`;
+          return /\s/.test(value) ? `"${value}"` : value;
         })
         .join(','),
     )
@@ -252,7 +278,7 @@ function formatDateToMMDDYYYY(date) {
   return `${month}${day}${year}`;
 }
 
-function saveCSV(fileName, content, folder) {
+function saveCSV(folder, fileName, content) {
   const files = folder.getFilesByName(fileName);
   while (files.hasNext()) {
     files.next().setTrashed(true);
@@ -263,15 +289,17 @@ function saveCSV(fileName, content, folder) {
 
 function throwAndDisplayError(message) {
   SpreadsheetApp.getUi().alert(message);
-  throw new Error(message);
+  const e = new Error(message);
+  e.hasWarned = true;
+  return e;
 }
 
-function mapWithDefaultArray() {
+function mapWithDefault(fun) {
   return new Proxy(
     {},
     {
       get: (target, name) =>
-        name in target ? target[name] : (target[name] = []),
+        name in target ? target[name] : (target[name] = fun()),
     },
   );
 }
@@ -279,18 +307,215 @@ function mapWithDefaultArray() {
 class ReportingPeriod {
   constructor() {
     this.all = [];
-    this.s2p2 = [];
-    this.entityReports = mapWithDefaultArray();
-    this.entityS2P2Reports = mapWithDefaultArray();
+    /** map of contact_id to S2P2Row object */
+    this.s2p2 = {};
+    this.entityReports = mapWithDefault(() => []);
+    this.entityS2P2Reports = mapWithDefault(() => {});
   }
 }
 
-function reportsObject() {
-  return new Proxy(
-    {},
-    {
-      get: (target, name) =>
-        name in target ? target[name] : (target[name] = new ReportingPeriod()),
-    },
-  );
+class AllRow {
+  constructor(
+    PartyID,
+    ContributorID,
+    ReceiptNumber,
+    ReceiptStatus,
+    AgencyContribution,
+    PoliticalEntityType,
+    PoliticalEntity,
+    ContributionAmount,
+    ContributionType,
+    AcceptanceDate,
+    ReceiptIssuanceDate,
+    ContributionPeriodID,
+    ContributorType,
+    ContributorLastName,
+    ContributorFirstName,
+    OrganizationName,
+    ContributorAddress,
+    ContributorCity,
+    ContributorProvince,
+    ContributorPostalCode,
+  ) {
+    this.PartyID = PartyID;
+    this.ContributorID = ContributorID;
+    this.ReceiptNumber = ReceiptNumber;
+    this.ReceiptStatus = ReceiptStatus;
+    this.AgencyContribution = AgencyContribution;
+    this.PoliticalEntityType = PoliticalEntityType;
+    this.PoliticalEntity = PoliticalEntity;
+    this.ContributionAmount = ContributionAmount;
+    this.ContributionType = ContributionType;
+    this.AcceptanceDate = AcceptanceDate;
+    this.ReceiptIssuanceDate = ReceiptIssuanceDate;
+    this.ContributionPeriodID = ContributionPeriodID;
+    this.ContributorType = ContributorType;
+    this.ContributorLastName = ContributorLastName;
+    this.ContributorFirstName = ContributorFirstName;
+    this.OrganizationName = OrganizationName;
+    this.ContributorAddress = ContributorAddress;
+    this.ContributorCity = ContributorCity;
+    this.ContributorProvince = ContributorProvince;
+    this.ContributorPostalCode = ContributorPostalCode;
+  }
+
+  static headers() {
+    return [
+      'Party_ID',
+      'Contributor_ID',
+      'Receipt_Number',
+      'Receipt_Status',
+      'Agency_Contribution',
+      'Political_Entity_Type',
+      'Political_Entity',
+      'Contribution_Amount',
+      'Contribution_Type',
+      'Acceptance_Date',
+      'Receipt_Issuance_Date',
+      'Contribution_Period_ID',
+      'Contributor_Type',
+      'Contributor_Last_Name',
+      'Contributor_First_Name',
+      'Organization_Name',
+      'Contributor_Address',
+      'Contributor_City',
+      'Contributor_Province',
+      'Contributor_Postal_Code',
+    ];
+  }
+
+  static newFromRow(row) {
+    return new AllRow(
+      /* PartyID */ row[0],
+      /* ContributorID */ row[1],
+      /* ReceiptNumber */ row[2],
+      /* ReceiptStatus */ row[3],
+      /* AgencyContribution */ row[4],
+      /* PoliticalEntityType */ row[5],
+      /* politicalEntity */ extractPoliticalEntity(row[6]),
+      /* ContributionAmount */ Number(row[7]),
+      /* ContributionType */ row[8],
+      /* AcceptanceDate */ row[9],
+      /* ReceiptIssuanceDate */ row[10],
+      /* ContributionPeriodID */ row[11],
+      /* ContributorType */ row[12],
+      /* ContributorLastName */ row[13],
+      /* ContributorFirstName */ row[14],
+      /* OrganizationName */ row[15],
+      /* ContributorAddress */ row[16],
+      /* ContributorCity */ row[17],
+      /* ContributorProvince */ row[18],
+      /* ContributorPostalCode */ row[19],
+    );
+  }
+
+  getValues() {
+    return [
+      this.PartyID,
+      this.ContributorID,
+      this.ReceiptNumber,
+      this.ReceiptStatus,
+      this.AgencyContribution,
+      this.PoliticalEntityType,
+      this.PoliticalEntity,
+      this.ContributionAmount,
+      this.ContributionType,
+      formatDateToMMDDYYYY(this.AcceptanceDate),
+      formatDateToMMDDYYYY(this.ReceiptIssuanceDate),
+      this.ContributionPeriodID,
+      this.ContributorType,
+      this.ContributorLastName,
+      this.ContributorFirstName,
+      this.OrganizationName,
+      this.ContributorAddress,
+      this.ContributorCity,
+      this.ContributorProvince,
+      this.ContributorPostalCode,
+    ];
+  }
+}
+
+class S2P2Row {
+  constructor(
+    ContributorID,
+    PoliticalEntityType,
+    PoliticalEntity,
+    ContributionPeriodID,
+    ContributorType,
+    ContributorLastName,
+    ContributorFirstName,
+    ContributorAddress,
+    ContributorCity,
+    ContributorProvince,
+    ContributorPostalCode,
+    AggregateContributionAmount,
+  ) {
+    this.ContributorID = ContributorID;
+    this.PoliticalEntityType = PoliticalEntityType;
+    this.PoliticalEntity = PoliticalEntity;
+    this.ContributionPeriodID = ContributionPeriodID;
+    this.ContributorType = ContributorType;
+    this.ContributorLastName = ContributorLastName;
+    this.ContributorFirstName = ContributorFirstName;
+    this.ContributorAddress = ContributorAddress;
+    this.ContributorCity = ContributorCity;
+    this.ContributorProvince = ContributorProvince;
+    this.ContributorPostalCode = ContributorPostalCode;
+    this.AggregateContributionAmount = AggregateContributionAmount;
+  }
+
+  static headers() {
+    return [
+      'Party_ID',
+      'Contributor_ID',
+      'Political_Entity_Type',
+      'Political_Entity',
+      'Contribution_Period_ID',
+      'Contributor_Type',
+      'Contributor_Last_Name',
+      'Contributor_First_Name',
+      'Organization_Name',
+      'Contributor_Address',
+      'Contributor_City',
+      'Contributor_Province',
+      'Contributor_Postal_Code',
+      'Aggregate_Contribution_Amount',
+    ];
+  }
+
+  static newFromRow(row) {
+    return new S2P2Row(
+      /*contributorID*/ row[1],
+      /*PoliticalEntityType*/ row[5],
+      /* politicalEntity */ extractPoliticalEntity(row[6]),
+      /*ContributionPeriodID*/ row[11],
+      /*ContributorType*/ row[5],
+      /*ContributorLastName*/ row[13],
+      /*ContributorFirstName*/ row[14],
+      /*ContributorAddress*/ row[16],
+      /*ContributorCity*/ row[17],
+      /*ContributorProvince*/ row[18],
+      /*ContributorPostalCode*/ row[19],
+      /*AggregateContributionAmount*/ Number(row[7]),
+    );
+  }
+
+  getValues() {
+    return [
+      /*PartyID*/ 8,
+      this.ContributorID,
+      this.PoliticalEntityType,
+      this.PoliticalEntity,
+      this.ContributionPeriodID,
+      this.ContributorType,
+      this.ContributorLastName,
+      this.ContributorFirstName,
+      /*OrganizationName*/ '',
+      this.ContributorAddress,
+      this.ContributorCity,
+      this.ContributorProvince,
+      this.ContributorPostalCode,
+      this.AggregateContributionAmount,
+    ];
+  }
 }
