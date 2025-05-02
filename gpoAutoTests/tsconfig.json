@@ -3,7 +3,7 @@
       "target": "es2016",
       "module": "commonjs",
       "lib": ["dom", "es6", "es7"],
-      "types": ["node","cypress"],
+      "types": ["node","cypress", "@cypress/grep"],
       "strict": true,
       "resolveJsonModule": true,
       "esModuleInterop": true,

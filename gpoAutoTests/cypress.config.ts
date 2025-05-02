@@ -8,6 +8,8 @@ export default defineConfig({
     // eslint-disable-next-line  @typescript-eslint/no-unused-vars
       setupNodeEvents(on, config) {
         // e2e testing node events setup code
+        require('@cypress/grep/src/plugin')(config);
+        return config;
     },
     specPattern: 'cypress/e2e/**/*tests.ts'
   },
