@@ -1,4 +1,4 @@
-name: End-to-end Cypress tests
+name: End-to-end Smoke tests
 on: 
   schedule:
     - cron: '0 0 * * 1'  # Runs at 00:00 on Monday (UTC)
@@ -17,8 +17,7 @@ jobs:
       - name: Cypress run
         uses: cypress-io/github-action@v6
         with:
-          spec: |
-            cypress/e2e/src/tests/join.party.smoke.tests.ts
-            cypress/e2e/src/tests/join.party.regression.tests.ts
+          project: ./cypress/e2e/src/tests
           browser: chrome
           working-directory: ./gpoAutoTests/
+          env: grepTags=@smoke

@@ -3,5 +3,6 @@
     "three_years_memership_fee": 25,
     "min_additionlal_contribution": 3,
     "default_country": "CA",
-    "default_state": "ON"
+    "default_state": "ON",
+    "max_other_amount": 3350
 }
