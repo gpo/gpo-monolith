@@ -42,10 +42,14 @@ class PersonalInfoTabComponent {
     public enterPersonalInfo(personalInfo: PersonalInfo) {
         this.firstName.click().clear().type(personalInfo.firstName);
         this.lastName.click().clear().type(personalInfo.lastName)
-        this.email.click().clear().type(personalInfo.email)
+        this.enterEmail(personalInfo.email)
         this.street.click().clear().type(personalInfo.street)
         this.city.click().clear().type(personalInfo.city)
         this.postalCode.click().clear().type(personalInfo.postalCode)
+    }
+
+    public enterEmail(email: string) {
+        this.email.click().clear().type(email)
     }
 }
 

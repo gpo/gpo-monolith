@@ -11,6 +11,7 @@ class AmountTabComponent {
     private get standartMembership() { return cy.get('.membership_amount-row1 > .price-set-option-content > label > .crm-price-amount-label') }
     private get threeYearsMembership() { return cy.get('.membership_amount-row2 > .price-set-option-content > label > .crm-price-amount-label') }
     private get yourContribution() { return cy.get('#donation-total') }
+    public get otherAmountError() {return cy.get('.content other_amount-content').find('crm-error')}
 
     public getYourContribution() {
         return this.yourContribution.then((e) => Number(e.text().replace('$ ', '')))
