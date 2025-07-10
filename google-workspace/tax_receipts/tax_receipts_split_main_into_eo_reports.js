@@ -136,12 +136,24 @@ function segmentReports() {
     reports[reportingPeriod].all.push(allRow);
     reports[reportingPeriod].entityReports[politicalEntity].push(allRow);
 
-    addToS2p2Report(reports[reportingPeriod].s2p2, row);
     addToS2p2Report(
       reports[reportingPeriod].entityS2P2Reports[politicalEntity],
       row,
     );
   });
+
+  // remove rows from the s2p2 report that are not >= 200.01
+  for (const reportingPeriod in reports) {
+    const report = reports[reportingPeriod];
+    for (const politicalEntity in report.entityReports) {
+      const s2p2Report = report.entityS2P2Reports[politicalEntity];
+      for (const contributorID in s2p2Report) {
+        if (s2p2Report[contributorID].AggregateContributionAmount < 200.01) {
+          delete s2p2Report[contributorID];
+        }
+      }
+    }
+  }
 
   return reports;
 }
@@ -208,7 +220,9 @@ function saveReports(reports, reportingPeriodNamesMap, generatedFilesFolder) {
       // Save the file with the following naming convention:
       // Party + ED + Event + S2P2 (i.e. ABC 123 2023 Annual S2P2)
       `GPO ${reportingPeriodName} S2P2.csv`,
-      report.s2p2,
+      Object.values(report.entityS2P2Reports).flatMap((report) =>
+        Object.values(report),
+      ),
     );
 
     const entityReportsFolder = findOrCreateFolder(
@@ -224,13 +238,15 @@ function saveReports(reports, reportingPeriodNamesMap, generatedFilesFolder) {
         `GPO ${politicalEntity} ${reportingPeriodName} ALL.csv`,
         report.entityReports[politicalEntity],
       );
+    }
 
+    for (const politicalEntity in report.entityS2P2Reports) {
       saveS2p2Csv(
         entityReportsFolder,
         // Please save the file with the following naming convention:
         // `Party + ED + Event + S2P2` (i.e. ABC 123 2023 Annual S2P2)
         `GPO ${politicalEntity} ${reportingPeriodName} S2P2.csv`,
-        report.entityS2P2Reports[politicalEntity],
+        Object.values(report.entityS2P2Reports[politicalEntity]),
       );
     }
   }
@@ -243,18 +259,15 @@ function saveAllCsv(folder, fileName, report) {
   saveCSV(folder, fileName, csvContent);
 }
 
-function saveS2p2Csv(folder, fileName, report) {
-  const contactIds = Object.keys(report).sort();
-
-  const rows = contactIds
-    .map((contactId) => report[contactId])
-    .filter((s2p2Row) => s2p2Row.AggregateContributionAmount >= 200.01)
-    .map((s2p2Row) => s2p2Row.getValues());
-
-  if (rows.length === 0) {
+function saveS2p2Csv(folder, fileName, s2p2Rows) {
+  if (s2p2Rows.length === 0) {
     // if the report is empty don't print it
     return;
   }
+
+  const rows = s2p2Rows
+    .sort((a, b) => a.ContributorID - b.ContributorID)
+    .map((s2p2Row) => s2p2Row.getValues());
 
   const csvContent = convertToCSV([S2P2Row.headers()].concat(rows));
   saveCSV(folder, fileName, csvContent);
@@ -318,8 +331,6 @@ function mapWithDefault(fun) {
 class ReportingPeriod {
   constructor() {
     this.all = [];
-    /** map of contact_id to S2P2Row object */
-    this.s2p2 = {};
     this.entityReports = mapWithDefault(() => []);
     this.entityS2P2Reports = mapWithDefault(() => ({}));
   }
