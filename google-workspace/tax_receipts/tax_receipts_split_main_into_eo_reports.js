@@ -1,5 +1,5 @@
 /**
- * This AppScript is designed to be used on a full callendar version of a tax receipt report.
+ * This AppScript is designed to be used on a full calendar version of a tax receipt report.
  * example: https://docs.google.com/spreadsheets/d/1jeMiZ2uQQSA5UkNliFgiUg9bkSifIQNH4MnlJZwcVdg/edit
  */
 
@@ -30,6 +30,7 @@ function generateEOReports() {
     renameEOReportsFolder('PROCESSING');
     exportFilteredCSVs();
     renameEOReportsFolder('DONE');
+    SpreadsheetApp.getUi().alert('Generating EO Reports has succeeded');
   } catch (e) {
     renameEOReportsFolder('ERROR');
 
@@ -55,6 +56,7 @@ function exportFilteredCSVs() {
 }
 
 let eoReportFolderCache = false;
+
 function getOrCreateEOReportFolder() {
   if (eoReportFolderCache) return eoReportFolderCache;
 
@@ -78,6 +80,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
   dateStyle: 'short',
   timeStyle: 'short',
 });
+
 function renameEOReportsFolder(status) {
   const eoReportFolder = getOrCreateEOReportFolder();
   const timestamp = dateTimeFormatter.format(startTime).replace(',', '');
@@ -144,6 +147,8 @@ function segmentReports() {
 }
 
 function addToS2p2Report(s2p2Report, row) {
+  if (row[3] !== 'I') return; // only process rows with Receipt_Status 'Issued'
+
   const contributorID = row[1];
   const amount = Number(row[7]);
 
@@ -193,7 +198,7 @@ function saveReports(reports, reportingPeriodNamesMap, generatedFilesFolder) {
     saveAllCsv(
       reportingPeriodFolder,
       // Save the file with the following naming convention:
-      // Party + ED + Event + ALL (ie. ABC 123 2023 Annual ALL)
+      // Party + ED + Event + ALL (i.e. ABC 123 2023 Annual ALL)
       `GPO ${reportingPeriodName} ALL.csv`,
       report.all,
     );
@@ -201,7 +206,7 @@ function saveReports(reports, reportingPeriodNamesMap, generatedFilesFolder) {
     saveS2p2Csv(
       reportingPeriodFolder,
       // Save the file with the following naming convention:
-      // Party + ED + Event + S2P2 (ie. ABC 123 2023 Annual S2P2)
+      // Party + ED + Event + S2P2 (i.e. ABC 123 2023 Annual S2P2)
       `GPO ${reportingPeriodName} S2P2.csv`,
       report.s2p2,
     );
@@ -215,7 +220,7 @@ function saveReports(reports, reportingPeriodNamesMap, generatedFilesFolder) {
       saveAllCsv(
         entityReportsFolder,
         // Please save the file with the following naming convention:
-        // `Party + ED + Event + ALL` (ie. ABC 123 2023 Annual ALL)
+        // `Party + ED + Event + ALL` (i.e. ABC 123 2023 Annual ALL)
         `GPO ${politicalEntity} ${reportingPeriodName} ALL.csv`,
         report.entityReports[politicalEntity],
       );
@@ -223,7 +228,7 @@ function saveReports(reports, reportingPeriodNamesMap, generatedFilesFolder) {
       saveS2p2Csv(
         entityReportsFolder,
         // Please save the file with the following naming convention:
-        // `Party + ED + Event + S2P2` (ie. ABC 123 2023 Annual S2P2)
+        // `Party + ED + Event + S2P2` (i.e. ABC 123 2023 Annual S2P2)
         `GPO ${politicalEntity} ${reportingPeriodName} S2P2.csv`,
         report.entityS2P2Reports[politicalEntity],
       );
@@ -232,9 +237,9 @@ function saveReports(reports, reportingPeriodNamesMap, generatedFilesFolder) {
 }
 
 function saveAllCsv(folder, fileName, report) {
-  const csvContent = convertToCSV(
-    [AllRow.headers()].concat(report.getValues()),
-  );
+  const rows = report.map((row) => row.getValues());
+
+  const csvContent = convertToCSV([AllRow.headers()].concat(rows));
   saveCSV(folder, fileName, csvContent);
 }
 
@@ -246,13 +251,18 @@ function saveS2p2Csv(folder, fileName, report) {
     .filter((s2p2Row) => s2p2Row.AggregateContributionAmount >= 200.01)
     .map((s2p2Row) => s2p2Row.getValues());
 
+  if (rows.length === 0) {
+    // if the report is empty don't print it
+    return;
+  }
+
   const csvContent = convertToCSV([S2P2Row.headers()].concat(rows));
   saveCSV(folder, fileName, csvContent);
 }
 
 function findOrCreateFolder(parentFolder, folderName) {
   const folders = parentFolder.getFoldersByName(folderName);
-  while (folders.hasNext()) {
+  if (folders.hasNext()) {
     return folders.next();
   }
   return parentFolder.createFolder(folderName);
@@ -263,7 +273,8 @@ function convertToCSV(dataArray) {
     .map((row) =>
       row
         .map((value) => {
-          return /\s/.test(value) ? `"${value}"` : value;
+          const trimmed = String(value).trim();
+          return /[,\s]/.test(trimmed) ? `"${trimmed}"` : trimmed;
         })
         .join(','),
     )
@@ -310,7 +321,7 @@ class ReportingPeriod {
     /** map of contact_id to S2P2Row object */
     this.s2p2 = {};
     this.entityReports = mapWithDefault(() => []);
-    this.entityS2P2Reports = mapWithDefault(() => {});
+    this.entityS2P2Reports = mapWithDefault(() => ({}));
   }
 }
 
