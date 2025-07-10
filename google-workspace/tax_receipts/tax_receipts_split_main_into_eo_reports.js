@@ -1,5 +1,5 @@
 /**
- * This AppScript is designed to be used on a full callendar version of a tax receipt report.
+ * This AppScript is designed to be used on a full calendar version of a tax receipt report.
  * example: https://docs.google.com/spreadsheets/d/1jeMiZ2uQQSA5UkNliFgiUg9bkSifIQNH4MnlJZwcVdg/edit
  */
 
@@ -23,6 +23,7 @@ function generateEOReports() {
     renameEOReportsFolder('PROCESSING');
     exportFilteredCSVs();
     renameEOReportsFolder('DONE');
+    SpreadsheetApp.getUi().alert('Generating EO Reports has succeeded');
   } catch (e) {
     renameEOReportsFolder('ERROR');
     throwAndDisplayError(
@@ -54,6 +55,7 @@ function exportFilteredCSVs() {
 }
 
 let eoReportFolderCache = false;
+
 function getOrCreateEOReportFolder() {
   if (eoReportFolderCache) return eoReportFolderCache;
 
@@ -77,6 +79,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
   dateStyle: 'short',
   timeStyle: 'short',
 });
+
 function renameEOReportsFolder(status) {
   const eoReportFolder = getOrCreateEOReportFolder();
   const timestamp = dateTimeFormatter.format(startTime).replace(',', '');
@@ -149,7 +152,53 @@ function segmentReports() {
     }
   });
 
+<<<<<<< HEAD
   return { headers, reports };
+||||||| parent of 57401b1 (changes from final script used March 2025)
+  return reports;
+}
+
+function addToS2p2Report(s2p2Report, row) {
+  const contributorID = row[1];
+  const amount = Number(row[7]);
+
+  const s2p2Row = s2p2Report[contributorID];
+  if (s2p2Row) {
+    s2p2Row.AggregateContributionAmount += amount;
+  } else {
+    s2p2Report[contributorID] = S2P2Row.newFromRow(row);
+  }
+}
+
+function extractPoliticalEntity(politicalEntity) {
+  if (politicalEntity.startsWith('GPO ')) {
+    return politicalEntity.substring(4);
+  }
+  return politicalEntity;
+=======
+  return reports;
+}
+
+function addToS2p2Report(s2p2Report, row) {
+  if (row[3] !== 'I') return; // only process rows with Receipt_Status 'Issued'
+
+  const contributorID = row[1];
+  const amount = Number(row[7]);
+
+  const s2p2Row = s2p2Report[contributorID];
+  if (s2p2Row) {
+    s2p2Row.AggregateContributionAmount += amount;
+  } else {
+    s2p2Report[contributorID] = S2P2Row.newFromRow(row);
+  }
+}
+
+function extractPoliticalEntity(politicalEntity) {
+  if (politicalEntity.startsWith('GPO ')) {
+    return politicalEntity.substring(4);
+  }
+  return politicalEntity;
+>>>>>>> 57401b1 (changes from final script used March 2025)
 }
 
 function getPeriodNames() {
@@ -182,9 +231,28 @@ function saveReports(
       `${reportingPeriod} - ${reportingPeriodName}`,
     );
 
+<<<<<<< HEAD
     // Save the file with the following naming convention: Party + ED + Event + ALL (ie. ABC 123 2023 Annual ALL)
     const allReportFileName = `GPO ${reportingPeriodName} ALL.csv`;
+||||||| parent of 57401b1 (changes from final script used March 2025)
+    saveAllCsv(
+      reportingPeriodFolder,
+      // Save the file with the following naming convention:
+      // Party + ED + Event + ALL (ie. ABC 123 2023 Annual ALL)
+      `GPO ${reportingPeriodName} ALL.csv`,
+      report.all,
+    );
+=======
+    saveAllCsv(
+      reportingPeriodFolder,
+      // Save the file with the following naming convention:
+      // Party + ED + Event + ALL (i.e. ABC 123 2023 Annual ALL)
+      `GPO ${reportingPeriodName} ALL.csv`,
+      report.all,
+    );
+>>>>>>> 57401b1 (changes from final script used March 2025)
 
+<<<<<<< HEAD
     const allReportCsvContent = convertToCSV([headers].concat(report.all));
     saveCSV(allReportFileName, allReportCsvContent, reportingPeriodFolder);
 
@@ -193,6 +261,23 @@ function saveReports(
 
     const s2p2CsvContent = convertToCSV([headers].concat(report.s2p2));
     saveCSV(s2p2ReportFileName, s2p2CsvContent, reportingPeriodFolder);
+||||||| parent of 57401b1 (changes from final script used March 2025)
+    saveS2p2Csv(
+      reportingPeriodFolder,
+      // Save the file with the following naming convention:
+      // Party + ED + Event + S2P2 (ie. ABC 123 2023 Annual S2P2)
+      `GPO ${reportingPeriodName} S2P2.csv`,
+      report.s2p2,
+    );
+=======
+    saveS2p2Csv(
+      reportingPeriodFolder,
+      // Save the file with the following naming convention:
+      // Party + ED + Event + S2P2 (i.e. ABC 123 2023 Annual S2P2)
+      `GPO ${reportingPeriodName} S2P2.csv`,
+      report.s2p2,
+    );
+>>>>>>> 57401b1 (changes from final script used March 2025)
 
     const entityReportsFolder = findOrCreateFolder(
       reportingPeriodFolder,
@@ -200,11 +285,45 @@ function saveReports(
     );
 
     for (const politicalEntity in report.entityReports) {
+<<<<<<< HEAD
       // Save the file with the following naming convention: Party + ED + Event + ALL (ie. ABC 123 2023 Annual ALL)
       const fileName = `GPO ${politicalEntity} ${reportingPeriodName} ALL.csv`;
+||||||| parent of 57401b1 (changes from final script used March 2025)
+      saveAllCsv(
+        entityReportsFolder,
+        // Please save the file with the following naming convention:
+        // `Party + ED + Event + ALL` (ie. ABC 123 2023 Annual ALL)
+        `GPO ${politicalEntity} ${reportingPeriodName} ALL.csv`,
+        report.entityReports[politicalEntity],
+      );
+=======
+      saveAllCsv(
+        entityReportsFolder,
+        // Please save the file with the following naming convention:
+        // `Party + ED + Event + ALL` (i.e. ABC 123 2023 Annual ALL)
+        `GPO ${politicalEntity} ${reportingPeriodName} ALL.csv`,
+        report.entityReports[politicalEntity],
+      );
+>>>>>>> 57401b1 (changes from final script used March 2025)
 
+<<<<<<< HEAD
       const csvContent = convertToCSV(
         [headers].concat(report.entityReports[politicalEntity]),
+||||||| parent of 57401b1 (changes from final script used March 2025)
+      saveS2p2Csv(
+        entityReportsFolder,
+        // Please save the file with the following naming convention:
+        // `Party + ED + Event + S2P2` (ie. ABC 123 2023 Annual S2P2)
+        `GPO ${politicalEntity} ${reportingPeriodName} S2P2.csv`,
+        report.entityS2P2Reports[politicalEntity],
+=======
+      saveS2p2Csv(
+        entityReportsFolder,
+        // Please save the file with the following naming convention:
+        // `Party + ED + Event + S2P2` (i.e. ABC 123 2023 Annual S2P2)
+        `GPO ${politicalEntity} ${reportingPeriodName} S2P2.csv`,
+        report.entityS2P2Reports[politicalEntity],
+>>>>>>> 57401b1 (changes from final script used March 2025)
       );
       saveCSV(fileName, csvContent, entityReportsFolder);
     }
@@ -220,9 +339,56 @@ function saveReports(
   }
 }
 
+<<<<<<< HEAD
+||||||| parent of 57401b1 (changes from final script used March 2025)
+function saveAllCsv(folder, fileName, report) {
+  const csvContent = convertToCSV(
+    [AllRow.headers()].concat(report.getValues()),
+  );
+  saveCSV(folder, fileName, csvContent);
+}
+
+function saveS2p2Csv(folder, fileName, report) {
+  const contactIds = Object.keys(report).sort();
+
+  const rows = contactIds
+    .map((contactId) => report[contactId])
+    .filter((s2p2Row) => s2p2Row.AggregateContributionAmount >= 200.01)
+    .map((s2p2Row) => s2p2Row.getValues());
+
+  const csvContent = convertToCSV([S2P2Row.headers()].concat(rows));
+  saveCSV(folder, fileName, csvContent);
+}
+
+=======
+function saveAllCsv(folder, fileName, report) {
+  const rows = report.map((row) => row.getValues());
+
+  const csvContent = convertToCSV([AllRow.headers()].concat(rows));
+  saveCSV(folder, fileName, csvContent);
+}
+
+function saveS2p2Csv(folder, fileName, report) {
+  const contactIds = Object.keys(report).sort();
+
+  const rows = contactIds
+    .map((contactId) => report[contactId])
+    .filter((s2p2Row) => s2p2Row.AggregateContributionAmount >= 200.01)
+    .map((s2p2Row) => s2p2Row.getValues());
+
+  if (rows.length === 0) {
+    // if the report is empty don't print it
+    return;
+  }
+
+  const csvContent = convertToCSV([S2P2Row.headers()].concat(rows));
+  saveCSV(folder, fileName, csvContent);
+}
+
+>>>>>>> 57401b1 (changes from final script used March 2025)
 function findOrCreateFolder(parentFolder, folderName) {
   const folders = parentFolder.getFoldersByName(folderName);
-  while (folders.hasNext()) {
+  if (folders.hasNext()) {
     return folders.next();
   }
   return parentFolder.createFolder(folderName);
@@ -233,11 +399,18 @@ function convertToCSV(dataArray) {
     .map((row) =>
       row
         .map((value) => {
+<<<<<<< HEAD
           if (value instanceof Date) {
             return formatDateToMMDDYYYY(value);
           }
 
           return `"${value}"`;
+||||||| parent of 57401b1 (changes from final script used March 2025)
+          return /\s/.test(value) ? `"${value}"` : value;
+=======
+          const trimmed = String(value).trim();
+          return /[,\s]/.test(trimmed) ? `"${trimmed}"` : trimmed;
+>>>>>>> 57401b1 (changes from final script used March 2025)
         })
         .join(','),
     )
@@ -279,9 +452,21 @@ function mapWithDefaultArray() {
 class ReportingPeriod {
   constructor() {
     this.all = [];
+<<<<<<< HEAD
     this.s2p2 = [];
     this.entityReports = mapWithDefaultArray();
     this.entityS2P2Reports = mapWithDefaultArray();
+||||||| parent of 57401b1 (changes from final script used March 2025)
+    /** map of contact_id to S2P2Row object */
+    this.s2p2 = {};
+    this.entityReports = mapWithDefault(() => []);
+    this.entityS2P2Reports = mapWithDefault(() => {});
+=======
+    /** map of contact_id to S2P2Row object */
+    this.s2p2 = {};
+    this.entityReports = mapWithDefault(() => []);
+    this.entityS2P2Reports = mapWithDefault(() => ({}));
+>>>>>>> 57401b1 (changes from final script used March 2025)
   }
 }
 
