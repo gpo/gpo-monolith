@@ -132,6 +132,25 @@ function segmentReports() {
       );
     }
 
+    // Validate that all required row indices exist (0-19)
+    const requiredIndices = [
+      0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19,
+    ];
+    const missingIndices = requiredIndices.filter(
+      (index) => row[index] === undefined || row[index] === null,
+    );
+
+    if (missingIndices.length > 0) {
+      const columnHeaders = AllRow.headers();
+      const missingColumns = missingIndices.map(
+        (index) => columnHeaders[index] || 'Unknown',
+      );
+
+      throwAndDisplayError(
+        `Row is missing required data in columns: ${missingColumns.join(', ')}. Row: ${convertToCSV([row])}`,
+      );
+    }
+
     const allRow = AllRow.newFromRow(row);
     reports[reportingPeriod].all.push(allRow);
     reports[reportingPeriod].entityReports[politicalEntity].push(allRow);
