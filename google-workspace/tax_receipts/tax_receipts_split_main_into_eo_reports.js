@@ -122,36 +122,12 @@ function segmentReports() {
 
   // process all records excluding headers
   data.slice(1).forEach((row) => {
-    const politicalEntity = extractPoliticalEntity(row[6]);
-    const reportingPeriod = row[11]; // Column L
-
-    if (!politicalEntity || !reportingPeriod) {
-      throwAndDisplayError(
-        `row is missing a political entity: ${politicalEntity} ` +
-          `or a reporting period: ${reportingPeriod}. ${convertToCSV([row])}`,
-      );
-    }
-
-    // Validate that all required row indices exist (0-19)
-    const requiredIndices = [
-      0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19,
-    ];
-    const missingIndices = requiredIndices.filter(
-      (index) => row[index] === undefined || row[index] === null,
-    );
-
-    if (missingIndices.length > 0) {
-      const columnHeaders = AllRow.headers();
-      const missingColumns = missingIndices.map(
-        (index) => columnHeaders[index] || 'Unknown',
-      );
-
-      throwAndDisplayError(
-        `Row is missing required data in columns: ${missingColumns.join(', ')}. Row: ${convertToCSV([row])}`,
-      );
-    }
+    validateRow(row);
 
     const allRow = AllRow.newFromRow(row);
+    const reportingPeriod = allRow.ContributionPeriodID;
+    const politicalEntity = allRow.PoliticalEntity;
+
     reports[reportingPeriod].all.push(allRow);
     reports[reportingPeriod].entityReports[politicalEntity].push(allRow);
 
@@ -175,6 +151,27 @@ function segmentReports() {
   }
 
   return reports;
+}
+
+function validateRow(row) {
+  // Validate that all required row indices exist (0-19)
+  const requiredIndices = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19,
+  ];
+  const missingIndices = requiredIndices.filter(
+    (index) => row[index] === undefined || String(row[index]).trim() === '',
+  );
+
+  if (missingIndices.length > 0) {
+    const columnHeaders = AllRow.headers();
+    const missingColumns = missingIndices.map(
+      (index) => columnHeaders[index] || 'Unknown',
+    );
+
+    throwAndDisplayError(
+      `Receipt ${row[2]} is missing required data in columns: ${missingColumns.join(', ')}.\n\nRow: ${convertToCSV([row])}`,
+    );
+  }
 }
 
 function addToS2p2Report(s2p2Report, row) {
