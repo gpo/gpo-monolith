@@ -36,7 +36,7 @@ function drawReceiptOnPage(page, font, row, width, height) {
   drawRow(510, page, row, width, height);
 }
 
-async function createReceiptPage(templatePdf, font, row) {
+async function createIndividualReceipt(templatePdf, row) {
   const pdfDoc = await PDFDocument.create();
   const pageFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const [page] = await pdfDoc.copyPages(templatePdf, [0]);
@@ -53,26 +53,35 @@ async function createPDF() {
   const templateBytes = fs.readFileSync(TEMPLATE_PDF_PATH);
   const templatePdf = await PDFDocument.load(templateBytes);
 
+  // Get template page dimensions
+  const [templatePage] = templatePdf.getPages();
+  const width = templatePage.getWidth();
+  const height = templatePage.getHeight();
+
   // Create a new PDF document for the combined file
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+  // Embed the template page as a form XObject (stored once, reused many times)
+  // This is the key optimization - the template content is stored once in the PDF
+  const templatePageForm = await pdfDoc.embedPage(templatePage);
 
   // Stream CSV line by line
   let count = 0;
   const stream = createReadStream(CSV_PATH).pipe(csv());
 
   for await (const row of stream) {
-    // Copy template page for combined PDF
-    const [newPage] = await pdfDoc.copyPages(templatePdf, [0]);
-    pdfDoc.addPage(newPage);
-    const { width, height } = newPage.getSize();
+    // Create a new page with the same dimensions as the template
+    const newPage = pdfDoc.addPage([width, height]);
+
+    // Draw the template form on the page (reusing the embedded form)
+    newPage.drawPage(templatePageForm);
 
     drawReceiptOnPage(newPage, font, row, width, height);
 
     // Create individual PDF for this receipt
-    const { pdfDoc: individualPdf } = await createReceiptPage(
+    const { pdfDoc: individualPdf } = await createIndividualReceipt(
       templatePdf,
-      font,
       row,
     );
 
