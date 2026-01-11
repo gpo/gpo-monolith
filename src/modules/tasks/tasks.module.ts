@@ -4,9 +4,10 @@ import {HistoricalContributionsReportTask} from "./historical-contributions-repo
 import {GoogleApiModule} from "../googleApi/googleApi.module";
 import {FilesystemModule} from "../filesystem/filesystem.module";
 import {CsvModule} from "../csv/csv.module";
+import { SlackModule } from '../slack/slack.module';
 
 @Module({
-    imports: [GoogleApiModule, DatabaseModule, FilesystemModule, CsvModule],
+    imports: [GoogleApiModule, DatabaseModule, FilesystemModule, CsvModule, SlackModule],
     providers: [HistoricalContributionsReportTask],
     exports: [HistoricalContributionsReportTask]
 })
