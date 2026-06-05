@@ -1,0 +1,353 @@
+openapi: 3.0.0
+info:
+  version: "1.0.0"
+  title: Qomon public API - Actions
+servers:
+  - url: https://incoming.qomon.app
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Actions
+
+paths:
+  /actions:
+    get:
+      tags:
+        - Actions
+      summary: Get actions
+      description: Get actions
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      ActionsAggreg:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ActionAgreg"
+
+components:
+  schemas:
+    Address:
+      type: object
+      properties:
+        housenumber:
+          type: string
+          example: 1
+        street:
+          type: string
+          example: rue de la paix
+        postalcode:
+          type: string
+          example: 75000
+        citycode:
+          type: string
+          example: 75101
+        city:
+          type: string
+          example: Paris
+        state:
+          type: string
+          example: Ile-de-France
+        country:
+          type: string
+          example: France
+        addition:
+          type: string
+          example: Résidence de la paix
+        infos:
+          type: string
+          example: Porte de gauche
+        building:
+          type: string
+          example: Bâtiment A
+        floor:
+          type: string
+          example: 2
+        door:
+          type: string
+          example: A
+        pollingstation:
+          type: string
+          example: BV-06
+
+    UserWithActive:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            active:
+              type: boolean
+              example: true
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        CreatedAt:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:50:34.643724Z"
+        UpdatedAt:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:55:12.853724Z"
+        birthdate:
+          type: string
+          format: date-time
+        created:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:50:34.643724Z"
+        firstname:
+          type: string
+          example: "John"
+        surname:
+          type: string
+          example: "Doe"
+        selected_group_id:
+          type: array
+          items:
+            type: integer
+          example: [1]
+        group_id:
+          type: array
+          items:
+            type: integer
+          example: [1, 2, 4]
+        locale:
+          type: string
+          example: "en"
+        mail:
+          type: string
+          format: email
+          example: "john.doe@example.org"
+        phone:
+          type: string
+          example: "0123456789"
+        role:
+          type: string
+          example: "superadmin"
+        two_factor_enable:
+          type: boolean
+        validationcode:
+          type: string
+          example:
+        gdpr_accepted:
+          type: boolean
+
+    Teams:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Team 1"
+        group_id:
+          type: integer
+          example: 1
+        CreatedAt:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:50:34.643724Z"
+        UpdatedAt:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:55:12.853724Z"
+        DeletedAt:
+          type: string
+          format: date-time
+          example: null
+        userswithactive:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserWithActive"
+
+    Action:
+      allOf:
+        - $ref: "#/components/schemas/actionMin"
+        - type: object
+          properties:
+            created_by_detail:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                  example: "John"
+                last_name:
+                  type: string
+                  example: "Doe"
+                status:
+                  type: string
+                  example: "Disponible"
+                phone:
+                  type: string
+                  example: "+33612345678"
+                email:
+                  type: string
+                  format: email
+                  example: "john.doe@example.org"
+                avator:
+                  type: string
+                  example: "https://avatars.qomon.com/avatars/1.png"
+            aggreg_without_location:
+              type: boolean
+            fields:
+              type: string
+              description: "Classic search fields stringified"
+            polygon:
+              type: string
+              description: Polygon stringified
+              example: "[]"
+            filter:
+              type: string
+            advanced_search:
+              type: string
+              format: json
+              description: "Advanced search stringified"
+              example: "[]"
+            polling_station_included:
+              type: string
+              format: json
+              example: "[]"
+            polling_station_excluded:
+              type: string
+              format: json
+              example: "[]"
+            polling_station_included_missing:
+              type: boolean
+            polling_station_excluded_missing:
+              type: boolean
+            address_included:
+              type: string
+              format: json
+              example: "[]"
+            address_excluded:
+              type: string
+              format: json
+              example: "[]"
+            address_included_missing:
+              type: boolean
+            address_excluded_missing:
+              type: boolean
+            not_polygon:
+              type: string
+              format: json
+              example: "[]"
+            excluded_nevada:
+              type: boolean
+
+    ActionAgreg:
+      type: object
+      properties:
+        Action:
+          $ref: "#/components/schemas/Action"
+        NbVisites:
+          type: integer
+          example: 79
+        NbContacts:
+          type: integer
+          example: 89
+        NbVisitesDeclared:
+          type: integer
+          example: 79
+
+    actionMin:
+
+      description: |-
+        Base for action and Action and ActionArgs components. Not used directly.
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          description: Name of the action
+          example: "Let's mobilize"
+        type_data:
+          type: string
+          enum:
+            - canvassing
+            - calling
+            - mail
+            - call
+            - challenge
+            - static
+            - sharing
+            - event
+            - gotvcanvassing
+            - gotvcalling
+            - other
+        pitch:
+          type: string
+          description: Pitch of the action
+          example: "Qomon is a great tool to mobilize people"
+        status:
+          type: string
+          enum:
+            - todo
+            - finished
+        group_id:
+          type: integer
+        Users:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserWithActive"
+        Teams:
+          type: array
+          items:
+            $ref: "#/components/schemas/Teams"
+        facts:
+          type: array
+          items:
+            type: object
+        Forms:
+          type: array
+          items:
+            type: object
+        Addresses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Address"
+        link:
+          type: string
+        goal:
+          type: integer
+        goal_forms:
+          type: integer
+        start:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:50:34.643724Z"
+        end:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:50:34.643724Z"
+        reminder_id:
+          type: string
+        created_by:
+          type: integer
+        gotv_voted_tag:
+          type: string
+        gotv_not_voted_tag:
+          type: string
+        gotv_abstention_tag:
+          type: string
+        public:
+          type: boolean
+        registration_link:
+          type: string
