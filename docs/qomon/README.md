@@ -1,3 +1,8 @@
+---
+last-reviewed: 2026-07-03
+review-interval-days: 180
+---
+
 # Qomon API — OpenAPI / Swagger specs
 
 OpenAPI 3.0/3.1 specifications for [Qomon](https://qomon.com)'s API, which the
