@@ -1,3 +1,8 @@
+---
+last-reviewed: 2026-06-08
+review-interval-days: 90
+---
+
 # Tax Receipts & Contributions Tool — Design Doc
 
 | | |

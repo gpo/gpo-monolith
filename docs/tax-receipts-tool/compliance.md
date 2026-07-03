@@ -1,3 +1,8 @@
+---
+last-reviewed: 2026-06-08
+review-interval-days: 180
+---
+
 # Elections Ontario Compliance Rules
 
 The receipt regime is **provincial — Elections Ontario (EO)**, under the *Election

@@ -1,11 +1,18 @@
+---
+last-reviewed: 2026-06-08
+review-interval-days: 60
+---
+
 # Integrations — Qomon API & BigQuery Warehouse
 
 The tool's only backends are **Qomon** (system of record) and the **BigQuery
 warehouse** (reporting read layer). **No CiviCRM** (see `decisions.md` D2).
 
-> Several Qomon specifics are unconfirmed because the public docs are JS-rendered and
-> GPO is still awaiting the raw Swagger file. Items marked **⚠️ unconfirmed** must be
-> verified against the Swagger before building against them. See `open-questions.md`.
+> The raw OpenAPI/Swagger specs are now in the repo under **`docs/qomon/`**
+> (received from Qomon 2026-05-07 and 2026-06-01; see that directory's README for
+> provenance and confidentiality). Verify remaining **⚠️ unconfirmed** items against
+> those specs before building. See `open-questions.md` R2 for what the specs still
+> do not cover (rate limits, webhook event catalog).
 
 ## Qomon
 
@@ -14,9 +21,12 @@ warehouse** (reporting read layer). **No CiviCRM** (see `decisions.md` D2).
 - **Auth:** API key as a **Bearer token** — `Authorization: Bearer <key>`. Keys are
   generated in the Qomon webapp under Settings.
 - Two doc surfaces: legacy `developers.qomon.com` / `developers.qomon.app`, and a
-  refreshed Swagger hub at `api.qomon.com/pages/v1/intro`. **The raw Swagger file is
-  pending from Qomon.**
-- ⚠️ **unconfirmed:** versioning, rate limits, pagination mechanism, base URL.
+  refreshed Swagger hub at `api.qomon.com/pages/v1/intro`. **The raw OpenAPI specs
+  live in this repo at `docs/qomon/`** (point-in-time snapshots; re-request from
+  Qomon when accuracy matters).
+- **Base URL:** `https://incoming.qomon.app`. **Pagination:** limit/offset on the
+  transactions endpoints (per the Transaction Bundles spec).
+- ⚠️ **unconfirmed:** rate limits (not covered by the specs).
 
 ### Data model (financial)
 - Resources: **Contacts, Actions, Users, Fundraising/Transactions.**

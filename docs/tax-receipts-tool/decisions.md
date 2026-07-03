@@ -1,3 +1,8 @@
+---
+last-reviewed: 2026-06-08
+review-interval-days: 180
+---
+
 # Architecture Decision Log — Tax Receipts & Contributions Tool
 
 Director-approved decisions. **Do not relitigate these** without explicit sign-off;

@@ -1,3 +1,8 @@
+---
+last-reviewed: 2026-06-08
+review-interval-days: 30
+---
+
 # Open Questions, Risks & Dependencies
 
 Living list. Update status as items close. `R` = risk, `O` = open question.
@@ -6,7 +11,7 @@ When an item is resolved, move the answer inline and mark it ✅.
 | Ref | Item | Status | Action / mitigation |
 |---|---|---|---|
 | **R1** | Qomon **custom transaction fields don't exist yet** (committed H2 2026, "subject to change"). Blocks native metadata write-back in Phase 1. **Highest project risk.** | 🔴 Open | Store metadata in our Postgres (and/or encode in `campaign_code`) for now; reconcile into Qomon once fields ship. |
-| **R2** | Qomon **raw Swagger** not yet delivered to GPO. Pagination, rate limits, transaction filter params, transaction tags, and the webhook event catalog are unconfirmed. | 🔴 Open | Obtain the Swagger from Qomon before Phase 0 build-out; it closes most Qomon unknowns at once. |
+| **R2** | Qomon **raw Swagger** ✅ received (2026-05-07 and 2026-06-01 by email) and committed under `docs/qomon/` (#90), including the Transaction Bundles spec (limit/offset pagination on transactions). Residual unknowns: **rate limits** and the **webhook event catalog** are not covered by the specs. | 🟡 Mostly closed | Build against `docs/qomon/`; confirm rate limits and webhook catalog with Qomon during Phase 0. |
 | **R3** | **Warehouse sync cadence** (real-time vs batch) is an open question in GPO's modernization plan. Affects freshness of contribution lists. | 🟡 Open | Confirm cadence; design polling/reads to tolerate lag. |
 | **R4** | Qomon **in-kind / goods-vs-services** representation is unconfirmed. We need a reliable G&S flag for receipts. | 🟡 Open | Confirm native support; otherwise model G&S locally. |
 | **R5** | **Migration timing** (late Jan 2027) leaves a tight window before the 2026 AR-1 deadline (May 31 2027). | 🟡 Open | Phase 5 must be ready to run immediately post-migration; validate during parallel run. |

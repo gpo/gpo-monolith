@@ -1,3 +1,8 @@
+---
+last-reviewed: 2026-06-08
+review-interval-days: 180
+---
+
 # Glossary — Tax Receipts & Contributions
 
 Domain terms used across the tool, the design doc, and Elections Ontario paperwork.

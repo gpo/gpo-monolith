@@ -1,18 +1,20 @@
+---
+last-reviewed: 2026-07-03
+review-interval-days: 90
+---
+
 # GPO Monolith — Claude Guide
 
 ## What this repo is — and where it's going
 
-The `gpo-monolith` is the Green Party of Ontario's backend code repo. It currently
-contains a **legacy NestJS + MySQL application** (`src/`) of one-off scripts (CSV
-imports, Google Drive jobs, PDF stamping).
+The `gpo-monolith` is the Green Party of Ontario's backend code repo. The legacy
+NestJS + MySQL application that used to live in `src/` was **removed in #89**;
+what remains today is the tax-receipt tooling that survives it (PDF generation
+script, EO-report Apps Script, Cypress e2e tests) plus the project knowledge
+base.
 
-**This repo is in transition.** The NestJS app is effectively **dead code slated for
-removal**. New work is a **go-forward stack** tool — starting with the **Tax Receipts
-& Contributions tool** under `apps/tax-receipts/`.
-
-> ⚠️ **Do not build new features on the NestJS app in `src/`.** New code uses the
-> go-forward stack (see below). If a task seems to call for extending `src/`, stop
-> and confirm — it almost certainly belongs in `apps/`.
+New work is a **go-forward stack** tool — starting with the **Tax Receipts &
+Contributions tool** under `apps/tax-receipts/` (not yet scaffolded).
 
 ## Go-forward stack (all new work)
 
@@ -26,27 +28,43 @@ Rationale is recorded in `docs/tax-receipts-tool/decisions.md` (D1).
 
 ## Commands
 
-> These are the **legacy** NestJS scripts. The go-forward tool will define its own
-> pnpm/turbo scripts once scaffolded under `apps/`.
+There is no root build: the legacy NestJS app and its `package.json` are gone.
+The go-forward tool will define its own pnpm/turbo scripts once scaffolded under
+`apps/`. Today's runnable pieces:
 
 ```bash
-npm install          # install (legacy)
-npm run build        # nest build
-npm run start:dev    # watch mode
-npm run test         # jest unit tests
-npm run lint         # eslint --fix
+node scripts/generate_tax_receipt_pdfs/generate.mjs   # stamp receipt PDFs from template
+cd gpoAutoTests && npx cypress run                    # e2e autotests (see its README)
+scripts/check-doc-freshness.sh                        # list overdue memory-doc reviews
 ```
 
 ## Layout
 
 ```
-src/                       — legacy NestJS app (being retired; don't extend)
-apps/                      — go-forward apps (tax-receipts tool lives here)
-docs/tax-receipts-tool/    — project knowledge base for the receipts tool
-docs/readme-images/        — README assets
-google-workspace/          — Google API credential helpers
-scripts/                   — misc scripts
+apps/                      — go-forward apps (tax-receipts tool will live here)
+docs/                      — shared memory (see below); README.md explains the system
+docs/tax-receipts-tool/    — knowledge base for the receipts tool
+docs/qomon/                — Qomon OpenAPI specs (confidential; snapshots from Qomon)
+google-workspace/          — Apps Script sources (EO-report splitter)
+gpoAutoTests/              — Cypress e2e autotests
+scripts/                   — receipt-PDF generation, doc-freshness checker
 ```
+
+## Docs are shared memory
+
+Version-controlled docs are how humans and agents share context across
+ephemeral sessions. **`docs/README.md` describes the system; read it before
+changing how docs work.** The working rules:
+
+- **Before working in an area, read its docs.** `docs/doc-map.tsv` maps code
+  areas to their docs; load only what the task needs.
+- **After changing behaviour in a mapped area, update its docs in the same
+  PR.** A Stop hook reminds you if you forget; the **doc-sync** skill gives
+  the guided path.
+- **Docs are reviewed on a schedule.** Frontmatter (`last-reviewed`,
+  `review-interval-days`) drives a SessionStart notice, a weekly workflow
+  issue, and `scripts/check-doc-freshness.sh`. To clear an overdue doc, run
+  the **doc-review** skill.
 
 ## Project knowledge base
 
@@ -66,6 +84,8 @@ first.** Load only what the task needs:
   architecture decision log (don't relitigate these).
 - [`docs/tax-receipts-tool/open-questions.md`](docs/tax-receipts-tool/open-questions.md)
   — living list of risks / unknowns to close.
+- [`docs/qomon/`](docs/qomon/README.md) — raw Qomon OpenAPI specs (shared in
+  confidence; do not redistribute).
 
 ## Conventions & hard rules
 
@@ -74,5 +94,7 @@ first.** Load only what the task needs:
 - **Never hard-delete receipt data.** Corrections are cancel/void + an append-only
   change-log entry. This is a regulatory requirement (`compliance.md`).
 - **Reporting reads hit the warehouse (BigQuery), not Qomon directly.**
-- Keep this CLAUDE.md lean; put durable detail in `docs/tax-receipts-tool/`.
+- Keep this CLAUDE.md lean; put durable detail in `docs/`.
+- Writing style for docs: Canadian spelling, Oxford comma, no em-dashes, no
+  horizontal rule directly above a header, text-based formats only.
 - Develop on the assigned feature branch; open a non-draft PR after pushing.
