@@ -28,7 +28,9 @@ bumps `last-reviewed` so the freshness system knows it was done. See
      it to `open-questions.md` with what would confirm it.
 4. **Look for the missing.** Scan the mapped code areas (and recent commits
    touching them, `git log --oneline -- <area>`) for things that exist but the
-   doc does not mention. Add what a future reader would need.
+   doc does not mention. Add what a future reader would need. Unlinked
+   mentions count as missing: where a term, decision, or subject has a
+   covering doc, add the first-mention link.
 5. **Reassess the cadence.** If the doc churned a lot, shorten
    `review-interval-days`; if it was all confirmed, consider lengthening.
    Adjust only with a reason, and say so in your reply.
@@ -42,4 +44,6 @@ bumps `last-reviewed` so the freshness system knows it was done. See
 
 Concise and factual, Canadian spelling, Oxford comma, no em-dashes, no
 horizontal rule directly above a header, text-based formats only (Markdown,
-Mermaid, CSV/TSV). Write for a reader with zero session context.
+Mermaid, CSV/TSV). Write for a reader with zero session context. Link on
+first mention: the first time you name a domain term, a decision, or another
+doc's subject, link its doc (repo-relative paths); once per doc is enough.

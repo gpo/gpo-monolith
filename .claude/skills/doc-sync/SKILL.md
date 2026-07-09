@@ -48,4 +48,6 @@ what a future session would otherwise have to rediscover.
 
 Concise and factual, Canadian spelling, Oxford comma, no em-dashes, no
 horizontal rule directly above a header, text-based formats only (Markdown,
-Mermaid, CSV/TSV). Write for a reader with zero session context.
+Mermaid, CSV/TSV). Write for a reader with zero session context. Link on
+first mention: the first time you name a domain term, a decision, or another
+doc's subject, link its doc (repo-relative paths); once per doc is enough.
