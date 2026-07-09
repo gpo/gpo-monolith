@@ -1,6 +1,7 @@
 ---
 last-reviewed: 2026-07-03
 review-interval-days: 180
+doc-memory-version: 3
 ---
 
 # Docs are shared memory
@@ -141,16 +142,11 @@ memory without searching it.
 
 ## Porting this to another repo
 
-The system is self-contained and copies cleanly. This repo holds the
-canonical version; port from here rather than forking a variant (gpo-data is
-the intended next home, and its existing inline-rules doc hook should be
-replaced by this, not kept alongside it):
-
-1. Copy `.claude/skills/`, `scripts/check-doc-sync.sh`, and
-   `scripts/check-doc-freshness.sh` as-is.
-2. Copy `.github/workflows/doc-sync-check.yml` and
-   `.github/workflows/doc-freshness.yml` as-is.
-3. Write that repo's `docs/doc-map.tsv` and add frontmatter to its docs.
-4. Add the shared-memory section to that repo's `CLAUDE.md`.
-
-Only step 3 and step 4 contain repo-specific content.
+The canonical source is the **doc-memory** skill bundle (the
+install-doc-memory and update-doc-memory skills); this repo is an install of
+it, stamped with `doc-memory-version` in this file's frontmatter. To add the
+system to another repo, run install-doc-memory there rather than copying this
+repo's files (gpo-data is the intended next home, and its existing
+inline-rules doc hook should be replaced by this, not kept alongside it).
+When the bundle evolves past this repo's stamp, update-doc-memory brings the
+install up to date.
