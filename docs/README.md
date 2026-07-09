@@ -132,6 +132,13 @@ Mermaid, CSV/TSV. Write for a reader with zero session context, and link to
 sources (Drive doc ids, spec files, handbook sections) so claims can be
 re-verified later.
 
+Link on first mention. The first time a doc names a domain term, link the
+glossary entry; the first time it leans on a decision, link the decision log
+entry; the first time it touches another doc's subject, link that doc. Use
+repo-relative paths. One link at first mention is enough; do not re-link
+every occurrence. Links are how a reader, human or agent, traverses the
+memory without searching it.
+
 ## Porting this to another repo
 
 The system is self-contained and copies cleanly. This repo holds the
