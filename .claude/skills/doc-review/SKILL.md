@@ -21,11 +21,21 @@ bumps `last-reviewed` so the freshness system knows it was done. See
    guidance, Drive documents, Slack).
 3. **Verify claim by claim.** For each factual claim, path, command, and
    cross-reference in the doc:
-   - **confirmed** → leave it;
+   - **confirmed** → leave it; a dated external fact re-verified against its
+     source gets its as-of date refreshed;
    - **stale** → fix it (repo-verifiable claims: check the code, run the
      command; do not guess);
    - **unverifiable from the repo** → leave it, but if it looks doubtful, add
      it to `open-questions.md` with what would confirm it.
+   Claims are not independent: also compare them to each other. Two claims
+   about the same fact (often an appended update sitting beside the sentence
+   it should have replaced) are the failure this system exists to prevent,
+   and this comparison holds even when both claims are individually
+   unverifiable. Collapse them into one current claim, stated once, where a
+   reader would look for it; the as-of dates say which is newer. If you
+   cannot tell whether the difference is a correction or a genuine change
+   over time, keep the newer claim and move the question to
+   `open-questions.md`.
 4. **Look for the missing.** Scan the mapped code areas (and recent commits
    touching them, `git log --oneline -- <area>`) for things that exist but the
    doc does not mention. Add what a future reader would need. Unlinked
@@ -46,4 +56,7 @@ Concise and factual, Canadian spelling, Oxford comma, no em-dashes, no
 horizontal rule directly above a header, text-based formats only (Markdown,
 Mermaid, CSV/TSV). Write for a reader with zero session context. Link on
 first mention: the first time you name a domain term, a decision, or another
-doc's subject, link its doc (repo-relative paths); once per doc is enough.
+doc's subject, link its doc (repo-relative paths); once per doc is enough. Date
+external facts: a claim about an external system, vendor, or rule carries an
+as-of date ("as of 2026-06") and its source; re-verifying against the source
+refreshes the date.

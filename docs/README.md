@@ -1,7 +1,7 @@
 ---
 last-reviewed: 2026-07-03
 review-interval-days: 180
-doc-memory-version: 3
+doc-memory-version: 4
 ---
 
 # Docs are shared memory
@@ -139,6 +139,13 @@ entry; the first time it touches another doc's subject, link that doc. Use
 repo-relative paths. One link at first mention is enough; do not re-link
 every occurrence. Links are how a reader, human or agent, traverses the
 memory without searching it.
+
+Date external facts. A claim about an external system, vendor, or rule
+carries the date it was last observed true ("as of 2026-06") and its source.
+`last-reviewed` records when a whole doc was verified; an as-of date records
+when a single fact was. Re-verifying a claim against its source refreshes its
+date, and when two versions of the same fact meet, the as-of dates say which
+one is current.
 
 ## Porting this to another repo
 
