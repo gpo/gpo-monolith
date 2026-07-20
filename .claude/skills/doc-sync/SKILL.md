@@ -18,7 +18,8 @@ what a future session would otherwise have to rediscover.
    decide that is not obvious from the code itself? Capture durable facts only:
    - behaviour or interface changes, and new constraints or invariants;
    - decisions made (and rejected alternatives, briefly);
-   - external facts learned (API quirks, regulatory rules, vendor commitments);
+   - external facts learned (API quirks, regulatory rules, vendor
+     commitments), each dated ("as of 2026-06") with its source;
    - open questions resolved, or new risks discovered.
    A pure refactor with no behaviour change usually needs no doc edit; in that
    case stop here and say so.
@@ -50,4 +51,7 @@ Concise and factual, Canadian spelling, Oxford comma, no em-dashes, no
 horizontal rule directly above a header, text-based formats only (Markdown,
 Mermaid, CSV/TSV). Write for a reader with zero session context. Link on
 first mention: the first time you name a domain term, a decision, or another
-doc's subject, link its doc (repo-relative paths); once per doc is enough.
+doc's subject, link its doc (repo-relative paths); once per doc is enough. Date
+external facts: a claim about an external system, vendor, or rule carries an
+as-of date ("as of 2026-06") and its source; re-verifying against the source
+refreshes the date.
