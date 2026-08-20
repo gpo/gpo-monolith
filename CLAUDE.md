@@ -7,7 +7,8 @@ NestJS + MySQL application that used to live in `src/` was **removed in #89**;
 what remains today is the tax-receipt tooling that survives it (the receipt-PDF
 generation script in `scripts/`, the EO-report Apps Script in
 `google-workspace/`, and the Cypress e2e tests in `gpoAutoTests/`) plus the
-project knowledge base in `docs/`.
+doc-memory system in `docs/`. The tax-receipt project knowledge base has moved
+to the private `gpo/qomon-migration-documents` repo (see below).
 
 New work is a **go-forward stack** tool, starting with the **Tax Receipts &
 Contributions tool** under `apps/tax-receipts/` (not yet scaffolded).
@@ -20,7 +21,8 @@ Contributions tool** under `apps/tax-receipts/` (not yet scaffolded).
 - **Auth:** Passport + bcrypt, stateful sessions; authorization at the query layer
   (CASL + Prisma).
 
-Rationale is recorded in `docs/tax-receipts-tool/decisions.md` (D1).
+Rationale is recorded in the decision log in the private
+`gpo/qomon-migration-documents` repo (`tax-receipts/design/decisions.md`, D1).
 
 ## Commands
 
@@ -55,24 +57,17 @@ changing how docs work.** The working rules:
 
 ## Project knowledge base
 
-**Working on the Tax Receipts & Contributions tool? Read `docs/tax-receipts-tool/`
-first.** Load only what the task needs:
+**The Tax Receipts & Contributions tool's knowledge base is private.** It moved
+out of this public repo because it includes internal strategy, stakeholder
+detail, and vendor material shared in confidence.
 
-- [`docs/tax-receipts-tool/DESIGN.md`](docs/tax-receipts-tool/DESIGN.md): design and
-  phased roadmap (start here).
-- [`docs/tax-receipts-tool/glossary.md`](docs/tax-receipts-tool/glossary.md):
-  domain terms (CA, TRR, AR-1, S2P2, CFO, target entity, agency fee, and more).
-  Read this if any term is unfamiliar.
-- [`docs/tax-receipts-tool/compliance.md`](docs/tax-receipts-tool/compliance.md):
-  Elections Ontario rules (limits, deadlines, receipt numbering, retention).
-- [`docs/tax-receipts-tool/integrations.md`](docs/tax-receipts-tool/integrations.md):
-  Qomon API + BigQuery warehouse facts and constraints.
-- [`docs/tax-receipts-tool/decisions.md`](docs/tax-receipts-tool/decisions.md):
-  architecture decision log (don't relitigate these).
-- [`docs/tax-receipts-tool/open-questions.md`](docs/tax-receipts-tool/open-questions.md):
-  living list of risks and unknowns to close.
-- [`docs/qomon/`](docs/qomon/README.md): raw Qomon OpenAPI specs (shared in
-  confidence; do not redistribute).
+It now lives in the **private** `gpo/qomon-migration-documents` repo under
+`tax-receipts/`: business, process, stakeholder, and current-state docs at the
+top level, the engineering docs (design, glossary, compliance, integrations,
+decisions, open questions) in `tax-receipts/design/`, and the confidential Qomon
+OpenAPI specs in `tax-receipts/design/qomon/`. See
+[`docs/tax-receipts-tool/README.md`](docs/tax-receipts-tool/README.md) for the
+pointer; ask the tech team for access.
 
 ## Conventions & hard rules
 
