@@ -1,0 +1,781 @@
+openapi: 3.0.0
+info:
+  version: "1.0.0"
+  title: Qomon Import API
+  description: |
+    This is the API documentation for Qomon's import functionality.
+    It allows you to import contacts from CSV files into your Qomon database.
+
+    To get an authorization token, go to [Qomon's settings page](https://qomon.app/settings/extensions/connect) and create an API key.
+
+    Normal flow for using the API:
+    - Create an import: Use the POST /imports endpoint to create a new import. You can upload a CSV file to create a new import.
+      Get the Import ID from the response and use it to manage the import.
+    - Configure the csv settings: Use the POST /imports/{importId}/csv-settings endpoint to configure the csv settings.
+    - Configure the mapping: Use the POST /imports/{importId}/mapping endpoint to configure the mapping between the csv columns and the contact fields.
+    - Start the import: Use the POST /imports/{importId}/enqueue endpoint to start the import.
+    - Get the import status: Use the GET /imports/{importId}/statuses endpoint to get the status of the import.
+      Note that the items in the response are NOT sorted: clients should sort them by `created_at` to read the history in order.
+    - Resolve conflicts (conditional): if the import reports a non-zero `on_hold_profils` value once it reaches the `search_conflicts_done`
+      status, the system has detected potential duplicates between the CSV rows and existing contacts and is waiting for a resolution
+      strategy. Use POST /imports/{importId}/resolve with `ignore_conflicts` (skip matching rows) or `create_new_profiles` (create a new
+      contact for every row). When no conflicts are detected, the import auto-progresses to `finalization_process_*` without calling
+      /resolve. The import is complete once it reaches `finalization_process_done`.
+
+servers:
+  - url: https://incoming.qomon.app
+    description: Production
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Imports
+    description: Manage contact imports from CSV files
+
+paths:
+  /imports:
+    get:
+      tags:
+        - Imports
+      summary: List all imports
+      description: Retrieve a list of all imports in your account
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Import"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    post:
+      tags:
+        - Imports
+      summary: Create a new import
+      description: Upload a CSV file to create a new import
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The CSV file to import
+      responses:
+        "201":
+          description: Import created. CSV settings and mapping are not yet configured at this stage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Import"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /imports/{importId}:
+    get:
+      tags:
+        - Imports
+      summary: Get import details
+      description: Retrieve details of a specific import
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import to retrieve
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Import"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      tags:
+        - Imports
+      summary: Archive an import
+      description: Archive a specific import
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import to archive
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "202":
+          description: Archive request accepted
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /imports/{importId}/name:
+    post:
+      tags:
+        - Imports
+      summary: Rename an import
+      description: Update the name of a specific import
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import to rename
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "My import"
+      responses:
+        "201":
+          description: Successfully renamed
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /imports/{importId}/csv-settings:
+    post:
+      tags:
+        - Imports
+      summary: Configure CSV settings
+      description: Set the CSV parsing parameters for the import
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import to configure
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                separator:
+                  type: string
+                  description: The character used to separate fields
+                  example: ";"
+                comment:
+                  type: string
+                  description: The character used for comments
+                  example: "#"
+                start_read_at:
+                  type: string
+                  description: The line number to start reading from
+                  example: "0"
+                country:
+                  type: string
+                  description: The country code for address formatting
+                  example: "FRA"
+      responses:
+        "201":
+          description: Successfully configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Import"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /imports/{importId}/columns:
+    get:
+      tags:
+        - Imports
+      summary: Get column names
+      description: Retrieve the column names from the imported file
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: separator
+          in: query
+          description: The separator character used in the file
+          required: true
+          schema:
+            type: string
+            example: ";"
+        - name: comment
+          in: query
+          description: The comment character used in the file
+          required: true
+          schema:
+            type: string
+            example: "#"
+        - name: start_read_at
+          in: query
+          description: The line number to start reading from
+          required: true
+          schema:
+            type: string
+            example: "0"
+        - name: column_idx
+          in: query
+          description: The column index to start reading from
+          required: true
+          schema:
+            type: string
+            example: "0"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: ["First Name","Last Name","Gender","Email","Mobile Phone","Street","City","Country"]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /imports/{importId}/file-preview:
+    get:
+      tags:
+        - Imports
+      summary: Preview file content
+      description: Get the first 5 lines of the imported file
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: separator
+          in: query
+          description: The separator character used in the file
+          required: true
+          schema:
+            type: string
+            example: ";"
+        - name: comment
+          in: query
+          description: The comment character used in the file
+          required: true
+          schema:
+            type: string
+            example: "#"
+        - name: start_read_at
+          in: query
+          description: The line number to start reading from
+          required: true
+          schema:
+            type: string
+            example: "0"
+        - name: column_idx
+          in: query
+          description: The column index to start reading from
+          required: true
+          schema:
+            type: string
+            example: "0"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: array
+                  items:
+                    type: string
+                example: [
+                  ["First Name","Last Name","Gender","Email","Mobile Phone","Street","City","Country"],
+                  ["John","Doe","M","john@example.com","+33123456789","123 Main St","Paris","France"]
+                ]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /imports/{importId}/properties:
+    get:
+      tags:
+        - Imports
+      summary: Get supported fields
+      description: List all supported fields for mapping
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example:
+                  - "first_name"
+                  - "last_name"
+                  - "email"
+                  - "mobile"
+                  - "phone"
+                  - "street"
+                  - "city"
+                  - "postal_code"
+                  - "country"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /imports/{importId}/mapping:
+    post:
+      tags:
+        - Imports
+      summary: Set field mapping
+      description: Define the mapping between CSV columns and contact fields
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name:
+                  type: integer
+                  description: Column index for first name
+                  example: 1
+                last_name:
+                  type: integer
+                  description: Column index for last name
+                  example: 2
+                email:
+                  type: integer
+                  description: Column index for email
+                  example: 4
+                mobile:
+                  type: integer
+                  description: Column index for mobile phone
+                  example: 5
+                street:
+                  type: integer
+                  description: Column index for street address
+                  example: 6
+      responses:
+        "201":
+          description: Successfully mapped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Import"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /imports/{importId}/enqueue:
+    post:
+      tags:
+        - Imports
+      summary: Start import process
+      description: Begin the import process with the configured settings
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: channel
+          in: query
+          description: |
+            Routing channel for the import. API clients should set this to `1`. If omitted, the import is routed
+            to the default webapp processing pipeline and may not be picked up by the public API workers.
+          required: false
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "201":
+          description: Successfully enqueued
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /imports/{importId}/statuses:
+    get:
+      tags:
+        - Imports
+      summary: Get import status
+      description: |
+        Retrieve the full history of status changes for the import. The latest status is the one with the most recent `created_at`.
+
+        IMPORTANT: the items in the response array are NOT guaranteed to be sorted. Clients MUST sort by `created_at` before reading the history.
+
+        Some statuses include a free-text `description` summarizing counters, for example:
+          - `file_parsing_done`: `"total created: N; total invalid: N; total already exists: N; total errors: N"`
+          - `finalization_process_done`: `"totalNewProfils: N; totalUpdateProfils: N; totalDequeuedCreation: N; totalDequeuedUpdates: N"`
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    status:
+                      type: string
+                      enum:
+                        - created
+                        - file_config_not_defined
+                        - file_config_defined
+                        - file_parsing_enqueued
+                        - file_parsing_canceled
+                        - file_parsing_wip
+                        - file_parsing_done
+                        - file_parsing_error
+                        - search_conflicts_wip
+                        - search_conflicts_done
+                        - finalization_process_requested
+                        - finalization_process_rejected
+                        - finalization_process_enqueued
+                        - finalization_process_wip
+                        - finalization_process_done
+                        - finalization_process_error
+                    created_at:
+                      type: string
+                      format: date-time
+                    description:
+                      type: string
+                      nullable: true
+                      description: Optional free-text summary. Absent on transient statuses like `*_wip` or `*_enqueued`.
+                      example: "total created: 4; total invalid: 0; total already exists: 0; total errors: 0"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /imports/{importId}/resolve:
+    post:
+      tags:
+        - Imports
+      summary: Resolve import conflicts
+      description: Handle conflicts found during the import process
+      parameters:
+        - name: importId
+          in: path
+          description: ID of the import
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - strategy
+              properties:
+                strategy:
+                  type: string
+                  enum:
+                    - ignore_conflicts
+                    - create_new_profiles
+                  description: Strategy to handle conflicts
+      responses:
+        "202":
+          description: Successfully accepted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AuthError"
+          example:
+            message: "Need authentication"
+            status: "fail"
+    BadRequest:
+      description: |
+        Malformed request. Most commonly returned when the `{importId}` path parameter is not a valid UUID
+        or when a form/query parameter is missing or has the wrong type. The body is plain text.
+      content:
+        text/plain:
+          schema:
+            type: string
+          examples:
+            invalidUUID:
+              value: "Bad Request"
+    UnprocessableEntity:
+      description: |
+        The import is not in a valid state for this operation. Typically returned by
+        POST /imports/{importId}/enqueue when CSV settings or field mapping have not been configured yet,
+        or when the import's current status does not allow the requested transition. The body is plain text
+        and includes the expected vs. actual status.
+      content:
+        text/plain:
+          schema:
+            type: string
+          examples:
+            invalidStatus:
+              value: "Unprocessable Entity (import has invalid status `created`, expected: `file_config_defined`)"
+            missingConfig:
+              value: "Unprocessable Entity (import must have CSV settings and mappding defined)"
+    InternalServerError:
+      description: |
+        Unexpected server-side error. The body is plain text. Clients should retry with exponential backoff;
+        if the error persists, contact Qomon support.
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: "Internal Server Error"
+  schemas:
+    AuthError:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Need authentication"
+        status:
+          type: string
+          example: "fail"
+    Import:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier of the import
+        customer_account_id:
+          type: integer
+          description: ID of the customer account
+        file_name:
+          type: string
+          description: Name of the imported file
+        name:
+          type: string
+          description: Custom name given to the import
+        original_file_name:
+          type: string
+          description: Original name of the uploaded file
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        start_read_at:
+          type: integer
+          description: |
+            Line number to start reading from. Defaults to `-1` until CSV settings are configured
+            via POST /imports/{importId}/csv-settings.
+          example: 1
+        country:
+          type: string
+          description: |
+            Country code for address formatting (ISO 3166-1 alpha-3, e.g. `FRA`). Empty string until CSV
+            settings are configured.
+        separator_char:
+          type: string
+          description: Character used to separate fields. Empty string until CSV settings are configured.
+        comment_char:
+          type: string
+          description: Character used for comments. Empty string until CSV settings are configured.
+        user_email:
+          type: string
+          format: email
+          description: Email of the user who created the import
+        user_first_name:
+          type: string
+          description: First name of the user who created the import
+        SegmentIOUserID:
+          type: string
+          description: |
+            Internal Segment.io user identifier (camelCase, kept for backwards compatibility).
+            Clients can safely ignore this field.
+          example: "1_3724"
+        locale:
+          type: string
+          description: Locale setting for the import
+        column_indexes:
+          type: object
+          nullable: true
+          description: |
+            Mapping of contact field names to CSV column indexes (set via POST /imports/{importId}/mapping).
+            `null` until the mapping has been defined. Values are usually integers (0-based column index),
+            but transaction- and membership-related fields use string references such as
+            `"transaction.amount"` or `"membership.price_id"`.
+          additionalProperties:
+            oneOf:
+              - type: integer
+              - type: string
+          example:
+            first_name: 1
+            last_name: 2
+            email: 4
+            mobile: 5
+            amount: "transaction.amount"
+        csv_settings_updated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last update of CSV settings. `null` until POST /imports/{importId}/csv-settings is called.
+        mapping_defined_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the field mapping was defined. `null` until POST /imports/{importId}/mapping is called.
+        total_created:
+          type: integer
+          description: |
+            Number of contacts created. Defaults to `-1` (sentinel for "not yet computed") until the import
+            has been processed. A non-negative value is only meaningful once the import reaches
+            `file_parsing_done` or beyond.
+          example: 3
+        total_invalid_lines:
+          type: integer
+          description: Number of invalid lines found. `-1` until processed (same sentinel as `total_created`).
+        total_already_exists:
+          type: integer
+          description: Number of contacts that already existed. `-1` until processed.
+        total_errors:
+          type: integer
+          description: Number of errors encountered. `-1` until processed.
+        on_hold_profils:
+          type: integer
+          description: |
+            Number of profiles on hold pending conflict resolution. A non-zero value once the import reaches
+            `search_conflicts_done` indicates that POST /imports/{importId}/resolve must be called to choose
+            a strategy. Note: the field name keeps a legacy spelling ("profils").
+        resolution_strategy:
+          type: string
+          description: Strategy used to resolve conflicts. Empty string until /resolve is called.
+          enum:
+            - ""
+            - ignore_conflicts
+            - create_new_profiles
+        statuses:
+          type: array
+          nullable: true
+          description: |
+            List of status changes attached to this import. May be `null` right after creation, before any
+            status has been recorded. Use GET /imports/{importId}/statuses for the authoritative,
+            up-to-date history.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              import_id:
+                type: string
+              label:
+                type: string
+              description:
+                type: string
+                nullable: true
+              created_at:
+                type: string
+                format: date-time
+        archived:
+          type: boolean
+          description: Whether the import is archived
