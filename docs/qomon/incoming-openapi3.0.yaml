@@ -1,0 +1,2316 @@
+openapi: 3.0.0
+info:
+  version: "1.1.0"
+  title: Qomon Public API Documentation
+
+servers:
+  - url: https://incoming.qomon.app
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Contacts
+    description: Create, Read, Update, Delete Qomon's contacts.
+  - name: Forms
+    description: Retrieve forms by their ID or list them based on their type.
+
+paths:
+  /contacts/upsert:
+    post:
+      tags:
+        - Contacts
+      summary: Upsert a contact asynchronously. (Strongly recommended)
+      description: |-
+        Upsert a contact asynchronously in the Qomon database.
+
+        ## Contact Matching Logic
+        When upserting, the system tries to find an existing contact to update using the following strategy (in order). If no match is found, a new contact is created.
+
+        1. Match by ID
+          - If an `id` is provided and matches an existing contact, that contact will be updated (can be a contact ID or nationbuilder ID).
+
+        2. Match by email + name
+          - If no ID is provided (or it didn't match), the system searches for contacts with the same `mail`.
+          - Among the results, if `firstname` is provided, it must also match. If `surname` is provided, it must also match. (An empty value for `firstname` or `surname` means the field will not be used for matching.)
+          - If a match is found, that contact is updated.
+
+        3. Match by surname + firstname + birthdate + address
+          - If no match was found by email, and a `surname` is provided, the system searches for contacts with the same `surname`.
+          - Among the results, `firstname` must match.
+          - If both the incoming and the existing contact have a `birthdate`, they must match exactly.
+          - If both contacts have an `address`, the `city` or `postalcode` must match. If no birthdate comparison was made, the `street` must also match.
+          - If all the above conditions are met, that contact is updated.
+
+        4. No match found
+          - If none of the above strategies found a match, a new contact is created.
+
+        ⚠️ If the `id` or `label` of an advanced field, or the `value` (for non-free-text fields), does not exist, the contact will not be updated or created. *Errors will not be logged.*
+
+        💡 For consents, level_of_support, custom_fields, survey, tasks:
+          - See details in above description.
+          - Found `id`, `label`, `value` in `GET /forms/{type}` endpoint.  
+
+      operationId: upsertContact
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, data]
+              additionalProperties: false
+              properties:
+                kind:
+                  type: string
+                  enum: [contact]
+                data:
+                  $ref: "#/components/schemas/ContactUpsert"
+            examples:
+              Basic fields:
+                value:
+                  kind: contact
+                  data:
+                    firstname: John
+                    surname: Doe
+                    gender: M
+                    mail: john.doe@example.com
+                    married_name: Doe
+                    birthdate: "1999-12-31T23:00:00.000Z"
+                    birthcity: Paris
+                    birthcountry: France
+                    nationality: Francais
+                    mobile: "0123456789"
+                    phone: "0123456789"
+                    address:
+                      building: A
+                      floor: "2"
+                      door: "3"
+                      housenumber: "123"
+                      street: Rue de la paix
+                      addition: Résidence de la paix
+                      postalcode: "75001"
+                      city: Paris
+                      country: France
+                    tags:
+                      - name: tag1
+                      - name: tag2
+              Advanced fields (survey, custom fields, consent):
+                value:
+                  kind: contact
+                  data:
+                    firstname: John
+                    surname: Doe
+                    gender: M
+                    mail: john.doe@example.com
+                    married_name: Doe
+                    birthdate: "1999-12-31T23:00:00.000Z"
+                    birthcity: Paris
+                    birthcountry: France
+                    mobile: "0123456789"
+                    phone: "0123456789"
+                    address:
+                      building: A
+                      floor: "2"
+                      door: "3"
+                      housenumber: "123"
+                      street: Rue de la paix
+                      addition: Résidence de la paix
+                      postalcode: "75001"
+                      city: Paris
+                      country: France
+                    tags:
+                      - name: tag1
+                      - name: tag2
+                    custom_fields:
+                      - label: Job
+                        value: Architect
+                      - label: Favorites food
+                        value: hamburger
+                      - label: Favorites food
+                        value: pizza
+                    status:
+                      - label: Level of support
+                        value: to_be_convinced
+                    consents:
+                      - label: The contact authorises me to collect and use the collected data for my
+                        value: yes
+                    forms:
+                      - label: What do you see as the city's strengths?
+                        value: Roads
+                    actions:
+                      - label: Next step
+                        value: recevoir_nos_informations
+              Basic fields with email consent:
+                value:
+                  kind: contact
+                  data:
+                    firstname: John
+                    surname: Doe
+                    gender: M
+                    mail: john.doe@example.com
+                    married_name: Doe
+                    birthdate: "1999-12-31T23:00:00.000Z"
+                    birthcity: Paris
+                    birthcountry: France
+                    mobile: "0123456789"
+                    phone: "0123456789"
+                    address:
+                      building: A
+                      floor: "2"
+                      door: "3"
+                      housenumber: "123"
+                      street: Rue de la paix
+                      addition: Résidence de la paix
+                      postalcode: "75001"
+                      city: Paris
+                      country: France
+                    consents:
+                      value: "consent_email"
+      responses:
+        202:
+          description: Accepted
+        400:
+          description: Invalid input
+        500:
+          description: Internal server error
+  /contacts/{contactId}:
+    get:
+      tags:
+        - Contacts
+      summary: Find a contact by ID.
+      description: |-
+        Returns a single contact.
+
+        Use this endpoint to get a contact by its ID.
+
+        In the response advanced fields except custom fields are formatted as `formdatas` structure with `form_id` and `form_ref_id`.
+          - `form_id`: the ID of the advanced field
+          - `form_ref_id`: the ID of the value of the advanced field
+
+          ```json
+          "formdatas": [
+            {
+              "form_id": 47566,
+              "form_ref_id": 15648,
+              "data": "consent_email"
+            }
+          ]
+          ```
+
+      operationId: getContactPerId
+      parameters:
+        - name: contactId
+          in: path
+          description: ID of contact to return
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      contact:
+                        $ref: "#/components/schemas/ContactResponse"
+        default:
+          description: Unsuccessful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: fail
+    delete:
+      tags:
+        - Contacts
+      summary: Delete a contact by ID synchronously.
+      operationId: deleteContactPerId
+      parameters:
+        - name: contactId
+          in: path
+          description: ID of contact to delete
+          required: true
+          schema:
+            type: integer
+      responses:
+        204:
+          description: Successful operation
+    patch:
+      tags:
+        - Contacts
+      summary: Fully update (REPLACE) an existing contact by id synchronously.
+      description: |-
+        Update entirely an existing contact by id synchronously in the Qomon database (behaves like PUT).
+        Fully replace an existing contact in the Qomon database.
+
+        ⚠️ Important:
+        - This endpoint uses the PATCH verb but behaves like a PUT (full replacement).
+        - Any fields that are NOT included in the payload will be cleared/removed.
+        - Always send the full contact object if you don't want to lose existing data.
+
+        To synchronize and mass update your contacts with Qomon database, use the UPSERT route instead.
+
+        To specify the advanced fields (survey, consents, etc), you need to use the `formdatas` structure with `form_id` and `form_ref_id`.
+        - `form_id`: the ID of the advanced field
+        - `form_ref_id`: the ID of the value of the advanced field
+        - `data`: free text if the field ("forms") type is Text, Integer, or Date (format : YYYY-MM-DD'T'HH:mm:ss.SSS'Z'); otherwise, use the value of the refvalue
+        - `date`: the date of the formdata entry
+
+        ```json
+        "formdatas": [
+          {
+            "form_id": 47566,
+            "form_ref_id": 15648,
+            "data": "consent_email"
+          }
+        ]
+        ```
+        To specify the custom fields, you need to use the `custom_fields` structure with `form_id` and `form_ref_id`.
+        - `form_id`: the ID of the custom field
+        - `form_ref_id`: the ID of the value of the custom field
+        - `data`: free text if the field ("forms") type is Text, Integer, or Date (format : YYYY-MM-DD'T'HH:mm:ss.SSS'Z'); otherwise, use the value of the refvalue
+        - `date`: the date of the custom_field entry 
+
+        ```json
+        "custom_fields": [
+          {
+            "form_id": 879854,
+            "form_ref_id": 98741,
+            "data": "hamburger",
+            "date": "2024-07-17T11:34:42.195Z"
+          }
+        ]
+        ```
+        NB :
+          - Each patch will generate new ids for formdatas and custom_fields. (due to the full replace behavior : soft delete + recreate)
+          - If you don't send the exhaustive list of formdatas or custom_fields, the missing ones will be deleted (soft).
+          - For Text, Integer and Date Fields, If you add a formdata or custom_field, it will be added to the existing ones.
+          - For Radio (single select), If you add a formdata or custom_field, it will replace the existing ones.
+          - For Checkbox (multi-select) fields, any new value will be added to the existing ones.
+          - If you change a formdata or custom_field with, it will update it. (the id is not required here because of the full-replace behavior).
+      operationId: updateContactPerId
+      parameters:
+        - name: contactId
+          in: path
+          description: ID of contact to update
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        description: The new values of the contact
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    contact:
+                      $ref: "#/components/schemas/Contact"
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      contact:
+                        $ref: "#/components/schemas/ContactResponse"
+        default:
+          description: Unsuccessful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: fail
+
+  /contacts:
+    post:
+      tags:
+        - Contacts
+      summary: Create a contact synchronously.
+      description: |-
+        Create a contact synchronously in the Qomon database.
+
+        To synchronize and mass update your contacts with Qomon database, use the UPSERT route instead.
+
+        To specify the advanced (custom fields, survey, etc) fields, you need to use the `formdatas` structure with `form_id` and `form_ref_id`.
+        - `form_id`: the ID of the advanced field
+        - `form_ref_id`: the ID of the value of the advanced field
+
+        ```json
+        "formdatas": [
+          {
+            "form_id": 47566,
+            "form_ref_id": 15648,
+            "data": "consent_email"
+          }
+        ]
+        ```
+
+      operationId: createContact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [contact]
+                  properties:
+                    contact:
+                      $ref: "#/components/schemas/Contact"
+            examples:
+              Basic:
+                value:
+                  data:
+                    contact:
+                      firstname: John
+                      surname: Doe
+                      birthdate: "1999-12-31T23:00:00.000Z"
+                      mail: john.doe@example.com
+                      mobile: "0123456789"
+                      address:
+                        building: A
+                        floor: "2"
+                        door: "3"
+                        housenumber: "123"
+                        street: Rue de la paix
+                        addition: Résidence de la paix
+                        postalcode: "75001"
+                        city: Paris
+                        country: France
+              Basic with formdatas:
+                value:
+                  data:
+                    contact:
+                      gender: M
+                      firstname: John
+                      surname: Doe
+                      married_name: Doe
+                      birthdate: "1999-12-31T23:00:00.000Z"
+                      birthcity: Paris
+                      birthcountry: France
+                      nationality: Francais
+                      mail: john.doe@example.com
+                      mobile: "0123456789"
+                      phone: "0123456789"
+                      address:
+                        building: A
+                        floor: "2"
+                        door: "3"
+                        housenumber: "123"
+                        street: Rue de la paix
+                        addition: Résidence de la paix
+                        postalcode: "75001"
+                        city: Paris
+                        country: France
+                      tags:
+                        - name: tag1
+                        - name: tag2
+                      formdatas:
+                        - form_id: 47566
+                          form_ref_id: 15648
+                          data: consent_email
+                        - form_id: 879856
+                          form_ref_id: 98746
+                          data: "Yes"
+                      custom_fields:
+                        - form_id: 879854
+                          form_ref_id: 98741
+                          data: hamburger
+                      black_list: false
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, data]
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    required: [contact]
+                    properties:
+                      contact:
+                        required: [id]
+                        $ref: "#/components/schemas/ContactResponse"
+        default:
+          description: Unsuccessful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: fail
+
+  /search:
+    post:
+      tags:
+        - Contacts
+      summary: Search for contacts
+      description: |
+        Search for contacts given a query.  
+        The query is a **2-level condition tree** that allows you to build complex filters using logical operators.
+
+        ## Query Structure
+
+        The query uses a nested structure with two levels:
+
+        - **Level 1 (Root):** Contains a logical operator (`$all` or `$at_least_one`) with an array of level 2 elements.
+        - **Level 2:** Contains either another logical operator (for nested logic) or conditions (`$condition`).
+
+        **Logic operators available:**
+
+        | Operator | Description | Behavior |
+        |----------|-------------|----------|
+        | `$all` | AND operator | All conditions in the array must match |
+        | `$at_least_one` | OR operator | At least one condition in the array must match |
+
+
+        **Conditions** are defined by the key `$condition` in the array. The value is an object with the following properties:
+        - `attr`: the attribute to search *(required)*
+        - `ope`: the operator to use *(required)*
+        - `value`: the value to search
+        - `from`: the start date for a range operator
+        - `to`: the end date for a range operator
+
+
+        **Example: Simple query (city equals Paris)**
+        ```json
+        {
+          "data": {
+            "advanced_search": {
+              "per_page": 100,
+              "query": {
+                "$all": [
+                  "$all": [
+                    {
+                      "$condition": {
+                        "attr": "address.city",
+                        "ope": "eql",
+                        "value": "New York"
+                      }
+                    }
+                  ]
+                ]
+              }
+            }
+          }
+        }
+        ```
+
+        **Example: Complex query with AND + OR logic**
+
+        Find contacts where: `(city is Paris OR city is Lyon) AND (mobile exists)`
+        ```json
+        {
+          "data": {
+            "advanced_search": {
+              "per_page": 100,
+              "query": {
+                "$all": [
+                  {
+                    "$at_least_one": [
+                      { "$condition": { "attr": "address.city", "ope": "eql", "value": "New York" } },
+                      { "$condition": { "attr": "address.city", "ope": "eql", "value": "Paris" } }
+                    ]
+                  },
+                  {
+                    "$condition": { "attr": "mobile", "ope": "ext" }
+                  }
+                ]
+              }
+            }
+          }
+        }
+        ```
+
+        ---
+
+        ## Available Operators (`ope`)
+
+        | Operator | Description |
+        |----------|-------------|
+        | `eql` | Equals |
+        | `not_eql` | Not equals |
+        | `eql:strictdata` | Equals (strict data) |
+        | `not_eql:strictdata` | Not equals (strict data) |
+        | `contains` | Contains |
+        | `not_contains` | Does not contain |
+        | `start_with` | Starts with |
+        | `not_start_with` | Does not start with |
+        | `any_of` | Any of (at least one matches) |
+        | `none_of` | None of |
+        | `all_of` | All of |
+        | `ext` | Exists / Reported |
+        | `not_ext` | Does not exist / Not reported |
+        | `range` | Range (use with `from` and `to`) |
+        | `lte` | Less than or equal to |
+        | `gte` | Greater than or equal to |
+        | `period` | Period |
+        | `today` | Today |
+
+
+        ## Available Attributes (`attr`)
+
+
+        These are some attributes you can use in your conditions to search for contacts:
+
+        | Attribute | Supported Operators |
+        |-----------|---------------------|
+        | `firstname` | `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `surname` | `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `married_name` | `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `gender` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `age_cat` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `birthdate` | `eql`, `ext`, `not_ext`, `range`, `lte`, `gte`, `period` |
+        | `birthday` | `today` |
+        | `birthcity` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `birthcountry` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `nationality` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `mail` | `eql:strictdata`, `not_eql:strictdata`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `phone` | `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `mobile` | `contains`, `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `address.addition` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `address.building` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `address.building_type` | `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `address.city` | `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `address.country` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `address.county` | `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `address.door` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `address.floor` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `address.housenumber` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `address.pollingstation` | `eql`, `not_eql`, `any_of`, `none_of`, `ext`, `not_ext` |
+        | `address.postalcode` | `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `address.state` | `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `address.street` | `eql`, `not_eql`, `ext`, `not_ext`, `start_with`, `not_start_with` |
+        | `tags.name` | `eql`, `not_eql`, `any_of`, `none_of`, `all_of`, `ext`, `not_ext` |
+        | `emails.blacklisted_at` | `eql`, `ext`, `not_ext`, `range`, `lte`, `gte`, `period` |
+        | `lastchange` | `eql`, `ext`, `not_ext`, `range`, `lte`, `gte`, `period` |
+        | `CreatedAt` | `eql`, `ext`, `not_ext`, `range`, `lte`, `gte`, `period` |
+        | `UpdatedAt` | `eql`, `ext`, `not_ext`, `range`, `lte`, `gte`, `period` |
+        | `user_id` | `eql`, `not_eql`, `ext`, `not_ext` |
+        | `user_contact_id` | `ext`, `not_ext` |
+        | `nationbuilderid` | `eql`, `not_eql`, `ext`, `not_ext` |
+
+
+        ## Pagination
+
+        You can retrieve maximum **1000 contacts per request**. If you need more, you can request multiple pages.
+
+        | Parameter | Description |
+        |-----------|-------------|
+        | `per_page` | Number of contacts per page *(required: 1-1000)* |
+        | `page` | Page number *(default: 0)* |
+        | `sort_asc` | Sort contacts in ascending order *(default: false)* |
+        | `sort_attr` | Attribute to sort by: `surname`, `firstname`, `birthdate`, `gender`, `lastchange`, `mail`, `married_name`, `city` |
+
+        ---
+
+        ## Interactions
+
+        If you need contacts interactions, use the `include_interactions` parameter.
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: "#/components/schemas/Search"
+            examples:
+              Minimal Search:
+                $ref: "#/components/examples/minimalSearch"
+              Search example 1:
+                $ref: "#/components/examples/advancedSearchSimple"
+              Advanced example 2:
+                $ref: "#/components/examples/advancedSearchFull"
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      contacts:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ContactResponseWithInteractions"
+                example:
+                  status: success
+                  data:
+                    contacts:
+                      - id: 83854766
+                        group_id: 1
+                        CreatedAt: "2022-10-13T15:50:34.643724Z"
+                        UpdatedAt: "2022-10-13T15:55:12.853724Z"
+                        lastchange: "2022-10-13T15:50:24.163Z"
+                        firstname: John
+                        surname: Doe
+                        married_name: Smith
+                        gender: F
+                        birthdate: "1955-07-06T00:00:00Z"
+                        age_category: 0
+                        birthdept: string
+                        birthcity: string
+                        birthcountry: string
+                        mail: user@example.com
+                        phone: string
+                        mobile: string
+                        address:
+                          housenumber: 1
+                          street: rue de la paix
+                          postalcode: 75000
+                          citycode: 75101
+                          city: Paris
+                          state: Ile-de-France
+                          country: France
+                          addition: Résidence de la paix
+                          infos: Porte de gauche
+                          building: Bâtiment A
+                          floor: 2
+                          door: A
+                          pollingstation: BV-06
+                          id: 8971
+                          score: 0.965753
+                          latitude: 48.869476
+                          longitude: 2.02458
+                          location: 48.8694762.02458
+                          invalid: null
+                        tags:
+                          - name: tag1
+                            color: red
+                        actions_ids: [152, 156]
+                        formdatas:
+                          - form_id: 97885
+                            form_ref_id: 1542036
+                            data: Oui
+                            id: 1178304
+                            created_at: "2022-10-13T15:50:24.163Z"
+                            updated_at: "2022-10-13T15:50:24.163Z"
+                            date: "2022-10-13T15:50:24.163Z"
+                            group_id: 1
+                            contact_id: 83854766
+                        customfields:
+                          - form_id: 97885
+                            form_ref_id: 1542036
+                            data: Oui
+                            id: 1178304
+                            created_at: "2022-10-13T15:50:24.163Z"
+                            updated_at: "2022-10-13T15:50:24.163Z"
+                            date: "2022-10-13T15:50:24.163Z"
+                            group_id: 1
+                            contact_id: 83854766
+                        notes:
+                          id: 1234
+                          created_at: "2024-09-12T08:06:47.957Z"
+                          updated_at: "2024-09-12T08:06:47.957Z"
+                          data: "John Doe asked for information about the next event."
+                          contact_id: 83854766
+                          group_id: 1
+                          user_id: 456
+                          pinned: true
+                        interactions:
+                          - id: 0
+                            created_at: "2024-09-12T08:06:47.957Z"
+                            updated_at: "2024-09-12T08:06:47.957Z"
+                            type: letter
+                            sub_type: incoming
+                            title: Send a request for information
+                            comments: John Doe asked for information about the next event.
+                            contact_id: 83854766
+                            group_id: 1
+                            user_id: 456
+                            only_super_admin: false
+                            files:
+                              - id: 45627
+                                created: "2024-09-12T08:06:47.957Z"
+                                owner_id: 456
+                                group_id: 1
+                                subject: The letter sent by John Doe
+                                url: string
+                                folder: string
+                                mime: image/jpeg
+                                name: string
+                                is_interaction: true
+
+        default:
+          description: Unsuccessful operation
+  /kpi:
+    post:
+      tags:
+        - Contacts
+      summary: Get KPIs about contacts
+      description: |-
+        Allow to get counts of contacts matching a query.
+        Check the /search endpoint for the query format.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: "#/components/schemas/Search"
+            examples:
+              Minimal Search:
+                $ref: "#/components/examples/minimalSearch"
+              Search example 1:
+                $ref: "#/components/examples/advancedSearchSimple"
+              Advanced example 2:
+                $ref: "#/components/examples/advancedSearchFull"
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                        example: 1597
+                      #   kpi:
+                      #     type: array
+                      #     items:
+                      #       type: object
+                      #       properties:
+                      #         KpiReplies:
+                      #           type: array
+                      #           nullable: true
+                      #           items:
+                      #             type: object
+                      #             properties:
+                      #               Key:
+                      #                 type: string
+                      #               Doc_count:
+                      #                 type: integer
+                      # example:
+                      # kpi:
+                      # - KpiReplies:
+                      #   - Key: total
+                      #     Doc_count: 22232
+                      # - KpiReplies:
+                      #   - Key: f
+                      #     Doc_count: 9549
+                      #   - Key: m
+                      #     Doc_count: 6672
+                      #   - Key: a
+                      #     Doc_count: 8
+                      #   - Key: missing
+                      #     Doc_count: 5972
+                      # - KpiReplies:
+                      #   - Key: NOTRE DAME DES CHAMPS
+                      #     Doc_count: 2463
+                      #   - Key: Laon-Zola – Neufchâtel - Orgeval
+                      #     Doc_count: 1466
+                      #   - Key: Centre Ville
+                      #     Doc_count: 1275
+                      #   - Key: Chemin vert – clémenceau – Europe
+                      #     Doc_count: 1275
+                      #   - Key: Cernay – Epinettes – Jamin – Jaures
+                      #     Doc_count: 1159
+                      #   - Key: Barbatre – St Rémi – Verriere
+                      #     Doc_count: 980
+                      #   - Key: Charles Arnould – Clairmarais
+                      #     Doc_count: 891
+                      #   - Key: missing
+                      #     Doc_count: 6017
+
+  /forms/{formId}:
+    get:
+      tags:
+        - Forms
+      summary: Retrieve a form using its ID.
+      description: |-
+        Retrieve detailed information about a specific form, including its label, type, and possible refvalues.
+
+        A form represents a field or a question that can be associated with a contact. It contains:
+        - Label: The name or description of the form (e.g., "What is your preferred contact method?").
+        - Type: The format of the form, such as radio, text, checkbox, numeric, date, range, signature or photos
+        - Refvalues: A list of possible answers or predefined values associated with the form. These can be simple options (e.g., "Yes" or "No") or a range of values, depending on the form type.
+
+        Here’s an example of a form with a range type, where the refvalue specifies a minimum, maximum, and step for the range of answers:
+
+        ```json
+        {
+          "id": 12515,
+          "type": "range",
+          "section": "My city and me",
+          "order": 1,
+          "label": "On a scale of 1 to 10, how would you rate your satisfaction with the council?",
+          "refvalues": [
+            {
+              "id": 19477,
+              "form_id": 12515,
+              "min": 0,
+              "max": 10,
+              "step": 1
+            }
+          ]
+        }
+        ```
+
+        This allows the form to represent a sliding scale, and the response can specify any value within this range.
+
+        <b>Link with contacts: formdatas & custom_fields </b>
+
+        When retrieving or working with contacts, the formdatas field links forms and refvalues to a contact. Custom fields have a dedicated structure in the contact object.
+
+        Each entry in formdatas and custom_fields contains:
+        - form_id: The ID of the form.
+        - form_ref_id: The ID of the refvalue selected for that form.
+        - data: The actual value or answer provided (e.g., "7" for a rating of 7 on the scale from 0 to 10).
+
+        Example of formdatas in a contact for the range form:
+
+        ```json
+        "formdatas": [
+          {
+            "form_id": 12515,
+            "form_ref_id": 19477,
+            "data": "7"
+          }
+        ],
+        "custom_fields": [
+          {
+            "form_id": 11391,
+            "form_ref_id": 18151
+            "data": "Architect",
+          }
+        ]
+        ```
+      parameters:
+        - name: formId
+          in: path
+          description: ID of the form to return
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      form:
+                        $ref: "#/components/schemas/Form"
+
+  /forms/{type}:
+    get:
+      tags:
+        - Forms
+      summary: Retrieve forms by their type.
+      description: |-
+        See all forms of a specific type.
+
+        The type parameter allows you to filter forms by their type. The available types are:
+        - consent: Forms related to consent and data collection.
+        - level_of_support: Forms related to the level of support provided.
+        - presence_status: Forms related to the presence status of the contact.
+        - custom_fields: Custom fields associated with the contact.
+        - survey: Forms related to surveys and questionnaires.
+        - tasks: Forms related to tasks and actions.
+
+        Most forms can be viewed and managed through the Qomon interface in the space settings.
+
+      parameters:
+        - name: type
+          in: path
+          description: Type of form to return
+          required: true
+          schema:
+            type: string
+            enum:
+              [
+                consent,
+                level_of_support,
+                presence_status,
+                custom_fields,
+                survey,
+                tasks,
+              ]
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      forms:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Form"
+              examples:
+                Consent:
+                  value:
+                    data:
+                      forms:
+                        - id: 11240
+                          group_id:
+                            - 631
+                          CreatedAt: '2024-01-05T10:12:56.029114Z'
+                          UpdatedAt: '2024-01-05T10:12:56.029114Z'
+                          label: The contact authorises me to collect and use the collected data for my
+                            action
+                          type: checkbox
+                          refvalues:
+                            - id: 17872
+                              form_id: 11240
+                              CreatedAt: '2024-01-05T10:12:56.029922Z'
+                              UpdatedAt: '2024-01-05T10:12:56.029922Z'
+                              label: nomobile
+                              value: nomobile
+                            - id: 17873
+                              form_id: 11240
+                              CreatedAt: '2024-01-05T10:12:56.030959Z'
+                              UpdatedAt: '2024-01-05T10:12:56.030959Z'
+                              label: stopsms
+                              value: stopsms
+                            - id: 17874
+                              form_id: 11240
+                              CreatedAt: '2024-01-05T10:12:56.031673Z'
+                              UpdatedAt: '2024-01-05T10:12:56.031673Z'
+                              label: consent_email
+                              value: consent_email
+                            - id: 17875
+                              form_id: 11240
+                              CreatedAt: '2024-01-05T10:12:56.032365Z'
+                              UpdatedAt: '2024-01-05T10:12:56.032365Z'
+                              label: consent_mobile
+                              value: consent_mobile
+                            - id: 17876
+                              form_id: 11240
+                              CreatedAt: '2024-01-05T10:12:56.033305Z'
+                              UpdatedAt: '2024-01-05T10:12:56.033305Z'
+                              label: no_consent_email
+                              value: no_consent_email
+                            - id: 17877
+                              form_id: 11240
+                              CreatedAt: '2024-01-05T10:12:56.033911Z'
+                              UpdatedAt: '2024-01-05T10:12:56.033911Z'
+                              label: no_consent_mobile
+                              value: no_consent_mobile
+                            - id: 17878
+                              form_id: 11240
+                              CreatedAt: '2024-01-05T10:12:56.034457Z'
+                              UpdatedAt: '2024-01-05T10:12:56.034457Z'
+                              label: double_optin_sms
+                              value: double_optin_sms
+                            - id: 17879
+                              form_id: 11240
+                              CreatedAt: '2024-01-05T10:12:56.035242Z'
+                              UpdatedAt: '2024-01-05T10:12:56.035242Z'
+                              label: 'yes'
+                              value: 'yes'
+                    status: success
+                Survey:
+                  value:
+                    data:
+                      forms:
+                        - id: 12515
+                          group_id:
+                            - 631
+                          CreatedAt: '2025-01-16T17:19:59.120908Z'
+                          UpdatedAt: '2025-01-16T17:19:59.120908Z'
+                          label: On a scale of 1 to 10, how would you rate your satisfaction with the
+                            council?
+                          order: 1
+                          section: My city and me
+                          type: range
+                          refvalues:
+                            - CreatedAt: '2025-01-16T17:19:59.128542Z'
+                              UpdatedAt: '2025-01-16T17:19:59.128542Z'
+                              form_id: 12515
+                              id: 19477
+                              max: 10
+                              step: 1
+                        - id: 12516
+                          group_id:
+                            - 631
+                          CreatedAt: '2025-01-16T17:19:59.132315Z'
+                          UpdatedAt: '2025-01-16T17:19:59.132315Z'
+                          label: What are the strengths of the town/city in your opinion?
+                          section: My city and me
+                          type: checkbox
+                          order: 2
+                          refvalues:
+                            - CreatedAt: '2025-01-16T17:19:59.132789Z'
+                              UpdatedAt: '2025-01-16T17:19:59.132789Z'
+                              form_id: 12516
+                              id: 19478
+                              label: Public infrastructure
+                              value: public_infrastructure
+                            - CreatedAt: '2025-01-16T17:19:59.132789Z'
+                              UpdatedAt: '2025-01-16T17:19:59.132789Z'
+                              form_id: 12516
+                              id: 19479
+                              label: Education
+                              value: education
+                            - CreatedAt: '2025-01-16T17:19:59.132789Z'
+                              UpdatedAt: '2025-01-16T17:19:59.132789Z'
+                              form_id: 12516
+                              id: 19480
+                              label: Parks and green areas
+                              value: parks_and_green_areas
+                            - CreatedAt: '2025-01-16T17:19:59.132789Z'
+                              UpdatedAt: '2025-01-16T17:19:59.132789Z'
+                              form_id: 12516
+                              id: 19481
+                              label: Roads
+                              value: roads
+                            - CreatedAt: '2025-01-16T17:19:59.132789Z'
+                              UpdatedAt: '2025-01-16T17:19:59.132789Z'
+                              form_id: 12516
+                              id: 19482
+                              label: Neighborhood living
+                              value: neighborhood_living
+                            - CreatedAt: '2025-01-16T17:19:59.132789Z'
+                              UpdatedAt: '2025-01-16T17:19:59.132789Z'
+                              form_id: 12516
+                              id: 19483
+                              label: Sports infrastructures
+                              value: sports_infrastructures
+                        - id: 12517
+                          group_id:
+                            - 631
+                          CreatedAt: '2025-01-16T17:19:59.134634Z'
+                          UpdatedAt: '2025-01-16T17:19:59.134634Z'
+                          label: What do you think should be improved?
+                          order: 3
+                          section: My city and me
+                          type: checkbox
+                          refvalues:
+                            - CreatedAt: '2025-01-16T17:19:59.135064Z'
+                              UpdatedAt: '2025-01-16T17:19:59.135064Z'
+                              form_id: 12517
+                              id: 19484
+                              label: Public infrastructure
+                              value: public_infrastructure
+                            - CreatedAt: '2025-01-16T17:19:59.135064Z'
+                              UpdatedAt: '2025-01-16T17:19:59.135064Z'
+                              form_id: 12517
+                              id: 19485
+                              label: Education
+                              value: education
+                            - CreatedAt: '2025-01-16T17:19:59.135064Z'
+                              UpdatedAt: '2025-01-16T17:19:59.135064Z'
+                              form_id: 12517
+                              id: 19486
+                              label: Parks and green areas
+                              value: parks_and_green_areas
+                            - CreatedAt: '2025-01-16T17:19:59.135064Z'
+                              UpdatedAt: '2025-01-16T17:19:59.135064Z'
+                              form_id: 12517
+                              id: 19487
+                              label: Roads
+                              value: roads
+                            - CreatedAt: '2025-01-16T17:19:59.135064Z'
+                              UpdatedAt: '2025-01-16T17:19:59.135064Z'
+                              form_id: 12517
+                              id: 19488
+                              label: Neighborhood living
+                              value: neighborhood_living
+                            - CreatedAt: '2025-01-16T17:19:59.135064Z'
+                              UpdatedAt: '2025-01-16T17:19:59.135064Z'
+                              form_id: 12517
+                              id: 19489
+                              label: Sports infrastructures
+                              value: sports_infrastructures
+                        - id: 12518
+                          group_id:
+                            - 631
+                          CreatedAt: '2025-01-16T17:19:59.136414Z'
+                          UpdatedAt: '2025-01-16T17:19:59.136414Z'
+                          label: Do you have anything to bring up?
+                          order: 4
+                          section: My city and me
+                          type: text
+                          refvalues:
+                            - CreatedAt: '2025-01-16T17:19:59.136896Z'
+                              UpdatedAt: '2025-01-16T17:19:59.136896Z'
+                              form_id: 12518
+                              id: 19490
+                    status: success
+                Level of support:
+                  value:
+                    data:
+                      forms:
+                        - id: 11238
+                          group_id:
+                            - 631
+                          CreatedAt: '2024-01-05T10:12:56.016111Z'
+                          UpdatedAt: '2024-01-05T10:12:56.016111Z'
+                          label: Level of support
+                          type: radio
+                          refvalues:
+                            - id: 17863
+                              form_id: 11238
+                              CreatedAt: '2024-01-05T10:12:56.016769Z'
+                              UpdatedAt: '2024-01-05T10:12:56.016769Z'
+                              color: "#05B66F"
+                              followed: true
+                              label: Elected official
+                              value: elected_official
+                            - id: 17864
+                              form_id: 11238
+                              CreatedAt: '2024-01-05T10:12:56.017383Z'
+                              UpdatedAt: '2024-01-05T10:12:56.017383Z'
+                              color: "#05B66F"
+                              followed: true
+                              label: Association
+                              value: association
+                            - id: 17865
+                              form_id: 11238
+                              CreatedAt: '2024-01-05T10:12:56.017919Z'
+                              UpdatedAt: '2024-01-05T10:12:56.017919Z'
+                              color: "#7AD8F7"
+                              followed: true
+                              label: Business
+                              value: business
+                            - id: 17866
+                              form_id: 11238
+                              CreatedAt: '2024-01-05T10:12:56.018642Z'
+                              UpdatedAt: '2024-01-05T10:12:56.018642Z'
+                              color: "#FF8383"
+                              followed: true
+                              label: Citizen
+                              value: citizen
+                            - id: 17867
+                              form_id: 11238
+                              CreatedAt: '2024-01-05T10:12:56.019282Z'
+                              UpdatedAt: '2024-01-05T10:12:56.019282Z'
+                              color: "#FF8383"
+                              followed: true
+                              label: To be convinced
+                              value: to_be_convinced
+                    status: success
+                Presence status:
+                  value:
+                    data:
+                      forms:
+                        - id: 11239
+                          group_id:
+                            - 631
+                          CreatedAt: '2024-01-05T10:12:56.022876Z'
+                          UpdatedAt: '2024-01-05T10:12:56.022876Z'
+                          type: radio
+                          label: Presence status
+                          refvalues:
+                            - id: 17868
+                              form_id: 11239
+                              CreatedAt: '2024-01-05T10:12:56.023542Z'
+                              UpdatedAt: '2024-01-05T10:12:56.023542Z'
+                              label: present
+                              value: present
+                            - id: 17869
+                              form_id: 11239
+                              CreatedAt: '2024-01-05T10:12:56.024299Z'
+                              UpdatedAt: '2024-01-05T10:12:56.024299Z'
+                              label: absent
+                              value: absent
+                            - id: 17870
+                              form_id: 11239
+                              CreatedAt: '2024-01-05T10:12:56.024868Z'
+                              UpdatedAt: '2024-01-05T10:12:56.024868Z'
+                              label: refusal
+                              value: refus
+                            - id: 17871
+                              form_id: 11239
+                              CreatedAt: '2024-01-05T10:12:56.025662Z'
+                              UpdatedAt: '2024-01-05T10:12:56.025662Z'
+                              label: repasse
+                              value: repasse
+                    status: success
+                Tasks:
+                  value:
+                    data:
+                      forms:
+                        - id: 11236
+                          group_id:
+                            - 631
+                          CreatedAt: '2024-01-05T10:12:56.004827Z'
+                          UpdatedAt: '2024-01-05T10:12:56.004827Z'
+                          label: Next steps
+                          order: 1
+                          type: checkbox
+                          refvalues:
+                            - id: 17858
+                              form_id: 11236
+                              followed: true
+                              CreatedAt: '2024-01-05T10:12:56.005509Z'
+                              UpdatedAt: '2024-01-05T10:12:56.005509Z'
+                              label: Receive our information
+                              value: receive_our_information
+                            - id: 17859
+                              form_id: 11236
+                              followed: true
+                              CreatedAt: '2024-01-05T10:12:56.006214Z'
+                              UpdatedAt: '2024-01-05T10:12:56.006214Z'
+                              label: Provide follow-up
+                              type: other
+                              value: provide_follow_up
+                            - id: 17860
+                              form_id: 11236
+                              followed: true
+                              CreatedAt: '2024-01-05T10:12:56.006795Z'
+                              UpdatedAt: '2024-01-05T10:12:56.006795Z'
+                              label: Report a problem
+                              type: report
+                              value: report_a_problem
+                            - id: 17861
+                              form_id: 11236
+                              followed: true
+                              CreatedAt: '2024-01-05T10:12:56.007569Z'
+                              UpdatedAt: '2024-01-05T10:12:56.007569Z'
+                              label: Invite to an event
+                              type: invite
+                              value: invite_to_event
+                        - id: 11237
+                          group_id:
+                            - 631
+                          CreatedAt: '2024-01-05T10:12:56.010989Z'
+                          UpdatedAt: '2024-01-05T10:12:56.010989Z'
+                          label: Notes
+                          order: 2
+                          type: text
+                          refvalues:
+                            - id: 17862
+                              form_id: 11237
+                              CreatedAt: '2024-01-05T10:12:56.011856Z'
+                              UpdatedAt: '2024-01-05T10:12:56.011856Z'
+                    status: success
+                Custom fields:
+                  value:
+                    data:
+                      forms:
+                        - id: 12519
+                          group_id:
+                            - 631
+                          CreatedAt: '2025-01-17T17:22:52.730998Z'
+                          UpdatedAt: '2025-01-17T17:22:52.730998Z'
+                          section: identity
+                          type: text
+                          hidden: true
+                          label: Job
+                          mandatory: true
+                          order: 10
+                          refvalues:
+                            - id: 19491
+                              form_id: 12519
+                              CreatedAt: '2025-01-17T17:22:52.737235Z'
+                              UpdatedAt: '2025-01-17T17:22:52.737235Z'
+                        - id: 12520
+                          group_id:
+                            - 631
+                          CreatedAt: '2025-01-17T17:22:52.744444Z'
+                          UpdatedAt: '2025-01-17T17:22:52.744444Z'
+                          section: identity
+                          type: date
+                          hidden: true
+                          label: Date of first job
+                          order: 11
+                          refvalues:
+                            - id: 19492
+                              form_id: 12520
+                              CreatedAt: '2025-01-17T17:22:52.745014Z'
+                              UpdatedAt: '2025-01-17T17:22:52.745014Z'
+                        - id: 12521
+                          group_id:
+                            - 631
+                          CreatedAt: '2025-01-17T17:22:52.746548Z'
+                          UpdatedAt: '2025-01-17T17:22:52.746548Z'
+                          section: identity
+                          type: numeric
+                          hidden: true
+                          label: Number of children
+                          order: 12
+                          refvalues:
+                            - form_id: 12521
+                              id: 19493
+                              CreatedAt: '2025-01-17T17:22:52.747327Z'
+                              UpdatedAt: '2025-01-17T17:22:52.747327Z'
+                        - id: 12522
+                          group_id:
+                            - 631
+                          CreatedAt: '2025-01-17T17:22:52.748828Z'
+                          UpdatedAt: '2025-01-17T17:22:52.748828Z'
+                          section: infos
+                          type: text
+                          hidden: true
+                          label: Member ID
+                          order: 16
+                          refvalues:
+                            - form_id: 12522
+                              id: 19494
+                              CreatedAt: '2025-01-17T17:22:52.749363Z'
+                              UpdatedAt: '2025-01-17T17:22:52.749363Z'
+                        - id: 12523
+                          group_id:
+                            - 631
+                          CreatedAt: '2025-01-17T17:22:52.750458Z'
+                          UpdatedAt: '2025-01-17T17:22:52.750458Z'
+                          section: address
+                          type: text
+                          hidden: true
+                          label: Door color
+                          order: 29
+                          refvalues:
+                            - form_id: 12523
+                              id: 19495
+                              CreatedAt: '2025-01-17T17:22:52.750905Z'
+                              UpdatedAt: '2025-01-17T17:22:52.750905Z'
+                    status: success
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  examples:
+    minimalSearch:
+      value:
+        data:
+          advanced_search:
+            per_page: 1000
+            query:
+              $all: []
+    advancedSearchSimple:
+      value:
+        data:
+          advanced_search:
+            page: 0
+            per_page: 50
+            sort_asc: true
+            sort_attr: surname
+            query:
+              "$all":
+                - "$at_least_one":
+                    - "$condition":
+                        attr: address.city
+                        ope: eql
+                        value: Bordeaux
+                    - "$condition":
+                        attr: address.city
+                        ope: eql
+                        value: Talence
+                    - "$condition":
+                        attr: address.city
+                        ope: eql
+                        value: Mérignac
+      description: |-
+        <b>Search contacts with:</b>
+        <br>(address.city is equal to Bordeaux
+        <br>OR address.city is equal to Talence
+        <br>OR address.city is equal to Mérignac)
+    advancedSearchFull:
+      value:
+        data:
+          advanced_search:
+            page: 0
+            per_page: 50
+            sort_asc: true
+            sort_attr: surname
+            include_interactions: true
+            query:
+              "$all":
+                - "$at_least_one":
+                    - "$condition":
+                        attr: mobile
+                        ope: ext
+                    - "$condition":
+                        attr: phone
+                        ope: ext
+                - "$all":
+                    - "$condition":
+                        attr: form
+                        form_id: 4530
+                        form_ref_ids:
+                          - 7486
+                        ope: eql
+                        value:
+                - "$all":
+                    - "$condition":
+                        attr: form
+                        form_id: 544
+                        form_ref_ids:
+                          - 6420
+                        ope: eql
+                        value:
+      description: |-
+        <b>Search contacts with:</b>
+        <br>(mobile exist OR phone exist)
+        <br>AND (ref value of form 4530 is equal to 7486)
+        <i>-> (ex: form 4530 is "Consentement RGPD" and ref value 7486 is "OK for call and SMS")</i>
+        <br>AND (ref value of form 544 is equal to 6420)
+        <i>-> (ex: form 544 is "Level of support" and ref value 6420 is "indecisive")</i>
+
+  schemas:
+    Contact:
+      type: object
+      properties:
+        firstname:
+          type: string
+          description: <br><i>this field is the firstname of the contact</i>
+          example: Jeanne
+        surname:
+          type: string
+          example: Dupont
+          description: <br><i>this field is the lastname/surname of the contact</i>
+        married_name:
+          type: string
+          example: Dupont
+          description: <br><i>this field is the married name of the contact</i>
+        gender:
+          type: string
+          example: F
+          description: <br><i>this field is the gender of the contact (possible values =>
+            F,M and O)</i>
+        birthdate:
+          type: string
+          format: date-time
+          example: "1955-07-06T00:00:00Z"
+          description: <br><i>this field is the birthdate of the contact</i>
+        age_category:
+          type: integer
+          description: <br><i>this field is the age category of the contact.<br>It's a
+            range from 0 to 6 by default (it can be customize).<br>0 is for
+            example people that are 18 years old or lower.1 is from 18 to 25
+            years old, etc.</i>
+        birthdept:
+          type: string
+          description: <br><i>this field is the birth county of the contact</i>
+        birthcity:
+          type: string
+          description: <br><i>this field is the birth city of the contact</i>
+        birthcountry:
+          type: string
+          description: <br><i>this field is the birth country of the contact</i>
+        nationality:
+          type: string
+          description: <br><i>this field is the nationality of the contact</i>
+        mail:
+          type: string
+          format: email
+          description: <br><i>this field is the email of the contact</i>
+        phone:
+          type: string
+          description: <br><i>this field is the land phone number of the contact</i>
+        mobile:
+          type: string
+          description: <br><i>this field is the mobile phone number of the contact</i>
+        address:
+          $ref: "#/components/schemas/Address"
+        tags:
+          type: array
+          items:
+            type: object
+            required: [name]
+            properties:
+              name:
+                type: string
+        actions_ids:
+          type: array
+          items:
+            type: integer
+          description: <br><i>this array give you the acion id where this contact is
+            linked to</i>
+        user_id:
+          type: integer
+          description: <br><i>This field provides the user ID of the last user who updated
+            the contact.</i>
+        user_contact_id:
+          type: integer
+          description: <br><i>this field give you the id of the user linked with this
+            contact</i>
+        formdatas:
+          type: array
+          items:
+            $ref: "#/components/schemas/FormData"
+          description: <br><i>this array is where are stored the survey/level of
+            support/presence status/consent informations for the contact</i>
+        customfields:
+          type: array
+          items:
+            $ref: "#/components/schemas/FormData"
+          description: <br><i>this array is where are stored the custom fields
+            informations for the contact</i>
+        black_list:
+          type: boolean
+          description: Prevent any communication with this contact.
+          example: true
+        notes:
+          type: array
+          items:
+            type: object
+            required:
+              - content
+            properties:
+              id:
+                type: integer
+              content:
+                type: string
+              pinned:
+                type: boolean
+
+    ContactResponse:
+      allOf:
+        - type: object
+          properties:
+            id:
+              type: integer
+              example: 83854766
+            group_id:
+              type: integer
+              example: 1
+            CreatedAt:
+              type: string
+              format: date-time
+              example: "2022-10-13T15:50:34.643724Z"
+            UpdatedAt:
+              type: string
+              format: date-time
+              example: "2022-10-13T15:55:12.853724Z"
+            lastchange:
+              type: string
+              example: "2022-10-13T15:50:24.163Z"
+        - $ref: "#/components/schemas/Contact"
+        - type: object
+          properties:
+            address:
+              $ref: "#/components/schemas/AddressResp"
+            tags:
+              type: array
+              items:
+                $ref: "#/components/schemas/Tag"
+            formdatas:
+              type: array
+              items:
+                $ref: "#/components/schemas/FormDataResp"
+            customfields:
+              type: array
+              items:
+                $ref: "#/components/schemas/FormDataResp"
+    ContactResponseWithInteractions:
+      allOf:
+        - $ref: "#/components/schemas/ContactResponse"
+        - type: object
+          properties:
+            interactions:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+                  type:
+                    type: string
+                    enum: [letter, call]
+                  sub_type:
+                    type: string
+                    enum: [incoming, outgoing]
+                  title:
+                    type: string
+                  comments:
+                    type: string
+                  contact_id:
+                    type: integer
+                  group_id:
+                    type: integer
+                  user_id:
+                    type: integer
+                  user_contact_id:
+                    type: integer
+                  address:
+                    type: string
+                  only_super_admin:
+                    type: boolean
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        created:
+                          type: string
+                          format: date-time
+                        owner_id:
+                          type: integer
+                        group_id:
+                          type: integer
+                        subject:
+                          type: string
+                        type:
+                          type: string
+                        url:
+                          type: string
+                        folder:
+                          type: string
+                        mime:
+                          type: string
+                        name:
+                          type: string
+                        category:
+                          type: string
+                        category_id:
+                          type: integer
+                        cover:
+                          type: string
+                        minimum_role:
+                          type: string
+                        is_a_team_file:
+                          type: boolean
+                        is_interaction:
+                          type: boolean
+                        private:
+                          type: boolean
+            notes:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+                  data:
+                    type: string
+                  contact_id:
+                    type: integer
+                  group_id:
+                    type: integer
+                  user_id:
+                    type: integer
+                  pinned:
+                    type: boolean
+                  only_super_admin:
+                    type: boolean
+
+    ContactUpsert:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        firstname:
+          type: string
+          example: John
+        surname:
+          type: string
+          example: Doe
+        married_name:
+          type: string
+          example: Smith
+        gender:
+          type: string
+          enum: [M, F, O]
+        birthdate:
+          type: string
+          format: date-time
+        age_category:
+          type: integer
+        birthdept:
+          type: string
+        birthcity:
+          type: string
+        birthcountry:
+          type: string
+        mail:
+          type: string
+          format: email
+        phone:
+          type: string
+        mobile:
+          type: string
+        address:
+          $ref: "#/components/schemas/Address"
+        tags:
+          type: array
+          items:
+            type: object
+            required: [name]
+            properties:
+              name:
+                type: string
+        nationbuilderid:
+          type: integer
+        black_list:
+          type: boolean
+        name_presences:
+          $ref: "#/components/schemas/FormsLight"
+        consents:
+          $ref: "#/components/schemas/FormsLight"
+        actions:
+          $ref: "#/components/schemas/FormsLight"
+        forms:
+          $ref: "#/components/schemas/FormsLight"
+        custom_fields:
+          $ref: "#/components/schemas/FormsLight"
+        status:
+          $ref: "#/components/schemas/FormsLight"
+        # others:
+        #   $ref: "#/components/schemas/FormsLight"
+
+    Tag:
+      type: object
+      properties:
+        name:
+          type: string
+        appearance_count:
+          type: integer
+        color:
+          type: string
+
+    Address:
+      type: object
+      properties:
+        housenumber:
+          type: string
+          example: 1
+        street:
+          type: string
+          example: rue de la paix
+        postalcode:
+          type: string
+          example: 75000
+        citycode:
+          type: string
+          example: 75101
+        city:
+          type: string
+          example: Paris
+        state:
+          type: string
+          example: Ile-de-France
+        country:
+          type: string
+          example: France
+        addition:
+          type: string
+          example: Résidence de la paix
+        infos:
+          type: string
+          example: Porte de gauche
+        building:
+          type: string
+          example: Bâtiment A
+        floor:
+          type: string
+          example: 2
+        door:
+          type: string
+          example: A
+        pollingstation:
+          type: string
+          example: BV-06
+    AddressResp:
+      allOf:
+        - type: object
+          properties:
+            id:
+              type: integer
+              example: 8971
+        - $ref: "#/components/schemas/Address"
+        - type: object
+          properties:
+            score:
+              type: number
+              example: 0.965753
+            latitude:
+              type: string
+              example: "48.869476"
+            longitude:
+              type: string
+              example: "2.02458"
+            location:
+              type: string
+              example: "48.869476,2.02458"
+            invalid:
+              type: boolean
+              nullable: true
+              example: null
+
+    Form:
+      type: object
+      description: |-
+        Represents a form field with its type (`numeric`, `radio`, ...) and
+        its possible values and/or constraints on it (`refvalues`).
+        <br>A form is used to describe a contact via formdata.
+      properties:
+        id:
+          type: integer
+        CreatedAt:
+          type: string
+        UpdatedAt:
+          type: string
+        # name:
+        #   type: string
+        group_id:
+          type: array
+          items:
+            type: integer
+        type:
+          type: string
+          enum:
+            - radio
+            - checkbox
+            - date
+            - report
+            - meet
+            - text
+            - signature
+            - photos
+            - numeric
+            - range
+            - other
+        section:
+          type: string
+        activate:
+          type: string
+        order:
+          type: integer
+        # activate_auto_send:
+        #   type: string
+        label:
+          type: string
+        # filterbyidrefvalue:
+        #   type: integer
+        # index_refvalue_filterbyidrefvalue:
+        #   type: integer
+        refvalues:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefValue'
+        # tag_for_nb:
+        #   type: boolean
+        mandatory:
+          type: boolean
+
+    RefValue:
+      type: object
+      properties:
+        id:
+          type: integer
+        CreatedAt:
+          type: string
+        UpdatedAt:
+          type: string
+        form_id:
+          type: integer
+        label:
+          type: string
+        value:
+          type: string
+        min:
+          type: integer
+        max:
+          type: integer
+        step:
+          type: integer
+        # auto_send:
+        #   type: string
+        #   description: |-
+        #     With name = `FORM` only.
+        #     <br>When a contact answer to this form a mail and/or a sms
+        #     is automatically sent, see autmatic emails for more details.
+        # auto_send_sms:
+        #   type: string
+        # filterbyidrefvalue:
+        #   type: integer
+        # index_form_filterbyidrefvalue:
+        #   type: integer
+        # index_refvalue_filterbyidrefvalue:
+        #   type: integer
+        type:
+          type: string
+        followed:
+          type: boolean
+        color:
+          type: string
+
+    FormsLight:
+      type: array
+      items:
+        type: object
+        anyOf:
+          - required: [id, value]
+            properties:
+              id:
+                type: integer
+                description: ID of the form
+              value:
+                type: string
+          - required: [label, value]
+            properties:
+              label:
+                type: string
+                description: Label of the form
+              value:
+                type: string
+          - required: [id, label, value]
+            properties:
+              id:
+                type: integer
+                description: ID of the form
+              label:
+                type: string
+                description: Label of the form
+              value:
+                type: string
+
+    FormData:
+      type: object
+      required: [form_id, form_ref_id]
+      properties:
+        form_id:
+          type: integer
+        form_ref_id:
+          type: integer
+        data:
+          type: string
+    FormDataResp:
+      description: |-
+        A formdata is a response to a form. It links a contact, a form and a refvalue.
+        <br>A contact (`contact_id`) anwser to a form (`form_id`) by selecting
+        a refvalue (`form_ref_id`) with a value (`data`).
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1178304
+        created_at:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:50:24.163Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:50:24.163Z"
+        deleted_at:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:50:24.163Z"
+          nullable: true
+        data:
+          type: string
+          example: Oui
+        date:
+          type: string
+          format: date-time
+          example: "2022-10-13T15:50:24.163Z"
+        donedate:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        label:
+          type: string
+          nullable: true
+          example: null
+        type_of_form:
+          type: string
+          nullable: true
+          example: null
+        group_id:
+          type: integer
+          example: 4567
+        contact_id:
+          type: integer
+          example: 83854766
+          description: ID of the contact
+        form_id:
+          type: integer
+          example: 97885
+          description: ID of the form
+        form_ref_id:
+          type: integer
+          example: 1542036
+          description: ID of the refvalue of the form
+
+    AdvancedSearchCondition:
+      type: object
+      additionalProperties: false
+      properties:
+        $condition:
+          type: object
+          oneOf:
+            - required: [attr, ope]
+              additionalProperties: false
+              properties:
+                attr:
+                  type: string
+                  example: surname
+                  description: Attribute
+                  enum:
+                    - firstname
+                    - surname
+                    - married_name
+                    - gender
+                    - birthdate
+                    - age_cat
+                    - birthcity
+                    - birthcountry
+                    - mail
+                    - mobile
+                    - phone
+                    - address.building
+                    - address.floor
+                    - address.door
+                    - address.housenumber
+                    - address.street
+                    - address.addition
+                    - address.postalcode
+                    - address.city
+                    - address.country
+                    - address.pollingstation
+                    - address.invalid
+                    - tags.name
+                    - lastchange
+                    - user_id
+                    - user_contact_id
+                    - action_ids
+                    - black_list
+                    - petitions.base_id
+                    - onlineforms.base_id
+                ope:
+                  type: string
+                  example: eq
+                  description: |-
+                    Operator
+                    <br>`ext`, `not_ext`: all fields
+                    <br>`eql`: firstname, surname, married_name, gender, birthdate, age_cat, birthcity, birthcountry, mobile, phone, address.building, address.floor, address.door, address.housenumber, address.street, address.addition, address.postalcode, address.city, address.country, address.pollingstation, tags.name, lastchange, user_id,user_contact_id, action_ids, petitions.base_id, onlineforms.base_id
+                    <br>`not_eql`: firstname, surname, married_name, gender, age_cat, birthcity, birthcountry, mobile, phone, address.building, address.floor, address.door, address.housenumber, address.street, address.addition, address.postalcode, address.city, address.country, address.pollingstation, tags.name, user_id,user_contact_id, action_ids, petitions.base_id, onlineforms.base_id
+                    <br>`start_with`, `not_start_with`: firstname, surname, married_name, mail, mobile, phone, address.street, address.postalcode, address.city, address.invalid
+                    <br>`lte`, `gte`, `range`: birthdate, lastchange
+                    <br>`eql:strictdata`, `not_eql:strictdata`: mail
+                  enum:
+                    - eql
+                    - not_eql
+                    - ext
+                    - not_ext
+                    - range
+                    - lte
+                    - gte
+                    - start_with
+                    - not_start_with
+                    - eql:strictdata
+                    - not_eql:strictdata
+                value:
+                  type: string
+                  description: |-
+                    Value of the attr if necessary (depends of the fields and the operator)
+                  nullable: true
+                  example: Dupont
+                from:
+                  type: string
+                  format: date-time
+                  description: Required only if "ope" is `range`
+                  nullable: true
+                  example: "1955-07-06T00:00:00Z"
+                to:
+                  type: string
+                  format: date-time
+                  description: Required only if "ope" is `range`
+                  nullable: true
+                  example: "1955-07-06T00:00:00Z"
+
+            - required: [attr, ope, form_id, form_ref_ids]
+              additionalProperties: false
+              properties:
+                attr:
+                  type: string
+                  example: form
+                  description: Attribute
+                  enum: [custom_fields, form]
+                ope:
+                  type: string
+                  example: eq
+                  description: |-
+                    Operator
+                    <br>`ext`, `not_ext`: all fields
+                    <br>`eql`, `not_eql`: forms with type 'text', 'radio', 'checkbox', 'range' or 'date'
+                    <br>`contains`, `not_contains`, `start_with`, `not_start_with`: forms with type 'text'
+                    <br>`lte`, `gte`, `range`: forms with type 'date'
+                  enum:
+                    - eql
+                    - not_eql
+                    - ext
+                    - not_ext
+                    - range
+                    - lte
+                    - gte
+                    - start_with
+                    - not_start_with
+                    - contains
+                    - not_contains
+                form_id:
+                  type: integer
+                  example: 4250
+                  description: If attr is form, the form_id is required
+                form_ref_ids:
+                  type: array
+                  description: If attr is form, the form_ref_ids is required
+                  items:
+                    type: integer
+                  example: [6648]
+                value:
+                  type: string
+                  description: |-
+                    Value of the form_ref_ids if necessary (depends of the fields and the operator)
+                  nullable: true
+                  example: "Yes"
+                from:
+                  type: string
+                  format: date-time
+                  description: Required only if "ope" is `range`
+                  nullable: true
+                  example: "1955-07-06T00:00:00Z"
+                to:
+                  type: string
+                  format: date-time
+                  description: Required only if "ope" is `range`
+                  nullable: true
+                  example: "1955-07-06T00:00:00Z"
+    AdvancedSearchNode:
+      oneOf:
+        - required: [$all]
+          properties:
+            $all:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdvancedSearchCondition"
+        - required: [$at_least_one]
+          properties:
+            $at_least_one:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdvancedSearchCondition"
+
+    Search:
+      type: object
+      required: [advanced_search]
+      properties:
+        advanced_search:
+          type: object
+          required: [query, per_page]
+          additionalProperties: false
+          properties:
+            page:
+              type: integer
+              minimum: 0
+              example: 0
+            per_page:
+              type: integer
+              maximum: 1000
+              minimum: 1
+              example: 50
+            sort_asc:
+              type: boolean
+              example: true
+            sort_attr:
+              type: string
+              enum:
+                - surname
+                - firstname
+                - birthdate
+                - gender
+                - lastchange
+                - mail
+                - married_name
+                - city
+              example: surname
+            query:
+              type: object
+              oneOf:
+                - required: [$all]
+                  properties:
+                    $all:
+                      type: array
+                      items:
+                        $ref: "#/components/schemas/AdvancedSearchNode"
+                - required: [$at_least_one]
+                  properties:
+                    $at_least_one:
+                      type: array
+                      items:
+                        $ref: "#/components/schemas/AdvancedSearchNode"
+        include_interactions:
+          type: boolean
+          example: true
