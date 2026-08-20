@@ -100,8 +100,8 @@ interval, with a stated reason, as a doc's churn becomes clear.
 ## Living memory vs reference snapshots
 
 Living docs (design, integrations, open questions) assert facts about the
-present and must track it. Snapshots (for example the vendor API specs under
-`docs/qomon/`) are point-in-time artifacts: a review does not edit them, it
+present and must track it. Snapshots (for example vendor API specs) are
+point-in-time artifacts: a review does not edit them, it
 asks whether the snapshot is old enough to re-request from the source. Both
 kinds carry freshness frontmatter; only the review action differs.
 
