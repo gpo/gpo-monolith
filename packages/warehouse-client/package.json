@@ -1,0 +1,40 @@
+{
+  "name": "@gpo/warehouse-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./fake": {
+      "types": "./dist/fake.d.ts",
+      "default": "./dist/fake.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gpo/tax-receipts-core": "workspace:*",
+    "zod": "^3.24.1"
+  },
+  "peerDependencies": {
+    "@google-cloud/bigquery": "^7.9.1"
+  },
+  "peerDependenciesMeta": {
+    "@google-cloud/bigquery": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@google-cloud/bigquery": "^7.9.1"
+  }
+}

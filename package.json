@@ -1,0 +1,29 @@
+{
+  "name": "gpo-monolith",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check": "turbo run lint typecheck test",
+    "format": "prettier --write \"apps/tax-receipts/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
+    "db:test:up": "docker compose -f apps/tax-receipts/api/docker-compose.test.yml up -d",
+    "db:test:down": "docker compose -f apps/tax-receipts/api/docker-compose.test.yml down -v"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.5",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.19.0",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,6 @@
+# Workspace for the go-forward Tax Receipts & Contributions tool (D1).
+# The legacy NestJS app is gone; gpoAutoTests keeps its own npm lockfile and
+# is deliberately not a workspace member.
+packages:
+  - 'apps/tax-receipts/*'
+  - 'packages/*'
