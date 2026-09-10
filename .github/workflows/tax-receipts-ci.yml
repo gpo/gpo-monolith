@@ -1,0 +1,77 @@
+# CI for the go-forward Tax Receipts & Contributions tool (apps/tax-receipts,
+# packages/*). Runs lint, typecheck, unit + DB tests, and the builds. The
+# qomon-client suite runs against its in-memory fake only (no network); the
+# api DB tests run against a Postgres service container.
+name: Tax Receipts CI
+
+on:
+  push:
+    branches: ['main', 'tax-receipts/**']
+    paths:
+      - 'apps/tax-receipts/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - 'tsconfig.base.json'
+      - 'eslint.config.mjs'
+      - '.github/workflows/tax-receipts-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/tax-receipts/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - 'tsconfig.base.json'
+      - 'eslint.config.mjs'
+      - '.github/workflows/tax-receipts-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: gpo
+          POSTGRES_PASSWORD: gpo
+          POSTGRES_DB: tax_receipts_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gpo -d tax_receipts_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://gpo:gpo@localhost:5432/tax_receipts_test?schema=public
+      # deterministic; not a secret (test-only)
+      SESSION_SECRET: ci-session-secret-at-least-32-characters-long
+      TURBO_TELEMETRY_DISABLED: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm version comes from the "packageManager" field in package.json
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: lint · typecheck · test · build
+        run: pnpm turbo run lint typecheck test build
+
+      - name: qomon-client contract fake is network-free
+        run: pnpm --filter @gpo/qomon-client test
