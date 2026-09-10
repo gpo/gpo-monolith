@@ -21,7 +21,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
     "test": "vitest run",
-    "test:sandbox": "QOMON_SANDBOX=1 vitest run src/sandbox.test.ts"
+    "test:sandbox": "QOMON_SANDBOX=1 vitest run"
   },
   "dependencies": {
     "@gpo/tax-receipts-core": "workspace:*",

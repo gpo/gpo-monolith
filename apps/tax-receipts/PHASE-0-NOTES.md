@@ -32,7 +32,7 @@ Postgres service container on every PR touching `apps/tax-receipts/**` or
 `packages/**`.
 
 Last local run on this branch: `lint typecheck test build` green, 20/20
-turbo tasks, 100 tests (62 core, 17 qomon-client, 6 warehouse-client, 38
+turbo tasks, 116 tests (54 core, 17 qomon-client, 6 warehouse-client, 38
 api, 1 web).
 
 ## What was built, ticket by ticket
@@ -103,7 +103,7 @@ api, 1 web).
 |---|---|
 | Qomon REST client | Real HTTP client, shapes verified against the live sandbox 2026-09-10. CI runs the **fake** only (`InMemoryQomon`), no network. |
 | Qomon transaction `metadata` field | Does **not exist** in Qomon yet (assumption A1 / R1). The client and fake both implement writing/reading it so the tool is ready; the sandbox contract run skips the metadata round-trip. |
-| Qomon sandbox tests | `QOMON_SANDBOX=1 pnpm --filter @gpo/qomon-client test:sandbox`. Key read from env or `../qomon-test/.env` (gitignored, never committed). These create disposable contacts/bundles in the sandbox. |
+| Qomon sandbox tests | `QOMON_SANDBOX=1 pnpm --filter @gpo/qomon-client test:sandbox`. Key read from `QOMON_API_KEY`, or `QOMON_ENV_FILE`, or `../qomon-test/.env` (gitignored, never committed). These create disposable contacts/bundles in the sandbox. **Verified 2026-09-10: 26/26 contract tests pass against the live sandbox.** Findings folded into open-questions O29 (real error shape, `payment_method_kind` set, PATCH re-validates the whole item). |
 | BigQuery warehouse | **Not seeded** (blocked on C1/C2). `warehouse-client` runs against `InMemoryWarehouse`; the BigQuery reader is exercised through a stub query client. Table names are the documented default, overridable via config. |
 | Qomon change dumps (S3) | Bucket does not exist (O28, raised in open-questions.md). Feed abstracted behind `ChangeFeedSource`; only `QomonPollChangeFeed` exists. |
 | Postgres for tests | Local: `pnpm db:test:up` (Docker, port 5433). CI: service container. No testcontainers dependency. |

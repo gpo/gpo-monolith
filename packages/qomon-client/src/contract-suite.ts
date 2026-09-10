@@ -53,9 +53,22 @@ export function runQomonContractSuite(
       const h = await setup();
       const { bundleId, transactionId } = await h.makeBundle();
       const before = await h.api.getTransactionBundle(bundleId);
+      const tx = before.transactions.find((t) => t.id === transactionId)!;
+      // Qomon re-validates the whole item on PATCH, so send it back complete
+      // with the change applied (the tool always writes whole objects anyway).
       const patched = await h.api.patchTransactionBundle({
         id: bundleId,
-        transactions: [{ id: transactionId, comment: 'contract-test note' }],
+        transactions: [
+          {
+            id: transactionId,
+            amount: tx.amount,
+            currency: tx.currency,
+            payment_method_kind: tx.payment_method_kind ?? undefined,
+            contact_id: tx.contact_id,
+            date: tx.date,
+            comment: 'contract-test note',
+          },
+        ],
       });
       expect(patched.transactions.length).toBe(before.transactions.length);
     });
