@@ -1,0 +1,18 @@
+# Local Postgres for `pnpm --filter @gpo/tax-receipts-api test` and migrations.
+# CI uses a GitHub Actions service container instead (see .github/workflows/ci.yml).
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: gpo
+      POSTGRES_PASSWORD: gpo
+      POSTGRES_DB: tax_receipts_test
+    ports:
+      - '5433:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U gpo -d tax_receipts_test']
+      interval: 2s
+      timeout: 3s
+      retries: 20
