@@ -35,7 +35,7 @@ const key = enabled ? resolveKey() : null;
 
 const suite = enabled && key ? describe : describe.skip;
 
-suite('sandbox', () => {
+suite('sandbox', { timeout: 30_000 }, () => {
   runQomonContractSuite('qomon sandbox', async () => {
     const api = new QomonClient({
       apiKey: key!,
@@ -47,6 +47,9 @@ suite('sandbox', () => {
       // Qomon has not shipped the transaction metadata field yet (A1 / R1).
       metadataSupported: false,
       async makeBundle() {
+        const settings = await api.getTransactionSettings();
+        const paymentMethod = settings.payment_method_kinds[0] ?? 'VIR';
+        const currency = settings.currency ?? 'cad';
         const contact = await api.createContact({
           firstname: 'Contract',
           surname: `Sandbox-${Date.now()}`,
@@ -56,8 +59,8 @@ suite('sandbox', () => {
           transactions: [
             {
               amount: 12_345,
-              currency: 'cad',
-              payment_method_kind: 'transfer',
+              currency,
+              payment_method_kind: paymentMethod,
               contact_id: contact.id,
               date: new Date().toISOString(),
             },
