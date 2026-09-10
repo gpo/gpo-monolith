@@ -7,6 +7,15 @@ credentials.json
 /node_modules
 /build
 
+# go-forward tool (Turborepo + pnpm workspace)
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+apps/tax-receipts/api/src/generated/
+apps/tax-receipts/web/dist/
+qomon-sandbox.env
+
 # Logs
 logs
 *.log
