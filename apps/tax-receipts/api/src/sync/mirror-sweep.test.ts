@@ -50,9 +50,16 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
       checksum: null, // stub default, never written to/confirmed against Qomon
     });
 
+    // one intake-flag work item per ticket-1.6 field the stub couldn't derive
+    // (period_id resolved fine, so it's absent here)
     const workItems = await prisma.workItem.findMany();
-    expect(workItems).toHaveLength(1);
-    expect(workItems[0]).toMatchObject({ kind: 'VALIDATION', status: 'OPEN' });
+    expect(workItems).toHaveLength(3);
+    expect(workItems.map((w) => w.ruleRef).sort()).toEqual([
+      'INTAKE:entity_kind',
+      'INTAKE:received_by',
+      'INTAKE:riding_number',
+    ]);
+    expect(workItems.every((w) => w.kind === 'VALIDATION' && w.status === 'OPEN')).toBe(true);
 
     // the sweep's own metadata writes go through the guarded change-log path
     const entries = await prisma.changeLogEntry.findMany({ where: { subjectType: 'ContributionMetadata' } });
@@ -85,7 +92,12 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
     const contribution = await prisma.contribution.findFirst({ include: { metadata: true } });
     expect(contribution?.metadata).toBeNull();
     const workItems = await prisma.workItem.findMany({ where: { kind: 'VALIDATION' } });
-    expect(workItems).toHaveLength(1);
+    expect(workItems.map((w) => w.ruleRef).sort()).toEqual([
+      'INTAKE:entity_kind',
+      'INTAKE:period_id',
+      'INTAKE:received_by',
+      'INTAKE:riding_number',
+    ]);
   });
 
   it('backfills metadata on a later sweep once a period is configured for a previously-unresolvable contribution', async () => {

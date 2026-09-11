@@ -4,6 +4,7 @@ import {
   deriveIntakeDefaults,
   descriptiveChanged,
   type ContributionSyncFields,
+  type IntakeFlag,
   type PeriodRow,
   type QomonMetadataEnvelope,
 } from '@gpo/tax-receipts-core';
@@ -17,6 +18,7 @@ import type {
 } from '@gpo/qomon-client';
 import { withChangeLog } from '../changelog/write.js';
 import { descriptiveToRow, isReceiptedOrReported } from '../contributions/metadata-cache.js';
+import { runValidationForContribution } from '../validation/run.js';
 import type { Prisma } from '../generated/prisma/index.js';
 import type { ContributionStatusKind, PrismaClient } from '../generated/prisma/index.js';
 
@@ -218,7 +220,14 @@ async function ingestChange(
       existing.id,
       existing.acceptedAt,
       transaction,
+      existing.contactId,
     );
+  }
+
+  if (metadataTouched) {
+    // an edit (external, since this is the sweep) re-runs the full rule
+    // registry (validation-rules.md "when rules run: on edit")
+    await runValidationForContribution(prisma, existing.id);
   }
 
   return transactionChanged || metadataTouched ? 'refreshed' : 'unchanged';
@@ -287,19 +296,42 @@ async function ingestNewContribution(
       });
     }
     // else: no period resolves yet. The contribution mirrors without
-    // metadata (data-model §6: "never from a Qomon default"); the VALIDATION
-    // work item below is how it surfaces, and a later sweep backfills once a
-    // period is configured (see the `!existing.metadata` branch above).
+    // metadata (data-model §6: "never from a Qomon default"); the intake
+    // flag work items below are how it surfaces, and a later sweep
+    // backfills once a period is configured (the `!existing.metadata`
+    // branch in ingestChange).
+    await openIntakeFlagWorkItems(prisma, contribution.id, contactId, derived.flags);
   }
 
-  await prisma.workItem.create({
-    data: {
-      kind: 'VALIDATION',
-      subjectType: 'Contribution',
-      subjectId: contribution.id,
-      contactId,
-    },
-  });
+  // "on intake, all rules against the new row" (validation-rules.md). A
+  // no-op when metadata is still missing (runValidationForContribution
+  // returns null in that case).
+  await runValidationForContribution(prisma, contribution.id);
+}
+
+/** One WorkItem per ticket-1.6 intake-derivation flag (a distinct concern
+ *  from the validation-rules.md registry, data-model §6: "never a Qomon
+ *  default" — these mark a field the sweep could not derive with
+ *  confidence, not a rule violation). Not reconciled by the validation
+ *  engine (run.ts excludes the `INTAKE:` ruleRef prefix): closing one is
+ *  manual for now, pending a future re-derivation pass once B3/B8 clear. */
+async function openIntakeFlagWorkItems(
+  prisma: PrismaClient,
+  contributionId: string,
+  contactId: string,
+  flags: readonly IntakeFlag[],
+): Promise<void> {
+  for (const flag of flags) {
+    await prisma.workItem.create({
+      data: {
+        kind: 'VALIDATION',
+        subjectType: 'Contribution',
+        subjectId: contributionId,
+        contactId,
+        ruleRef: `INTAKE:${flag.field}`,
+      },
+    });
+  }
 }
 
 async function backfillMetadataIfPossible(
@@ -308,6 +340,7 @@ async function backfillMetadataIfPossible(
   contributionId: string,
   acceptedAt: Date,
   transaction: QomonTransaction,
+  contactId: string,
 ): Promise<boolean> {
   const derived = deriveIntakeDefaults({
     acceptedAt,
@@ -325,6 +358,7 @@ async function backfillMetadataIfPossible(
     });
     await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
   });
+  await openIntakeFlagWorkItems(prisma, contributionId, contactId, derived.flags);
   return true;
 }
 

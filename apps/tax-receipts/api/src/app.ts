@@ -21,6 +21,7 @@ import { healthRoutes } from './routes/health.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
 import { sessionRoutes } from './routes/session.js';
 import { syncRoutes } from './routes/sync.js';
+import { validationRoutes } from './routes/validation.js';
 
 export interface BuildAppOptions {
   prisma: PrismaClient;
@@ -87,6 +88,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(killSwitchRoutes);
   await app.register(syncRoutes, { qomon: opts.qomon });
   await app.register(contributionRoutes, { qomon: opts.qomon });
+  await app.register(validationRoutes);
 
   return app;
 }

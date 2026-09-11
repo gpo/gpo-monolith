@@ -6,6 +6,7 @@ import {
 } from '@gpo/tax-receipts-core';
 import type { QomonApi } from '@gpo/qomon-client';
 import { withChangeLog } from '../changelog/write.js';
+import { runValidationForContribution } from '../validation/run.js';
 import { descriptiveToRow, isReceiptedOrReported } from './metadata-cache.js';
 import type { ContributionMetadata, PrismaClient } from '../generated/prisma/index.js';
 
@@ -130,7 +131,7 @@ export async function writeContributionMetadata(
     );
   }
 
-  return withChangeLog(
+  const updated = await withChangeLog(
     prisma,
     { userId: input.actorUserId, reason: input.reason },
     async (ctx) => {
@@ -150,4 +151,9 @@ export async function writeContributionMetadata(
       return after;
     },
   );
+
+  // "on edit, all rules against the changed row" (validation-rules.md)
+  await runValidationForContribution(prisma, contribution.id);
+
+  return updated;
 }

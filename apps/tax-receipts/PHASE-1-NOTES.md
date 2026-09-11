@@ -144,6 +144,106 @@ green, 20/20 tasks, 74 core tests + 57 api tests.
    in `source-code.ts`; revisit if real source codes turn out to need
    stricter matching.
 
+## Ticket 1.7 — Validation engine v1
+
+Spec: validation-rules.md. STATUS.md row moved to `review`. New open question
+**O34** raised (below).
+
+Phase 1 pulls forward a *subset* of the full A/B/C catalogue — the rules
+checkable with data this phase actually populates. Full coverage is Phase 2
+ticket 2.1 (backlog.md already frames 1.7 this way). Implemented:
+
+| Rule | Where | Note |
+|---|---|---|
+| A1 period window | `packages/tax-receipts-core/src/validation/rules.ts` | acceptance date inside the period's bounds |
+| A2 riding/entity consistency | same | range + PARTY-has-no-riding / CA·CAMPAIGN-needs-one; the "active campaign for the period" half is not checked (no campaign roster exists yet) |
+| A5 non-deductible | same | non-deductible ≤ amount, eligible > 0; the "or marked non-receiptable" half has no field to check (none exists) |
+| A6 duplicate contribution **[EO]** | same | same donor + amount + entity within ±3 days (a judgment call, not spec-given), or a matching `external_ref` |
+| A7 source-code riding | same | reuses 1.6's `parseRidingFromSourceCode`; compares the parsed riding against metadata |
+| A8 cash limit | same | $25 EFA cash limit |
+| B2 over-limit **[EO]** | same | wraps 0.7's `evaluateLimits` directly; `candidateSelf`/`leadership` are always false (no data source for either flag yet) |
+| B4 duplicate contributor **[EO]** | same | only the email-match half; "same name + address" needs `AddressSnapshot` data, not populated yet |
+
+Not implemented, and why: A3/A4/A9/B1/B3/B5/C1-C5 need data no ticket
+populates yet (active-entity roster, invoices, addresses); REP* are
+report-generation-time (Phase 4); E1/E4 are already structurally enforced by
+1.1's sweep itself, not separate rules to re-run; E2/E3/E5 need RTD
+inclusions/receipts/entity reports (Phase 2/3/4). **B1 (ineligible
+contributor, out-of-province) is the one gap worth flagging loudly**: it's
+one of the four flag types EO's Evaluation Tool explicitly mandates, and the
+other three (A6, B2, B4) now have v1 coverage — B1 alone is blocked on
+address data. Raised as **O34** in open-questions.md rather than silently
+dropped, since it bears on the Nov 16 pre-evaluation checklist.
+
+**Architecture**: `packages/tax-receipts-core/src/validation/rules.ts` holds
+pure rule functions (`runContributionRules` is the registry entry point);
+`apps/tax-receipts/api/src/validation/run.ts` assembles the DB-side context
+(candidate duplicates, year-to-date contributions, limit rows, contact
+matches) and reconciles findings against `WorkItem` rows — one row kept per
+(contribution, ruleRef) over time:
+
+- a finding with no existing WorkItem → open one (`OPEN`);
+- a finding whose WorkItem is `RESOLVED`, or `EXCEPTION` **from a prior ET
+  calendar year**, → reopen the *same* row (data-model §2: "exceptions
+  expire at year-end"), change-logged;
+- a finding whose WorkItem is already `OPEN`, or `EXCEPTION` from the
+  *current* year → leave it;
+- an `OPEN` WorkItem whose rule no longer fires → auto-resolve, change-logged
+  (`resolutionNote: 'auto-resolved: condition no longer applies'`).
+
+`apps/tax-receipts/api/src/work-items/resolve.ts` is the separate
+staff-driven resolution primitive (`resolveWorkItem`, RESOLVED or EXCEPTION
+outcome, mandatory reason, change-logged) — generic across every WorkItem
+kind, not just VALIDATION, per data-model's one-table-four-queues design.
+Typed fix actions (reallocate, refund, merge — validation-rules.md's list)
+are later work; this ticket is only the close/except primitive itself.
+
+**Wiring** (validation-rules.md "when rules run"): the mirror sweep (1.1)
+calls the registry on intake (after metadata is created or backfilled) and
+the metadata write-through (1.2) calls it after every edit. A manual
+sysadmin-only `POST /internal/validation/run` stands in for "nightly" until
+a real schedule exists (ticket 1.15), same pattern as 1.1's sync trigger.
+
+**1.6 integration**: `deriveIntakeDefaults`' per-field `flags` (added in
+1.6, unused until now) turn into their own WorkItems, `ruleRef` prefixed
+`INTAKE:` (e.g. `INTAKE:riding_number`) — a distinct concern from
+validation-rules.md's registry (an intake flag means "couldn't derive this
+with confidence," not "violates a rule"), so `run.ts`'s reconciliation
+explicitly excludes that prefix: it never auto-resolves or reopens an intake
+flag it didn't create and has no way to re-evaluate. This replaces 1.1's
+original single ruleRef-less "new contribution" WorkItem with one item per
+actually-uncertain field, which also fixed a latent gap: a stub-derived
+contribution with the *default* values (PARTY, no riding) coincidentally
+satisfies rule A2 (PARTY-has-no-riding is valid), so without the intake
+flags such a row would have surfaced in **no** queue at all.
+
+Tests: `packages/tax-receipts-core/src/validation/rules.test.ts` (27 cases,
+one/none-per-rule plus the aggregator); `apps/tax-receipts/api/src/validation/run.test.ts`
+(open-per-finding, auto-resolve-then-reopen on the same row, current-year
+exception left alone vs prior-year exception reopened, A6/B4/B2 wired
+through real DB queries, the nightly sweep skips contributions with no
+metadata); `work-items/resolve.test.ts`. 1.1's `mirror-sweep.test.ts` updated
+for the new per-field intake WorkItems (was asserting exactly one
+ruleRef-less item). `pnpm turbo run lint typecheck test build` green, 20/20
+tasks, 108 core tests + 76 api tests.
+
+### Deviations / judgment calls
+
+1. **One WorkItem row per (contribution, ruleRef), reused across
+   open/resolve/reopen cycles**, rather than a fresh row each time a rule
+   re-fires. Keeps exactly one queryable history per issue instead of
+   accumulating duplicates release over release; the change-log carries the
+   full history of status transitions regardless.
+2. **A6's duplicate window (±3 days) is a judgment call**: validation-rules.md
+   says "within a window" without a number. Revisit once real duplicate
+   cases are seen (test-plan drills / the pilot).
+3. **B2 always attributes via entity kind only** (never LEADERSHIP or
+   CANDIDATE_SELF) since no field carries `candidateSelf`/`leadership` yet.
+   Not a Phase 1 gap by itself — those buckets need their own data source,
+   likely a later ticket.
+4. **O34 (B1 not implemented)** — see table above; flagged rather than
+   silently dropped given EO's explicit mandate.
+
 ## Ticket 1.9 — SpaceState ladder + state-machine tests
 
 Spec: data-model.md §2 SpaceState, workflows.md W6/W7. STATUS.md row moved
