@@ -433,6 +433,43 @@ filter, CSV header + quoting), `routes/change-log.test.ts`,
 link's href carries the current filters). `pnpm turbo run lint typecheck
 test build` green, 20/20 tasks, 125 api tests + 16 web tests.
 
+## Ticket 1.12 — Annual settings + admin
+
+Spec: screens.md 11. STATUS.md row moved to `review`.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/routes/admin.ts` | Periods (create/edit; an edit re-runs the *full* validation registry via 1.7's `runValidationForAllContributions`, since rule A1's period-window check touches every contribution, not just ones inside the edited period), `ContributionLimit` buckets (upsert by year+bucket, delete — O15's "buckets are added, removed, and changed" taken literally, since this is pure configuration, not audit-critical data), the RTD business-day calendar (holiday list per year, ticket 0.10's table), and users/roles (create, update role/riding-grants/allRidings/CFO-designate/active — deactivate, never hard-delete an account). |
+| `apps/tax-receipts/web/src/routes/admin.tsx` | One page, five sections behind a button group (same pattern as 1.8's tabs — no Mantine `Tabs`/`Select` risk). The kill switch section is new UI for ticket 0.5's already-existing `GET`/`POST /admin/kill-switch` — no backend work needed here, just the page. |
+
+All writes are **sysadmin-only**, gated on the `administer` CASL action
+(`auth/abilities.ts` already names it for "users, periods, limits, kill
+switch" — sysadmin's documented role is "full config + user admin"); reads
+need only authentication, matching every other list route in the app.
+
+**Two things screens.md names for this screen are explicitly not built:**
+
+1. **The receipt letter template.** No template system exists anywhere in
+   the codebase yet (Phase 3, receipting), and per screens.md itself the
+   template isn't freely admin-editable anyway — changes route through the
+   EO material-change checklist (compliance.md). Nothing to build here until
+   Phase 3 has a template to administer.
+2. **RTD "CFO name" and the sign-off threshold** (validation rule B2: "filer
+   sign-off above a configurable threshold, initially $0"). No schema field
+   holds either value — `BusinessDayCalendar` only carries the holiday list,
+   not a CFO name or a dollar threshold, and no other table was an obvious
+   fit. Building a field for a value with no confirmed source or default
+   beyond "initially $0" felt like guessing rather than deriving from spec;
+   flagged here rather than invented. A small `Settings` key-value table
+   would be the natural fix whenever these need a home.
+
+Tests: `routes/admin.test.ts` (non-sysadmin blocked from every write but not
+reads, sysadmin can create a period and it re-runs validation, upsert/delete
+a limit, set a calendar, create/update a user), `admin.test.tsx` (default
+section, switching to the kill switch section loads status and engaging it
+posts the right payload). `pnpm turbo run lint typecheck test build` green,
+20/20 tasks, 131 api tests + 18 web tests.
+
 ## Ticket 1.9 — SpaceState ladder + state-machine tests
 
 Spec: data-model.md §2 SpaceState, workflows.md W6/W7. STATUS.md row moved

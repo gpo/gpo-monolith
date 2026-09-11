@@ -223,6 +223,39 @@ export interface ChangeLogFilters {
   cursor?: string;
 }
 
+export interface PeriodRow {
+  id: number;
+  name: string;
+  kind: string;
+  ridingNumbers: number[];
+  startsAt: string;
+  endsAt: string;
+}
+
+export interface ContributionLimitRow {
+  id: string;
+  year: number;
+  bucket: string;
+  amountCents: number;
+  notes: string | null;
+}
+
+export interface BusinessDayCalendarRow {
+  year: number;
+  holidays: string[];
+}
+
+export interface AdminUserRow {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  isCfoDesignate: boolean;
+  allRidings: boolean;
+  ridingGrants: number[];
+}
+
 export const api = {
   health: () => request<Health>('/health'),
   me: () => request<Me>('/auth/me'),
@@ -234,6 +267,11 @@ export const api = {
   logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
   killSwitch: () =>
     request<{ engaged: boolean; reason: string | null }>('/admin/kill-switch'),
+  setKillSwitch: (engaged: boolean, reason: string) =>
+    request<{ engaged: boolean; reason: string | null }>('/admin/kill-switch', {
+      method: 'POST',
+      body: JSON.stringify({ engaged, reason }),
+    }),
   listContributions: (filters: ContributionListFilters = {}) =>
     request<ContributionListPage>(`/contributions${filtersToQuery(filters)}`),
   getContribution: (id: string) => request<ContributionDetail>(`/contributions/${id}`),
@@ -263,6 +301,28 @@ export const api = {
   resolveWorkItem: (id: string, input: { reason: string; outcome: 'RESOLVED' | 'EXCEPTION' }) =>
     request<WorkItemRow>(`/work-items/${id}/resolve`, { method: 'POST', body: JSON.stringify(input) }),
   listSpaces: () => request<{ data: SpaceDashboardRow[] }>('/spaces'),
+  listPeriods: () => request<{ data: PeriodRow[] }>('/admin/periods'),
+  savePeriod: (id: number, input: Omit<PeriodRow, 'id'>) =>
+    request<{ period: PeriodRow; revalidation: unknown }>(`/admin/periods/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  listContributionLimits: () => request<{ data: ContributionLimitRow[] }>('/admin/contribution-limits'),
+  saveContributionLimit: (input: Omit<ContributionLimitRow, 'id'>) =>
+    request<ContributionLimitRow>('/admin/contribution-limits', { method: 'PUT', body: JSON.stringify(input) }),
+  deleteContributionLimit: (id: string) =>
+    request<void>(`/admin/contribution-limits/${id}`, { method: 'DELETE' }),
+  listBusinessDayCalendars: () => request<{ data: BusinessDayCalendarRow[] }>('/admin/business-day-calendars'),
+  saveBusinessDayCalendar: (year: number, holidays: string[]) =>
+    request<BusinessDayCalendarRow>(`/admin/business-day-calendars/${year}`, {
+      method: 'PUT',
+      body: JSON.stringify({ holidays }),
+    }),
+  listUsers: () => request<{ data: AdminUserRow[] }>('/admin/users'),
+  createUser: (input: { name: string; email: string; password: string; role: string }) =>
+    request<{ id: string }>('/admin/users', { method: 'POST', body: JSON.stringify(input) }),
+  updateUser: (id: string, input: Partial<Pick<AdminUserRow, 'role' | 'active' | 'allRidings' | 'ridingGrants' | 'isCfoDesignate'>>) =>
+    request<AdminUserRow>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   listChangeLog: (filters: ChangeLogFilters = {}) =>
     request<{ data: ChangeLogRow[]; nextCursor: string | null }>(
       `/change-log${filtersToQuery(filters)}`,
