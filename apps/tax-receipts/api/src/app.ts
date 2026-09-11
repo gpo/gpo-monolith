@@ -8,8 +8,15 @@ import {
 import type { PrismaClient } from './generated/prisma/index.js';
 import { IssuanceDisabledError } from './auth/kill-switch.js';
 import { ChangeLogError } from './changelog/write.js';
+import {
+  ContributionNotFoundError,
+  MetadataWriteBlockedError,
+  QomonWriteRejectedError,
+  QomonWriteUnconfirmedError,
+} from './contributions/metadata-write-through.js';
 import authPlugin from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
+import { contributionRoutes } from './routes/contributions.js';
 import { healthRoutes } from './routes/health.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
 import { sessionRoutes } from './routes/session.js';
@@ -44,6 +51,15 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     if (error instanceof ChangeLogError) {
       return reply.code(400).send({ error: error.message });
     }
+    if (error instanceof ContributionNotFoundError) {
+      return reply.code(404).send({ error: error.message });
+    }
+    if (error instanceof MetadataWriteBlockedError) {
+      return reply.code(409).send({ error: error.message });
+    }
+    if (error instanceof QomonWriteRejectedError || error instanceof QomonWriteUnconfirmedError) {
+      return reply.code(502).send({ error: error.message });
+    }
     if (error.validation) {
       return reply
         .code(400)
@@ -70,6 +86,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(sessionRoutes);
   await app.register(killSwitchRoutes);
   await app.register(syncRoutes, { qomon: opts.qomon });
+  await app.register(contributionRoutes, { qomon: opts.qomon });
 
   return app;
 }

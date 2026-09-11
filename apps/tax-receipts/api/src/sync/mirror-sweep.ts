@@ -4,7 +4,6 @@ import {
   deriveIntakeDefaults,
   descriptiveChanged,
   type ContributionSyncFields,
-  type GpoMetadataDescriptive,
   type PeriodRow,
   type QomonMetadataEnvelope,
 } from '@gpo/tax-receipts-core';
@@ -17,6 +16,7 @@ import type {
   QomonTransaction,
 } from '@gpo/qomon-client';
 import { withChangeLog } from '../changelog/write.js';
+import { descriptiveToRow, isReceiptedOrReported } from '../contributions/metadata-cache.js';
 import type { Prisma } from '../generated/prisma/index.js';
 import type { ContributionStatusKind, PrismaClient } from '../generated/prisma/index.js';
 
@@ -357,20 +357,6 @@ function contactDisplayName(c: QomonContact, fallbackId: number): string {
   return parts.length > 0 ? parts.join(' ') : `Qomon contact ${fallbackId}`;
 }
 
-async function isReceiptedOrReported(
-  prisma: PrismaClient,
-  contributionId: string,
-): Promise<boolean> {
-  const [allocation, inclusion] = await Promise.all([
-    prisma.receiptAllocation.findFirst({
-      where: { contributionId, receipt: { status: 'ISSUED' } },
-      select: { id: true },
-    }),
-    prisma.rtdInclusion.findFirst({ where: { contributionId }, select: { id: true } }),
-  ]);
-  return allocation !== null || inclusion !== null;
-}
-
 async function openDiffWorkItem(
   prisma: PrismaClient,
   existing: { id: string; contactId: string },
@@ -476,23 +462,6 @@ function parseIncomingMetadata(transaction: QomonTransaction): QomonMetadataEnve
   const m = transaction.metadata;
   if (!m || m.v !== 1) return null;
   return m;
-}
-
-function descriptiveToRow(d: GpoMetadataDescriptive, checksum: string | null) {
-  return {
-    periodId: d.period_id,
-    ridingNumber: d.riding_number,
-    entityKind: d.entity_kind,
-    receivedBy: d.received_by,
-    goodsServices: d.goods_services,
-    nonDeductibleCents: d.non_deductible_cents,
-    processedDate: d.processed_date ? new Date(d.processed_date) : null,
-    sourceCode: d.source_code,
-    eoContributorId: d.eo_contributor_id,
-    exceptionReason: d.exception_reason,
-    checksum,
-    syncedAt: checksum ? new Date() : null,
-  };
 }
 
 async function loadCursor(prisma: PrismaClient, feedKind: string): Promise<ChangeCursor | null> {

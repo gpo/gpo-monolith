@@ -53,4 +53,43 @@ build` green, 20/20 tasks.
 4. **No S3 change-dump feed** (O28): only `QomonPollChangeFeed` exists
    (built in 0.8). `ChangeFeedSource` stays the abstraction point.
 
-## Ticket 1.2 — not yet started as of this note.
+## Ticket 1.2 — Metadata model + write-through
+
+Spec: data-model.md §5 "Tool edit (write-first, Qomon is truth)", D4.
+STATUS.md row moved to `review`.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/contributions/metadata-cache.ts` | Extracted from 1.1's `mirror-sweep.ts`: `isReceiptedOrReported` and `descriptiveToRow`, now shared by the sweep and the write-through service — both cache a `GpoMetadataDescriptive` into `ContributionMetadata`, and both must refuse a contribution already backing an ISSUED receipt or an RTD filing. |
+| `apps/tax-receipts/api/src/contributions/metadata-write-through.ts` | `writeContributionMetadata(deps, input)`: PATCHes the whole metadata object to Qomon first (no partial merges — the checksum covers the whole object); only on a **confirmed** echo (recomputes the checksum from what Qomon echoed back, never trusts the echoed checksum field itself, matching 1.1's "echoes are never truth" rule) does it commit cache + change-log locally, in one `withChangeLog` transaction. Blocks the edit outright (`MetadataWriteBlockedError`, 409) once the contribution backs an ISSUED receipt or an RTD filing — that's invariant 6 / the Phase 3 correction workflow's job, not a plain edit's. `QomonWriteRejectedError` (502) for a failed PATCH, `QomonWriteUnconfirmedError` (502) when the echo doesn't match, `ContributionNotFoundError` (404). |
+| `apps/tax-receipts/api/src/routes/contributions.ts` | `PATCH /contributions/:id/metadata`. Registers always (unlike the 1.1 sync trigger) but returns 501 until a Qomon client is configured — editing is core path, so its absence should read as "not configured," not "route doesn't exist." Gated on `ability.can('update', 'ContributionMetadata')`; no per-riding scoping yet (matches every other route today — none scope by riding; revisit with 1.3/1.5). |
+| `apps/tax-receipts/api/src/app.ts` | Registers the new route; error handler grows four cases (404/409/502×2) following the existing per-error-class `instanceof` pattern (`IssuanceDisabledError`, `ChangeLogError`). |
+
+Tests: `metadata-write-through.test.ts` (success writes Qomon-then-cache in
+that order and stamps actor+reason; whole-object replace, not merge; a
+failed Qomon PATCH touches nothing locally; an unconfirmed echo is refused
+even though the PATCH itself succeeded; blocked once receipted, and the
+block happens *before* any Qomon call; unknown contribution id).
+`routes/contributions.test.ts` (501 unconfigured; write-through end to end
+through the HTTP layer with a real session; 403 for a role without the
+`update` grant). `pnpm turbo run lint typecheck test build` green, 20/20
+tasks, 132 tests across the workspace.
+
+### Deviations / judgment calls
+
+1. **Crash-consistency is sweep-mediated, not two-phase-commit.** If the
+   process dies between a Qomon-confirmed write and the local commit, the
+   cache is stale until the next mirror sweep notices the checksum drift and
+   self-heals it (1.1's refresh path) — attributed to the system actor, not
+   the original edit's actor/reason. This satisfies "crash-consistent" (no
+   corruption, no lost Qomon state) but not "the change-log always has the
+   original reason." Flagging since a true two-phase protocol was not built.
+2. **No riding-scope check on the route** (see table above) — consistent
+   with the rest of the codebase today, not a regression introduced here.
+3. **B5 still open**: nothing here is blocked by it — `qomon-client`'s
+   `writeTransactionMetadata` already models the field (0.8), so this ticket
+   writes against that contract. The fallback in data-model §1 (cache as
+   interim store of record) only matters once a real Qomon PATCH is attempted
+   against a Qomon that rejects an unknown `metadata` key; no evidence either
+   way yet (untested against the live sandbox for this field per
+   PHASE-0-NOTES.md).
