@@ -410,6 +410,29 @@ build` green, 20/20 tasks, 118 api tests + 13 web tests.
    dashboard. A session indicator (signed-in alert) is kept, condensed.
 2. **RTD-deadline column omitted, not faked** — see above.
 
+## Ticket 1.11 — Change-log explorer ⚑
+
+Spec: screens.md 12. STATUS.md row moved to `review`. Critical path: needed
+for the EO virtual-evaluation demo (Evaluation Tool rows 13–19).
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/changelog/list.ts` | `listChangeLog` (filter by subjectType/subjectId/actorUserId/correlationId/date range) and `exportChangeLogCsv`. Deliberately **no riding scoping** — unlike 1.3/1.5, this is the completeness-first audit trail for central staff, and `ChangeLogEntry` has no riding field of its own to scope by without reaching into type-dependent `before`/`after` JSON. |
+| `apps/tax-receipts/api/src/routes/change-log.ts` | `GET /change-log`, `GET /change-log/export` (CSV, capped at `CHANGE_LOG_EXPORT_MAX_ROWS` = 50,000). |
+| `apps/tax-receipts/web/src/routes/change-log.tsx` | Filter form, results table (before/after shown as truncated JSON), an "Export CSV (for EO)" link — a plain `<a href>` to the export endpoint so the browser handles the download natively. |
+
+**No export format is specified anywhere** — screens.md says only
+"exportable for EO." One row per entry, before/after serialized inline as
+JSON, RFC 4180 quoting; a judgment call, not a cited EO requirement. Revisit
+if EO's actual evaluators want something more specific once the real demo
+happens (ticket 1.13).
+
+Tests: `list.test.ts` (actor name resolution incl. system/null actor, every
+filter, CSV header + quoting), `routes/change-log.test.ts`,
+`change-log.test.tsx` (renders entries, a filter re-queries, the export
+link's href carries the current filters). `pnpm turbo run lint typecheck
+test build` green, 20/20 tasks, 125 api tests + 16 web tests.
+
 ## Ticket 1.9 — SpaceState ladder + state-machine tests
 
 Spec: data-model.md §2 SpaceState, workflows.md W6/W7. STATUS.md row moved

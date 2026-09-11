@@ -19,6 +19,7 @@ import { ContributionNotMirroredError } from './contributions/refresh.js';
 import { WorkItemAlreadyClosedError, WorkItemNotFoundError } from './work-items/resolve.js';
 import authPlugin from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
+import { changeLogRoutes } from './routes/change-log.js';
 import { contributionRoutes } from './routes/contributions.js';
 import { healthRoutes } from './routes/health.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
@@ -109,6 +110,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(validationRoutes);
   await app.register(workItemRoutes);
   await app.register(spaceRoutes);
+  await app.register(changeLogRoutes);
 
   return app;
 }

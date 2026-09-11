@@ -8,6 +8,7 @@ import {
   type RouterHistory,
 } from '@tanstack/react-router';
 import { AppShell, Group, Text, Anchor } from '@mantine/core';
+import { ChangeLogPage } from './routes/change-log.js';
 import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
@@ -33,6 +34,9 @@ function RootLayout() {
             </Anchor>
             <Anchor component={Link} to="/work-queue">
               Work queue
+            </Anchor>
+            <Anchor component={Link} to="/change-log">
+              Change-log
             </Anchor>
             <Anchor component={Link} to="/login">
               Sign in
@@ -80,12 +84,19 @@ const workQueueRoute = createRoute({
   component: WorkQueuePage,
 });
 
+const changeLogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/change-log',
+  component: ChangeLogPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   contributionsRoute,
   contributionDetailRoute,
   workQueueRoute,
+  changeLogRoute,
 ]);
 
 export function makeRouter(history?: RouterHistory) {

@@ -87,9 +87,9 @@ export interface ContributionListFilters {
   cursor?: string;
 }
 
-function filtersToQuery(filters: ContributionListFilters): string {
+function filtersToQuery(filters: object): string {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(filters)) {
+  for (const [key, value] of Object.entries(filters as Record<string, unknown>)) {
     if (value === undefined || value === '') continue;
     params.set(key, String(value));
   }
@@ -200,6 +200,29 @@ export interface SpaceDashboardRow {
   openWorkItemCount: number;
 }
 
+export interface ChangeLogRow {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  actorUserId: string | null;
+  actorName: string | null;
+  reason: string;
+  before: unknown;
+  after: unknown;
+  at: string;
+  correlationId: string;
+}
+
+export interface ChangeLogFilters {
+  subjectType?: string;
+  subjectId?: string;
+  actorUserId?: string;
+  correlationId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  cursor?: string;
+}
+
 export const api = {
   health: () => request<Health>('/health'),
   me: () => request<Me>('/auth/me'),
@@ -240,4 +263,10 @@ export const api = {
   resolveWorkItem: (id: string, input: { reason: string; outcome: 'RESOLVED' | 'EXCEPTION' }) =>
     request<WorkItemRow>(`/work-items/${id}/resolve`, { method: 'POST', body: JSON.stringify(input) }),
   listSpaces: () => request<{ data: SpaceDashboardRow[] }>('/spaces'),
+  listChangeLog: (filters: ChangeLogFilters = {}) =>
+    request<{ data: ChangeLogRow[]; nextCursor: string | null }>(
+      `/change-log${filtersToQuery(filters)}`,
+    ),
+  changeLogExportUrl: (filters: Omit<ChangeLogFilters, 'cursor'> = {}) =>
+    `${BASE}/change-log/export${filtersToQuery(filters)}`,
 };
