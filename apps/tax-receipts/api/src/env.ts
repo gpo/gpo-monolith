@@ -13,6 +13,10 @@ const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  /** unset in most environments until B5/B6 land; the mirror-sweep trigger
+   *  route (ticket 1.1) registers only when this is present. */
+  QOMON_API_KEY: z.string().optional(),
+  QOMON_API_BASE: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

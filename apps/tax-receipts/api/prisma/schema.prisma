@@ -660,6 +660,20 @@ model BusinessDayCalendar {
   @@map("business_day_calendar")
 }
 
+/// Mirror-sweep resume cursor, one row per ChangeFeedSource (ticket 1.1;
+/// qomon-client's `ChangeCursor`). Not a data-model §2 entity: it is sync
+/// bookkeeping, in the same vein as the three Phase-0 infra tables above.
+model SyncCursor {
+  /// the feed's `kind`, e.g. "qomon-poll" (qomon-client ChangeFeedSource)
+  feedKind  String   @id
+  /// ISO timestamp of the newest record ingested so far, or null (never run)
+  since     String?
+  token     String?
+  updatedAt DateTime @updatedAt
+
+  @@map("sync_cursor")
+}
+
 /// Stateful auth session store (ticket 0.5). Backs @fastify/session.
 model Session {
   sid       String   @id

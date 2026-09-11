@@ -1,3 +1,4 @@
+import type { QomonApi } from '@gpo/qomon-client';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import {
   serializerCompiler,
@@ -12,6 +13,7 @@ import prismaPlugin from './plugins/prisma.js';
 import { healthRoutes } from './routes/health.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
 import { sessionRoutes } from './routes/session.js';
+import { syncRoutes } from './routes/sync.js';
 
 export interface BuildAppOptions {
   prisma: PrismaClient;
@@ -21,6 +23,8 @@ export interface BuildAppOptions {
   secureCookie?: boolean;
   trustProxy?: boolean;
   logger?: boolean;
+  /** when provided, registers the manual mirror-sweep trigger (ticket 1.1). */
+  qomon?: QomonApi;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -65,6 +69,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(healthRoutes);
   await app.register(sessionRoutes);
   await app.register(killSwitchRoutes);
+  await app.register(syncRoutes, { qomon: opts.qomon });
 
   return app;
 }
