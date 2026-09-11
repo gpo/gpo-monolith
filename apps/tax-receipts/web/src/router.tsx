@@ -4,11 +4,17 @@ import {
   createRouter,
   Link,
   Outlet,
+  useParams,
   type RouterHistory,
 } from '@tanstack/react-router';
 import { AppShell, Group, Text, Anchor } from '@mantine/core';
+import { AdminPage } from './routes/admin.js';
+import { ChangeLogPage } from './routes/change-log.js';
+import { ContributionDetailPage } from './routes/contribution-detail.js';
+import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
 import { LoginPage } from './routes/login.js';
+import { WorkQueuePage } from './routes/work-queue.js';
 
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -23,6 +29,18 @@ function RootLayout() {
           <Group>
             <Anchor component={Link} to="/">
               Dashboard
+            </Anchor>
+            <Anchor component={Link} to="/contributions">
+              Contributions
+            </Anchor>
+            <Anchor component={Link} to="/work-queue">
+              Work queue
+            </Anchor>
+            <Anchor component={Link} to="/change-log">
+              Change-log
+            </Anchor>
+            <Anchor component={Link} to="/admin">
+              Admin
             </Anchor>
             <Anchor component={Link} to="/login">
               Sign in
@@ -49,7 +67,48 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute]);
+const contributionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/contributions',
+  component: ContributionsListPage,
+});
+
+const contributionDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/contributions/$id',
+  component: () => {
+    const { id } = useParams({ from: '/contributions/$id' });
+    return <ContributionDetailPage id={id} />;
+  },
+});
+
+const workQueueRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/work-queue',
+  component: WorkQueuePage,
+});
+
+const changeLogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/change-log',
+  component: ChangeLogPage,
+});
+
+const adminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin',
+  component: AdminPage,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  contributionsRoute,
+  contributionDetailRoute,
+  workQueueRoute,
+  changeLogRoute,
+  adminRoute,
+]);
 
 export function makeRouter(history?: RouterHistory) {
   return createRouter({ routeTree, ...(history ? { history } : {}) });
