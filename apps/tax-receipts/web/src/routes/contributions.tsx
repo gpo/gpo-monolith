@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useSearch } from '@tanstack/react-router';
 import {
   Alert,
   Badge,
@@ -134,7 +134,14 @@ function persistSavedFilters(filters: SavedFilter[]): void {
 
 export function ContributionsListPage() {
   const qc = useQueryClient();
-  const [filters, setFilters] = useState<ContributionListFilters>({});
+  // drill-in from the space dashboard (ticket 1.10) arrives as search params
+  const search = useSearch({ strict: false }) as Partial<ContributionListFilters>;
+  const [filters, setFilters] = useState<ContributionListFilters>(() => ({
+    ...(search.periodId !== undefined ? { periodId: Number(search.periodId) } : {}),
+    ...(search.ridingNumber !== undefined ? { ridingNumber: Number(search.ridingNumber) } : {}),
+    ...(search.partyLevelOnly ? { partyLevelOnly: true } : {}),
+    ...(search.entityKind ? { entityKind: search.entityKind } : {}),
+  }));
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => loadVisibleColumns());
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => loadSavedFilters());
   const [saveName, setSaveName] = useState('');

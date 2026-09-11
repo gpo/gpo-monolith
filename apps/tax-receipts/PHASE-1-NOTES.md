@@ -379,6 +379,37 @@ typecheck test build` green, 20/20 tasks, 112 api tests + 12 web tests.
    SYNC_INCIDENT only populate once 1.1's sweep actually detects a Qomon-side
    change or deletion against real data.
 
+## Ticket 1.10 — Space dashboard
+
+Spec: screens.md 1, PRD I3. STATUS.md row moved to `review`; traceability.md
+gap 4 (I3) fully closed (test half landed with 1.9).
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/space/dashboard.ts` | `getSpaceDashboard`: the grid is derived from `ContributionMetadata` grouped by (period, riding, entity kind) — DESIGN.md's "spaces are derived, not stored" — rather than from `SpaceState` rows, since a space exists the moment a contribution lands in it, not only once someone has moved its ladder stage. `SpaceState` is left-joined on for stage/owner (defaults to `intake` with no row); open `WorkItem` counts come from a `Contribution → ContributionMetadata` join in application code, since `WorkItem.subjectId` is a loose string, not a real foreign key Prisma can join through. |
+| `apps/tax-receipts/api/src/routes/spaces.ts` | `GET /spaces`, riding-scoped like 1.3/1.5. |
+| `apps/tax-receipts/web/src/routes/dashboard.tsx` | Replaces the Phase 0 placeholder at `/` with the real grid. Each period cell links into 1.3's contributions list, pre-filtered to that space (screens.md: "rows drill into the space-filtered contributions list") — via router search params that 1.3's page now reads on mount (`useSearch({ strict: false })`), a small addition to `contributions.tsx` this ticket needed. |
+
+**The RTD-deadline column from screens.md is not built.** Nothing in the
+codebase yet computes an RTD due date per space — that needs Phase 2's
+business-day clock wired to actual filings. Flagged in `dashboard.ts`'s
+header rather than shipping a null placeholder that would misleadingly read
+as "computed, nothing due."
+
+Tests: `dashboard.test.ts` (derives spaces from contribution data,
+defaults to `intake`, reads a real `SpaceState` once one exists, counts
+open work items, applies riding scope), a route test, `app.test.tsx`
+(rewritten — the old "Phase 0 shell" assertion no longer applies) and a new
+`dashboard.test.tsx` (empty state). `pnpm turbo run lint typecheck test
+build` green, 20/20 tasks, 118 api tests + 13 web tests.
+
+### Deviations / judgment calls
+
+1. **Dropped the Phase 0 health/session diagnostic card from `/`** — it was
+   scaffold-only placeholder content; the route now carries the real
+   dashboard. A session indicator (signed-in alert) is kept, condensed.
+2. **RTD-deadline column omitted, not faked** — see above.
+
 ## Ticket 1.9 — SpaceState ladder + state-machine tests
 
 Spec: data-model.md §2 SpaceState, workflows.md W6/W7. STATUS.md row moved

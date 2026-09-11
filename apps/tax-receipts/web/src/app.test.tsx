@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -12,13 +12,20 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
-      if (String(url).endsWith('/health')) {
+      if (String(url).includes('/spaces')) {
         return new Response(
           JSON.stringify({
-            status: 'ok',
-            service: 'gpo-tax-receipts-api',
-            time: new Date().toISOString(),
-            db: 'up',
+            data: [
+              {
+                periodId: 67,
+                ridingNumber: 84,
+                entityKind: 'CA',
+                stage: 'intake',
+                stageOwner: null,
+                contributionCount: 3,
+                openWorkItemCount: 1,
+              },
+            ],
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
@@ -35,7 +42,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test('the shell renders the dashboard and reports API health', async () => {
+test('the shell renders the space dashboard', async () => {
   const router = makeRouter(
     createMemoryHistory({ initialEntries: ['/'] }),
   );
@@ -52,6 +59,7 @@ test('the shell renders the dashboard and reports API health', async () => {
   expect(
     await screen.findByText('GPO Tax Receipts & Contributions'),
   ).toBeInTheDocument();
-  expect(await screen.findByText('Phase 0 shell')).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByText('db up')).toBeInTheDocument());
+  expect(await screen.findByText('CA')).toBeInTheDocument();
+  expect(screen.getByText('3')).toBeInTheDocument();
+  expect(screen.getByText('Not signed in. Use the Sign in link.')).toBeInTheDocument();
 });

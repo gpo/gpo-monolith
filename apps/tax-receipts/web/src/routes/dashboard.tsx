@@ -1,74 +1,107 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Badge,
   Card,
-  Group,
   Loader,
   Stack,
+  Table,
   Text,
   Title,
 } from '@mantine/core';
 import { api } from '../api.js';
 
+/**
+ * Space dashboard (ticket 1.10, screens.md 1, PRD I3): the process owner's
+ * "where are we" grid, one row per derived space (period × riding × entity
+ * kind). Rows drill into the space-filtered contributions list.
+ *
+ * The RTD-deadline column screens.md describes isn't here yet — see
+ * api/src/space/dashboard.ts's header comment: nothing in the build
+ * computes an RTD due date per space before Phase 2.
+ */
+
+function stageColor(stage: string): string {
+  if (stage === 'sent-to-cfo' || stage === 'reported') return 'green';
+  if (stage === 'issued' || stage === 'delivered') return 'blue';
+  if (stage === 'reconciled') return 'teal';
+  return 'gray';
+}
+
 export function DashboardPage() {
-  const health = useQuery({ queryKey: ['health'], queryFn: api.health });
-  const me = useQuery({
-    queryKey: ['me'],
-    queryFn: api.me,
-    retry: false,
-  });
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false });
+  const spaces = useQuery({ queryKey: ['spaces'], queryFn: api.listSpaces });
 
   return (
-    <Stack gap="lg" maw={720}>
-      <Title order={2}>Phase 0 shell</Title>
-      <Text c="dimmed">
-        Scaffold only. The contributions list, validation queue, issuance
-        wizard, and reporting screens land in Phases 1 to 4.
-      </Text>
+    <Stack gap="lg">
+      <Title order={2}>Spaces</Title>
 
-      <Card withBorder>
-        <Group justify="space-between">
-          <Text fw={600}>API health</Text>
-          {health.isLoading ? (
-            <Loader size="sm" />
-          ) : health.data ? (
-            <Group gap="xs">
-              <Badge color={health.data.db === 'up' ? 'green' : 'red'}>
-                db {health.data.db}
-              </Badge>
-              <Text size="sm" c="dimmed">
-                {health.data.service}
-              </Text>
-            </Group>
-          ) : (
-            <Badge color="red">unreachable</Badge>
-          )}
-        </Group>
-      </Card>
+      {!me.isLoading && !me.data && (
+        <Alert color="blue" variant="light">
+          Not signed in. Use the Sign in link.
+        </Alert>
+      )}
 
-      <Card withBorder>
-        <Text fw={600} mb="xs">
-          Session
-        </Text>
-        {me.isLoading ? (
-          <Loader size="sm" />
-        ) : me.data ? (
-          <Stack gap={4}>
-            <Text>
-              {me.data.name} &mdash; <Badge>{me.data.role}</Badge>
-            </Text>
-            <Text size="sm" c="dimmed">
-              can issue receipts: {String(me.data.can.issueReceipts)} &middot; can
-              operate kill switch: {String(me.data.can.administerKillSwitch)}
-            </Text>
-          </Stack>
-        ) : (
-          <Alert color="blue" variant="light">
-            Not signed in. Use the Sign in link.
-          </Alert>
-        )}
-      </Card>
+      {spaces.isLoading ? (
+        <Loader />
+      ) : spaces.isError ? (
+        <Text c="red">Failed to load the space dashboard.</Text>
+      ) : spaces.data && spaces.data.data.length > 0 ? (
+        <Table striped highlightOnHover withTableBorder>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Period</Table.Th>
+              <Table.Th>Riding</Table.Th>
+              <Table.Th>Entity</Table.Th>
+              <Table.Th>Stage</Table.Th>
+              <Table.Th>Stage owner</Table.Th>
+              <Table.Th>Contributions</Table.Th>
+              <Table.Th>Open flags</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {spaces.data.data.map((s) => (
+              <Table.Tr
+                key={`${s.periodId}:${s.ridingNumber ?? 'party'}:${s.entityKind}`}
+              >
+                <Table.Td>
+                  <Link
+                    to="/contributions"
+                    search={{
+                      periodId: s.periodId,
+                      ...(s.ridingNumber ? { ridingNumber: s.ridingNumber } : { partyLevelOnly: true }),
+                      entityKind: s.entityKind,
+                    }}
+                  >
+                    <Text span c="blue">
+                      {s.periodId}
+                    </Text>
+                  </Link>
+                </Table.Td>
+                <Table.Td>{s.ridingNumber ?? 'Party'}</Table.Td>
+                <Table.Td>{s.entityKind}</Table.Td>
+                <Table.Td>
+                  <Badge color={stageColor(s.stage)}>{s.stage}</Badge>
+                </Table.Td>
+                <Table.Td>{s.stageOwner ?? '—'}</Table.Td>
+                <Table.Td>{s.contributionCount}</Table.Td>
+                <Table.Td>
+                  {s.openWorkItemCount > 0 ? (
+                    <Badge color="orange">{s.openWorkItemCount}</Badge>
+                  ) : (
+                    <Badge color="green">clear</Badge>
+                  )}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      ) : (
+        <Card withBorder>
+          <Text c="dimmed">No spaces yet — nothing has been mirrored from Qomon.</Text>
+        </Card>
+      )}
     </Stack>
   );
 }

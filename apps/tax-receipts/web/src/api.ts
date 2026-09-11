@@ -190,6 +190,16 @@ export interface WorkItemListPage {
   nextCursor: string | null;
 }
 
+export interface SpaceDashboardRow {
+  periodId: number;
+  ridingNumber: number | null;
+  entityKind: string;
+  stage: string;
+  stageOwner: string | null;
+  contributionCount: number;
+  openWorkItemCount: number;
+}
+
 export const api = {
   health: () => request<Health>('/health'),
   me: () => request<Me>('/auth/me'),
@@ -229,4 +239,5 @@ export const api = {
   },
   resolveWorkItem: (id: string, input: { reason: string; outcome: 'RESOLVED' | 'EXCEPTION' }) =>
     request<WorkItemRow>(`/work-items/${id}/resolve`, { method: 'POST', body: JSON.stringify(input) }),
+  listSpaces: () => request<{ data: SpaceDashboardRow[] }>('/spaces'),
 };

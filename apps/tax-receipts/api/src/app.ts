@@ -23,6 +23,7 @@ import { contributionRoutes } from './routes/contributions.js';
 import { healthRoutes } from './routes/health.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
 import { sessionRoutes } from './routes/session.js';
+import { spaceRoutes } from './routes/spaces.js';
 import { syncRoutes } from './routes/sync.js';
 import { validationRoutes } from './routes/validation.js';
 import { workItemRoutes } from './routes/work-items.js';
@@ -107,6 +108,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(contributionRoutes, { qomon: opts.qomon });
   await app.register(validationRoutes);
   await app.register(workItemRoutes);
+  await app.register(spaceRoutes);
 
   return app;
 }
