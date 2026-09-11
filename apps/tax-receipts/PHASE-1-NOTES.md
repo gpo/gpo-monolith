@@ -143,3 +143,32 @@ green, 20/20 tasks, 74 core tests + 57 api tests.
    examples show, so an under-padded code isn't silently dropped. Documented
    in `source-code.ts`; revisit if real source codes turn out to need
    stricter matching.
+
+## Ticket 1.9 — SpaceState ladder + state-machine tests
+
+Spec: data-model.md §2 SpaceState, workflows.md W6/W7. STATUS.md row moved
+to `review`; traceability.md gap 4 (I3) marked test-half-closed (the screen
+half is ticket 1.10).
+
+| Where | What |
+|---|---|
+| `packages/tax-receipts-core/src/space/state-machine.ts` | Pure ladder logic: `SPACE_STAGE_ORDER` (the seven W6 stages), `classifyTransition`/`assertValidTransition`. Deliberately just the ladder's *shape and direction* — a same-stage move is a no-op, any forward move is allowed (including skipping stages, e.g. a backfilled/pilot space jumping straight to "reported"), any backward move must pass `allowRegress` explicitly. The real preconditions for a given move ("queue actually empty," "issuance actually happened") belong to the tickets that trigger it, not this one. |
+| `apps/tax-receipts/api/src/space/space-state.ts` | `getOrCreateSpaceState` / `moveSpaceStage`, persisting into `SpaceState` (`@@unique([periodId, ridingNumber, entityKind])`). A forward move or no-op is a plain write; a regression requires a `reason` and change-logs it (`SpaceState` isn't one of invariant 5's guarded tables, so this isn't DB-enforced — done anyway, since an unusual backward move is exactly the kind of thing W7's audit trail cares about). |
+
+**Prisma gotcha worth flagging for later tickets touching `SpaceState`**:
+its compound unique index includes the nullable `ridingNumber` (party-level
+spaces), and Prisma's generated compound-unique `where` input requires
+`ridingNumber: number`, not `number | null`, so `upsert`/`findUnique` on
+that index can't express the null case. `getOrCreateSpaceState` uses
+`findFirst` (which does accept `null` in a plain filter) plus a fallback
+`create` instead — not perfectly race-free, judged acceptable for v1 given
+nothing else writes this table yet.
+
+Tests: `state-machine.test.ts` (stage order, no-op/advance/regress
+classification, skip-ahead allowed, regression blocked without
+`allowRegress`, unknown-stage error); `space-state.test.ts` (create-once
+idempotency including the party-level/null-riding case, forward move with a
+skip, regression rejected and the row left untouched, regression requires
+and change-logs a reason, a no-op move can still update `stageOwner`).
+`pnpm turbo run lint typecheck test build` green, 20/20 tasks, 81 core
+tests + 63 api tests.

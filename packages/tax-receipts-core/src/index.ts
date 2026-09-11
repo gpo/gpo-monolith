@@ -9,3 +9,4 @@ export * from './invariants/sequence.js';
 export * from './sync-hash.js';
 export * from './source-code.js';
 export * from './intake/defaults.js';
+export * from './space/state-machine.js';
