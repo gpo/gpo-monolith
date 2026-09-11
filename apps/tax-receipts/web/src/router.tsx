@@ -7,6 +7,7 @@ import {
   type RouterHistory,
 } from '@tanstack/react-router';
 import { AppShell, Group, Text, Anchor } from '@mantine/core';
+import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
 import { LoginPage } from './routes/login.js';
 
@@ -23,6 +24,9 @@ function RootLayout() {
           <Group>
             <Anchor component={Link} to="/">
               Dashboard
+            </Anchor>
+            <Anchor component={Link} to="/contributions">
+              Contributions
             </Anchor>
             <Anchor component={Link} to="/login">
               Sign in
@@ -49,7 +53,13 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute]);
+const contributionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/contributions',
+  component: ContributionsListPage,
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, loginRoute, contributionsRoute]);
 
 export function makeRouter(history?: RouterHistory) {
   return createRouter({ routeTree, ...(history ? { history } : {}) });

@@ -120,3 +120,53 @@ describe('PATCH /contributions/:id/metadata (ticket 1.2)', () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+describe('GET /contributions (ticket 1.3)', () => {
+  let app: FastifyInstance;
+  let baseline: Awaited<ReturnType<typeof seedBaseline>>;
+
+  beforeEach(async () => {
+    await resetDb(prisma);
+    baseline = await seedBaseline(prisma);
+    await prisma.user.update({
+      where: { id: baseline.adminUserId },
+      data: { passwordHash: await hashPassword('admin-pass-phrase') },
+    });
+    app = await buildApp({ prisma, sessionSecret: SECRET });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('requires authentication', async () => {
+    const res = await app.inject({ method: 'GET', url: '/contributions' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('lists mirrored contributions for an authenticated user, filterable by query params', async () => {
+    const contact = await prisma.contact.create({ data: { qomonContactId: 99n, name: 'Dana Donor' } });
+    await prisma.contribution.create({
+      data: { contactId: contact.id, qomonTransactionId: 99n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') },
+    });
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'admin@gpo.test', password: 'admin-pass-phrase' },
+    });
+    const cookie = login.cookies[0]!;
+
+    const all = await app.inject({ method: 'GET', url: '/contributions', cookies: { [cookie.name]: cookie.value } });
+    expect(all.statusCode).toBe(200);
+    expect(all.json().data).toHaveLength(1);
+
+    const filtered = await app.inject({
+      method: 'GET',
+      url: '/contributions?minAmountCents=5000',
+      cookies: { [cookie.name]: cookie.value },
+    });
+    expect(filtered.json().data).toHaveLength(0);
+  });
+});

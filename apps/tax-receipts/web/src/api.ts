@@ -45,6 +45,58 @@ export interface Me {
   can: { issueReceipts: boolean; administerKillSwitch: boolean };
 }
 
+export interface ContributionListRow {
+  id: string;
+  qomonTransactionId: string;
+  contactName: string;
+  contactEmail: string | null;
+  amountCents: number;
+  currency: string;
+  acceptedAt: string;
+  statusKind: string;
+  periodId: number | null;
+  ridingNumber: number | null;
+  entityKind: string | null;
+  receivedBy: string | null;
+  sourceCode: string | null;
+  nonDeductibleCents: number | null;
+  hasReceipt: boolean;
+  openValidationCount: number;
+  lastSyncedAt: string | null;
+}
+
+export interface ContributionListPage {
+  data: ContributionListRow[];
+  nextCursor: string | null;
+}
+
+export interface ContributionListFilters {
+  periodId?: number;
+  ridingNumber?: number;
+  partyLevelOnly?: boolean;
+  entityKind?: string;
+  receivedBy?: string;
+  contactQuery?: string;
+  minAmountCents?: number;
+  maxAmountCents?: number;
+  acceptedFrom?: string; // ISO date
+  acceptedTo?: string;
+  hasOpenValidation?: boolean;
+  ruleRef?: string;
+  hasReceipt?: boolean;
+  cursor?: string;
+}
+
+function filtersToQuery(filters: ContributionListFilters): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined || value === '') continue;
+    params.set(key, String(value));
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
 export const api = {
   health: () => request<Health>('/health'),
   me: () => request<Me>('/auth/me'),
@@ -56,4 +108,6 @@ export const api = {
   logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
   killSwitch: () =>
     request<{ engaged: boolean; reason: string | null }>('/admin/kill-switch'),
+  listContributions: (filters: ContributionListFilters = {}) =>
+    request<ContributionListPage>(`/contributions${filtersToQuery(filters)}`),
 };

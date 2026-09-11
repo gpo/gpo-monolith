@@ -244,6 +244,43 @@ tasks, 108 core tests + 76 api tests.
 4. **O34 (B1 not implemented)** — see table above; flagged rather than
    silently dropped given EO's explicit mandate.
 
+## Ticket 1.3 — Contributions list
+
+Spec: screens.md 2, PRD C1. STATUS.md row moved to `review`. Read-only: bulk
+edit (1.4) and the detail screen (1.5) are separate tickets.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/contributions/list.ts` | `listContributions`: server-side filters (period, riding — including an explicit party-level-only filter — entity kind, received-by, donor name/email substring, amount range, date range, open-validation status and a specific `ruleRef`, receipt state) plus cursor pagination. `WorkItem` has no Prisma relation to `Contribution` (`subjectId` is a loose string shared by four subject types), so validation-status filtering runs as a separate lookup rather than a nested relation filter. |
+| `apps/tax-receipts/api/src/routes/contributions.ts` | `GET /contributions`, zod query-param coercion, applies per-riding access scope (`user.allRidings ? null : user.ridingGrants`) — the first route in the app to actually apply it; party-level rows stay visible to everyone regardless of grants. |
+| `apps/tax-receipts/web/src/routes/contributions.tsx` | The list screen: filter form, a Mantine `Table`, a column picker, and saved filters. Column visibility and saved filters are both `localStorage`-only (no `SavedFilter` entity exists in data-model.md, and none is warranted for a v1 per-browser convenience). |
+
+Tests: `list.test.ts` (11 cases covering every filter plus riding scope and
+pagination), a `GET` case in `routes/contributions.test.ts`,
+`routes/contributions.test.tsx` (renders rows, a filter input re-queries
+with the right query param, the column picker hides a column, saved
+filters persist to `localStorage`). `pnpm turbo run lint typecheck test
+build` green, 20/20 tasks, 88 api tests + 5 web tests.
+
+### Deviations / judgment calls
+
+1. **Mantine's `Select` (Combobox-based) hangs test mounts under jsdom** —
+   confirmed by bisection (removing it fixed an otherwise-unexplained
+   5-second render freeze in `pnpm --filter @gpo/tax-receipts-web test`);
+   root cause not chased further (likely a Floating UI positioning loop
+   jsdom can't satisfy). Both filter/loader dropdowns use `NativeSelect`
+   instead, and the column picker uses a plain toggled `Paper` rather than
+   Mantine's `Menu` (same Floating UI family) — confirmed same failure mode
+   opening it. `apps/tax-receipts/web/src/test/setup.ts` also gained
+   `ResizeObserver` and `scrollIntoView` stubs either way, since Mantine's
+   floating/combobox components need them regardless of which ones this
+   screen ends up using. **Flag for whoever builds 1.4/1.5/1.8/1.10**: if a
+   later screen needs an actual `Select`/`Menu`/`Popover`, expect the same
+   issue and budget time to either chase the real fix or take the same
+   native-element workaround.
+2. **No `SavedFilter` entity** — see table above; revisit if saved filters
+   need to sync across a user's devices.
+
 ## Ticket 1.9 — SpaceState ladder + state-machine tests
 
 Spec: data-model.md §2 SpaceState, workflows.md W6/W7. STATUS.md row moved
