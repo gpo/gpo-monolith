@@ -16,6 +16,7 @@ import {
   QomonWriteUnconfirmedError,
 } from './contributions/metadata-write-through.js';
 import { ContributionNotMirroredError } from './contributions/refresh.js';
+import { WorkItemAlreadyClosedError, WorkItemNotFoundError } from './work-items/resolve.js';
 import authPlugin from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
 import { contributionRoutes } from './routes/contributions.js';
@@ -24,6 +25,7 @@ import { killSwitchRoutes } from './routes/kill-switch.js';
 import { sessionRoutes } from './routes/session.js';
 import { syncRoutes } from './routes/sync.js';
 import { validationRoutes } from './routes/validation.js';
+import { workItemRoutes } from './routes/work-items.js';
 
 export interface BuildAppOptions {
   prisma: PrismaClient;
@@ -54,8 +56,15 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     if (error instanceof ChangeLogError) {
       return reply.code(400).send({ error: error.message });
     }
-    if (error instanceof ContributionNotFoundError || error instanceof ContributionNotMirroredError) {
+    if (
+      error instanceof ContributionNotFoundError ||
+      error instanceof ContributionNotMirroredError ||
+      error instanceof WorkItemNotFoundError
+    ) {
       return reply.code(404).send({ error: error.message });
+    }
+    if (error instanceof WorkItemAlreadyClosedError) {
+      return reply.code(409).send({ error: error.message });
     }
     if (error instanceof MetadataWriteBlockedError) {
       return reply.code(409).send({ error: error.message });
@@ -97,6 +106,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(syncRoutes, { qomon: opts.qomon });
   await app.register(contributionRoutes, { qomon: opts.qomon });
   await app.register(validationRoutes);
+  await app.register(workItemRoutes);
 
   return app;
 }

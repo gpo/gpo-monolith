@@ -169,6 +169,27 @@ export interface MetadataEditInput {
   externalRef: string | null;
 }
 
+export interface WorkItemRow {
+  id: string;
+  kind: string;
+  subjectType: string;
+  subjectId: string;
+  contactId: string | null;
+  contactName: string | null;
+  ruleRef: string | null;
+  dueAt: string | null;
+  status: string;
+  assigneeUserId: string | null;
+  resolutionNote: string | null;
+  openedAt: string;
+  closedAt: string | null;
+}
+
+export interface WorkItemListPage {
+  data: WorkItemRow[];
+  nextCursor: string | null;
+}
+
 export const api = {
   health: () => request<Health>('/health'),
   me: () => request<Me>('/auth/me'),
@@ -200,4 +221,12 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
+  listWorkItems: (filters: { kind?: string; status?: string; cursor?: string } = {}) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
+    const qs = params.toString();
+    return request<WorkItemListPage>(`/work-items${qs ? `?${qs}` : ''}`);
+  },
+  resolveWorkItem: (id: string, input: { reason: string; outcome: 'RESOLVED' | 'EXCEPTION' }) =>
+    request<WorkItemRow>(`/work-items/${id}/resolve`, { method: 'POST', body: JSON.stringify(input) }),
 };

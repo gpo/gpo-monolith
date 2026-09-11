@@ -351,6 +351,34 @@ result). `pnpm turbo run lint typecheck test build` green, 20/20 tasks,
    what's loaded (paginated) would need a server-side by-filter bulk
    operation; not built for v1, flagged as a possible enhancement.
 
+## Ticket 1.8 — Work queue screen
+
+Spec: screens.md 5. STATUS.md row moved to `review`.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/work-items/list.ts` | `listWorkItems`, filtered by kind/status/ruleRef/assignee. Donor name comes from `WorkItem.contactId`, denormalized for exactly this (data-model §2), rather than joining through `subjectId` — that field is a loose string shared by four subject types, not a real foreign key. |
+| `apps/tax-receipts/api/src/routes/work-items.ts` | `GET /work-items`, `POST /work-items/:id/resolve` (wraps 1.7's `resolveWorkItem` — generic across every WorkItem kind, so this ticket needed no new resolution logic, only the route). |
+| `apps/tax-receipts/web/src/routes/work-queue.tsx` | The four tabs (validation, diff, owed-to-EO, sync incidents) as a button group, not Mantine's `Tabs` — sidesteps the Floating-UI/jsdom issue documented under 1.3 rather than risking hitting it again. Each row: subject (links to the 1.5 detail screen), donor, rule, opened/due dates, status, and inline resolve/except actions (a reason/note input appears in place, confirm disabled until 3+ characters). |
+
+Tests: `list.test.ts` (kind/status/ruleRef filters, donor name join,
+pagination), `routes/work-items.test.ts` (auth, list, resolve, rejects a
+second resolve on an already-closed item), `work-queue.test.tsx` (renders
+the default tab's items, switching tabs re-queries by kind, resolving
+requires a note and posts the right outcome). `pnpm turbo run lint
+typecheck test build` green, 20/20 tasks, 112 api tests + 12 web tests.
+
+### Deviations / judgment calls
+
+1. **No grouping by rule in the UI** — screens.md says "validation findings
+   (grouped by rule)"; the API sorts by `ruleRef` so same-rule rows are
+   adjacent, but the table doesn't render rule-group headers. A visual
+   grouping pass is easy to add later without an API change.
+2. **DIFF/OWED_TO_EO/SYNC_INCIDENT tabs are wired but will show empty**
+   today — nothing in Phase 1 creates OWED_TO_EO items (Phase 2), and DIFF/
+   SYNC_INCIDENT only populate once 1.1's sweep actually detects a Qomon-side
+   change or deletion against real data.
+
 ## Ticket 1.9 — SpaceState ladder + state-machine tests
 
 Spec: data-model.md §2 SpaceState, workflows.md W6/W7. STATUS.md row moved

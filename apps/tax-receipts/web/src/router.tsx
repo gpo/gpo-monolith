@@ -12,6 +12,7 @@ import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
 import { LoginPage } from './routes/login.js';
+import { WorkQueuePage } from './routes/work-queue.js';
 
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -29,6 +30,9 @@ function RootLayout() {
             </Anchor>
             <Anchor component={Link} to="/contributions">
               Contributions
+            </Anchor>
+            <Anchor component={Link} to="/work-queue">
+              Work queue
             </Anchor>
             <Anchor component={Link} to="/login">
               Sign in
@@ -70,11 +74,18 @@ const contributionDetailRoute = createRoute({
   },
 });
 
+const workQueueRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/work-queue',
+  component: WorkQueuePage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   contributionsRoute,
   contributionDetailRoute,
+  workQueueRoute,
 ]);
 
 export function makeRouter(history?: RouterHistory) {
