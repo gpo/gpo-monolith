@@ -1,30 +1,47 @@
 import { AmbiguousPeriodError, resolvePeriod, type PeriodRow } from '../period/calendar.js';
 import type { GpoMetadataDescriptive } from '../metadata.js';
+import { parseRidingFromSourceCode } from '../source-code.js';
+import type { EntityKind, ReceivedBy } from '../enums.js';
 
 /**
- * Intake derivation defaults, applied when the mirror sweep (ticket 1.1)
- * first sees a Qomon transaction (data-model §6).
+ * Intake derivation defaults (ticket 1.6, data-model §6): applied when the
+ * mirror sweep (ticket 1.1) first sees a Qomon transaction.
  *
- * THIS IS A STUB. The full rule set (riding from the originating subspace,
- * entity_kind from a "directed-to" field or `code_campaign`, received_by
- * from provenance, source-code parsing) is ticket 1.6 and is additionally
- * blocked on open items B3 (subspace `group_id` -> riding) and B8 (the
- * "directed-to" field or convention) — see STATUS.md. Until 1.6 lands, every
- * new contribution gets the documented fallback (data-model §6 / the
- * kickoff's blocker notes): riding_number null, entity_kind PARTY,
- * received_by GPO, all flagged for review. The one rule this stub CAN apply
- * correctly today is period_id, because the period calendar (ticket 0.6) has
- * no B3/B8-style blocker.
+ * Three of the four rules are partially or fully blocked as of 2026-09-11
+ * (STATUS.md B3, B8) — per the Phase 1 kickoff prompt's ground rule ("do not
+ * guess and do not invent behavior"), each blocked field falls back to the
+ * documented default and is flagged rather than guessed:
  *
- * Ticket 1.6 replaces the body of {@link deriveIntakeDefaults}; callers
- * (the mirror sweep) do not need to change.
+ *  - **period_id**: fully derivable (period calendar, ticket 0.6; no
+ *    blocker). Uses the derived riding (below) to scope by-election periods.
+ *  - **riding_number**: subspace-based derivation is blocked (B3: no
+ *    confirmed `group_id` -> riding convention). Source-code parsing (rule
+ *    A7) is NOT blocked, so a directed online source code (`TSF.W.007`)
+ *    still resolves a riding; only an undirected code (subspace CFO entry,
+ *    or a general/party code) falls back to null, flagged.
+ *  - **entity_kind**: no unblocked source exists at all (B8: no
+ *    "directed-to" field or `code_campaign` convention yet), and D6 forbids
+ *    deriving it from the space regardless. Always PARTY, flagged.
+ *  - **received_by**: invariant 8's "a processor record forces GPO" clause
+ *    is unblocked (a processor `external_ref` is a reliable signal) and is
+ *    applied with confidence. Distinguishing "CFO subspace entry" (defaults
+ *    ENTITY) from "central manual entry" (defaults GPO) needs the same
+ *    space identification B3 blocks, so anything else defaults GPO,
+ *    flagged, per invariant 8's own fallback ("with operator override").
  */
+
+export interface IntakeFlag {
+  field: 'period_id' | 'riding_number' | 'entity_kind' | 'received_by';
+  reason: string;
+}
 
 export interface IntakeDefaultsInput {
   /** acceptance date (drives period resolution; data-model §2 Contribution.date) */
   acceptedAt: Date;
-  /** directed-to riding, when already known (by-election period scoping). Always
-   *  null for this stub since riding derivation is ticket 1.6. */
+  /** already-known riding (e.g. once B3 resolves and a caller can identify
+   *  the originating subspace) — takes priority over source-code parsing.
+   *  No current caller passes this; the hook exists so B3 landing doesn't
+   *  require another signature change here. */
   ridingNumber?: number | null;
   codeCampaign: string | null;
   externalRef: string | null;
@@ -38,27 +55,54 @@ export interface IntakeDefaultsResult {
   periodId: number | null;
   /** null exactly when periodId is null. */
   descriptive: GpoMetadataDescriptive | null;
-  /** always true for this stub: every field besides period_id is a fallback
-   *  pending ticket 1.6. */
-  flagged: boolean;
-  flagReason: string;
+  /** one entry per field this call could not derive with confidence. */
+  flags: IntakeFlag[];
 }
 
-export function deriveIntakeDefaults(
-  input: IntakeDefaultsInput,
-): IntakeDefaultsResult {
+export function deriveIntakeDefaults(input: IntakeDefaultsInput): IntakeDefaultsResult {
+  const flags: IntakeFlag[] = [];
+
+  const ridingFromSourceCode = parseRidingFromSourceCode(input.codeCampaign);
+  let ridingNumber: number | null;
+  if (input.ridingNumber != null) {
+    ridingNumber = input.ridingNumber;
+  } else if (ridingFromSourceCode != null) {
+    ridingNumber = ridingFromSourceCode;
+  } else {
+    ridingNumber = null;
+    flags.push({
+      field: 'riding_number',
+      reason:
+        'not derivable: the source code has no directed riding segment (rule A7), and subspace-based derivation is blocked pending B3',
+    });
+  }
+
+  const entityKind: EntityKind = 'PARTY';
+  flags.push({
+    field: 'entity_kind',
+    reason:
+      'never derived from the space (D6); no "directed-to" field or code_campaign convention exists yet (B8) — defaulting PARTY',
+  });
+
+  const isProcessorRecord = input.externalRef != null && input.externalRef.trim().length > 0;
+  const receivedBy: ReceivedBy = 'GPO';
+  if (!isProcessorRecord) {
+    flags.push({
+      field: 'received_by',
+      reason:
+        'no processor external_ref present; cannot yet distinguish a CFO subspace entry (ENTITY) from central manual entry (GPO) pending B3 — defaulting GPO with operator override (invariant 8)',
+    });
+  }
+
   let period: PeriodRow | null;
   try {
-    period = resolvePeriod(input.acceptedAt, input.periods, {
-      ridingNumber: input.ridingNumber ?? null,
-    });
+    period = resolvePeriod(input.acceptedAt, input.periods, { ridingNumber });
   } catch (err) {
     if (err instanceof AmbiguousPeriodError) {
       return {
         periodId: null,
         descriptive: null,
-        flagged: true,
-        flagReason: `ambiguous period for acceptance date: ${err.message}`,
+        flags: [...flags, { field: 'period_id', reason: `ambiguous period: ${err.message}` }],
       };
     }
     throw err;
@@ -68,16 +112,21 @@ export function deriveIntakeDefaults(
     return {
       periodId: null,
       descriptive: null,
-      flagged: true,
-      flagReason: 'no configured period covers this contribution\'s acceptance date',
+      flags: [
+        ...flags,
+        {
+          field: 'period_id',
+          reason: "no configured period covers this contribution's acceptance date",
+        },
+      ],
     };
   }
 
   const descriptive: GpoMetadataDescriptive = {
     period_id: period.id,
-    riding_number: null,
-    entity_kind: 'PARTY',
-    received_by: 'GPO',
+    riding_number: ridingNumber,
+    entity_kind: entityKind,
+    received_by: receivedBy,
     goods_services: false,
     non_deductible_cents: 0,
     processed_date: null,
@@ -87,11 +136,5 @@ export function deriveIntakeDefaults(
     external_ref: input.externalRef,
   };
 
-  return {
-    periodId: period.id,
-    descriptive,
-    flagged: true,
-    flagReason:
-      'riding_number, entity_kind, and received_by are stub defaults pending ticket 1.6 (B3/B8)',
-  };
+  return { periodId: period.id, descriptive, flags };
 }

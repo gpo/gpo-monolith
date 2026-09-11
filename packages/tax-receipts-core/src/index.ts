@@ -7,4 +7,5 @@ export * from './rtd/business-days.js';
 export * from './invariants/allocation.js';
 export * from './invariants/sequence.js';
 export * from './sync-hash.js';
+export * from './source-code.js';
 export * from './intake/defaults.js';

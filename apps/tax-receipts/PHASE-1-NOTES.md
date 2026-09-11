@@ -93,3 +93,53 @@ tasks, 132 tests across the workspace.
    against a Qomon that rejects an unknown `metadata` key; no evidence either
    way yet (untested against the live sandbox for this field per
    PHASE-0-NOTES.md).
+
+## Ticket 1.6 — Intake derivation defaults
+
+Spec: data-model.md §6, invariant 8, validation-rules.md rule A7.
+STATUS.md row moved to `review`.
+
+Replaces 1.1's flagged-everything-but-period stub
+(`packages/tax-receipts-core/src/intake/defaults.ts`) with the real rule set
+— to the extent B3/B8 allow (both still open as of 2026-09-11; per the
+kickoff prompt's ground rule, the blocked parts stay the documented
+fallback, flagged, not guessed):
+
+| Field | What changed | Still blocked on |
+|---|---|---|
+| `period_id` | Now scoped by the derived riding (below), so by-election periods resolve correctly instead of always falling through to the party-wide annual period. | nothing |
+| `riding_number` | New `packages/tax-receipts-core/src/source-code.ts`: `parseRidingFromSourceCode` extracts rule A7's directed riding segment (`TSF.W.007` → 7); an undirected code (`NC.W.DON.DBK.BTN50`) or none still falls back to null, flagged. | subspace-based derivation (B3) |
+| `received_by` | Invariant 8's "a processor record forces GPO" clause is applied (a non-empty `external_ref` is the signal) — confident, unflagged. | distinguishing CFO-subspace (ENTITY) from central-manual (GPO) when there's no processor record — same space-identification gap as riding (B3) |
+| `entity_kind` | Unchanged: always PARTY, flagged. D6 forbids deriving it from the space regardless of any blocker, and no "directed-to" field/convention exists yet. | B8 |
+
+`IntakeDefaultsResult.flags` replaced the old single `flagged`/`flagReason`
+pair with `Array<{ field, reason }>` — one entry per field that couldn't be
+derived with confidence, so a field that *is* now derivable (riding via a
+directed source code, received_by via a processor record) stops being
+flagged instead of the whole row staying uniformly flagged. The mirror sweep
+(1.1) doesn't consume `.flags` yet — it only reads `.descriptive`/`.periodId`
+— since turning per-field flags into WorkItem detail is validation-engine
+territory (ticket 1.7), not this ticket's.
+
+Tests: `packages/tax-receipts-core/src/source-code.test.ts`,
+`src/intake/defaults.test.ts` (rewritten for the new `flags` shape, directed
+vs undirected codes, processor-record received_by, by-election period
+scoping via the derived riding). 1.1's `mirror-sweep.test.ts` needed no
+changes — its fixtures all use undirected/absent source codes, so the
+observed behaviour didn't move. `pnpm turbo run lint typecheck test build`
+green, 20/20 tasks, 74 core tests + 57 api tests.
+
+### Deviations / judgment calls
+
+1. **`received_by` defaults GPO, not ENTITY, when there's no processor
+   record.** Invariant 8 names both "CFO subspace entry defaults ENTITY" and
+   "central manual entry defaults GPO" as the two fallbacks for a
+   non-processor record, and nothing here can tell which case applies
+   (that's the same B3 gap). GPO was picked as the safer conservative
+   default — flagged either way, so a human confirms it — rather than
+   guessing ENTITY for what might be the more common CFO-entry case.
+2. **Source-code riding parsing accepts any in-range all-digit trailing
+   segment**, not strictly the 3-digit zero-padded form the two rule A7
+   examples show, so an under-padded code isn't silently dropped. Documented
+   in `source-code.ts`; revisit if real source codes turn out to need
+   stricter matching.
