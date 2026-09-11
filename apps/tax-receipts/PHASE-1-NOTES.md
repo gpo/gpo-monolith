@@ -281,6 +281,36 @@ build` green, 20/20 tasks, 88 api tests + 5 web tests.
 2. **No `SavedFilter` entity** — see table above; revisit if saved filters
    need to sync across a user's devices.
 
+## Ticket 1.5 — Contribution detail
+
+Spec: screens.md 3, PRD C3/C4. STATUS.md row moved to `review`.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/contributions/detail.ts` | `getContributionDetail`: Qomon facts, metadata, allocations + their receipts, RTD inclusions, every WorkItem, and the change-log slice for `Contribution`/`ContributionMetadata` subjects. Applies the same riding scope as 1.3's list (a row outside scope reads as not-found, not 403 — avoids confirming existence to an unauthorized viewer). |
+| `apps/tax-receipts/api/src/contributions/refresh.ts` | `refreshContributionFromQomon`: the "refresh from Qomon" action (data-model §5: gate reads re-fetch live by id). Re-fetches the bundle and runs the transaction through 1.1's own `ingestChange` (now exported from `mirror-sweep.ts`, along with `loadPeriods`) — same diff-queue protection and metadata handling the scheduled sweep would apply, just on demand. |
+| `apps/tax-receipts/api/src/routes/contributions.ts` | `GET /contributions/:id`, `POST /contributions/:id/refresh` (501 unconfigured, matching 1.2's pattern). |
+| `apps/tax-receipts/web/src/routes/contribution-detail.tsx` | The detail screen at `/contributions/$id`, linked from 1.3's list (donor name). Read-only Qomon facts panel with the refresh button and sync-incident alert; an editable metadata form (same fields as 1.2's write-through, reason required, save disabled until one is entered); work items, allocations/receipts, and change-log panels — all empty-state today since Phase 3 doesn't exist yet, but wired correctly. |
+
+Tests: `detail.test.ts` (unknown id, full detail shape, allocations +
+receipt join, riding-scope hides an out-of-grant row but not a party-level
+one), `refresh.test.ts` (unmirrored id throws, a non-receipted refresh
+updates the cache, a receipted refresh routes to the diff queue and leaves
+facts untouched, a transaction missing from its bundle is a no-op),
+`contribution-detail.test.tsx` (renders facts/metadata/work items/change-log,
+refresh button calls the endpoint, save is disabled until a reason is
+typed). `pnpm turbo run lint typecheck test build` green, 20/20 tasks, 96
+api tests + 8 web tests.
+
+### Deviations / judgment calls
+
+1. **Out-of-scope rows 404, not 403** — consistent with not confirming a
+   resource's existence to a viewer who can't see it.
+2. **Reused 1.1's `ingestChange` rather than writing a second ingestion
+   path** for the refresh action — the alternative (a parallel "fetch one,
+   apply directly") would have to re-implement the diff-queue check and
+   metadata handling and could drift from the sweep's behaviour over time.
+
 ## Ticket 1.9 — SpaceState ladder + state-machine tests
 
 Spec: data-model.md §2 SpaceState, workflows.md W6/W7. STATUS.md row moved

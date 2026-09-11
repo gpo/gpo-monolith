@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import {
   Badge,
   Button,
@@ -32,7 +33,17 @@ interface Column {
 
 const COLUMNS: Column[] = [
   { key: 'acceptedAt', label: 'Date', render: (r) => new Date(r.acceptedAt).toLocaleDateString() },
-  { key: 'donor', label: 'Donor', render: (r) => r.contactName },
+  {
+    key: 'donor',
+    label: 'Donor',
+    render: (r) => (
+      <Link to="/contributions/$id" params={{ id: r.id }}>
+        <Text span c="blue">
+          {r.contactName}
+        </Text>
+      </Link>
+    ),
+  },
   {
     key: 'amount',
     label: 'Amount',

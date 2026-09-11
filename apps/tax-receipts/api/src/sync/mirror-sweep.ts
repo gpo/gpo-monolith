@@ -131,9 +131,13 @@ export async function runMirrorSweep(
   };
 }
 
-type IngestOutcome = 'created' | 'refreshed' | 'diff-queued' | 'unchanged';
+export type IngestOutcome = 'created' | 'refreshed' | 'diff-queued' | 'unchanged';
 
-async function ingestChange(
+/** Exported for the contribution detail screen's "refresh from Qomon"
+ *  action (ticket 1.5): re-fetching one contribution live by id and running
+ *  it through the same ingestion path the sweep uses keeps the diff-queue
+ *  protection and metadata handling identical between the two callers. */
+export async function ingestChange(
   prisma: PrismaClient,
   qomon: Pick<QomonApi, 'getContact'>,
   periods: PeriodRow[],
@@ -516,7 +520,7 @@ async function saveCursor(
   });
 }
 
-async function loadPeriods(prisma: PrismaClient): Promise<PeriodRow[]> {
+export async function loadPeriods(prisma: PrismaClient): Promise<PeriodRow[]> {
   const rows = await prisma.period.findMany();
   return rows.map((p) => ({
     id: p.id,

@@ -97,6 +97,78 @@ function filtersToQuery(filters: ContributionListFilters): string {
   return qs ? `?${qs}` : '';
 }
 
+export interface ContributionDetail {
+  id: string;
+  qomonTransactionId: string;
+  qomonBundleId: string | null;
+  contact: { id: string; name: string; email: string | null };
+  amountCents: number;
+  currency: string;
+  acceptedAt: string;
+  paymentMethodKind: string | null;
+  statusKind: string;
+  codeCampaign: string | null;
+  comment: string | null;
+  externalRef: string | null;
+  firstSeenAt: string;
+  lastSyncedAt: string | null;
+  deletedInQomonAt: string | null;
+  metadata: {
+    periodId: number;
+    ridingNumber: number | null;
+    entityKind: string;
+    receivedBy: string;
+    goodsServices: boolean;
+    nonDeductibleCents: number;
+    processedDate: string | null;
+    sourceCode: string;
+    eoContributorId: string | null;
+    exceptionReason: string | null;
+    checksum: string | null;
+    syncedAt: string | null;
+  } | null;
+  allocations: Array<{
+    id: string;
+    amountCents: number;
+    receipt: { id: string; receiptNumber: string; status: string; issueDate: string };
+  }>;
+  rtdInclusions: Array<{ id: string; rtdFilingId: string; amountCents: number; aggregateAfterCents: number }>;
+  workItems: Array<{
+    id: string;
+    kind: string;
+    ruleRef: string | null;
+    status: string;
+    openedAt: string;
+    closedAt: string | null;
+    resolutionNote: string | null;
+  }>;
+  changeLog: Array<{
+    id: string;
+    subjectType: string;
+    actorUserId: string | null;
+    reason: string;
+    before: unknown;
+    after: unknown;
+    at: string;
+    correlationId: string;
+  }>;
+}
+
+export interface MetadataEditInput {
+  reason: string;
+  periodId: number;
+  ridingNumber: number | null;
+  entityKind: string;
+  receivedBy: string;
+  goodsServices: boolean;
+  nonDeductibleCents: number;
+  processedDate: string | null;
+  sourceCode: string;
+  eoContributorId: string | null;
+  exceptionReason: string | null;
+  externalRef: string | null;
+}
+
 export const api = {
   health: () => request<Health>('/health'),
   me: () => request<Me>('/auth/me'),
@@ -110,4 +182,12 @@ export const api = {
     request<{ engaged: boolean; reason: string | null }>('/admin/kill-switch'),
   listContributions: (filters: ContributionListFilters = {}) =>
     request<ContributionListPage>(`/contributions${filtersToQuery(filters)}`),
+  getContribution: (id: string) => request<ContributionDetail>(`/contributions/${id}`),
+  refreshContribution: (id: string) =>
+    request<{ outcome: string }>(`/contributions/${id}/refresh`, { method: 'POST' }),
+  editContributionMetadata: (id: string, input: MetadataEditInput) =>
+    request<unknown>(`/contributions/${id}/metadata`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
 };

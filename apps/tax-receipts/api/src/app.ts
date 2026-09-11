@@ -14,6 +14,7 @@ import {
   QomonWriteRejectedError,
   QomonWriteUnconfirmedError,
 } from './contributions/metadata-write-through.js';
+import { ContributionNotMirroredError } from './contributions/refresh.js';
 import authPlugin from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
 import { contributionRoutes } from './routes/contributions.js';
@@ -52,7 +53,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     if (error instanceof ChangeLogError) {
       return reply.code(400).send({ error: error.message });
     }
-    if (error instanceof ContributionNotFoundError) {
+    if (error instanceof ContributionNotFoundError || error instanceof ContributionNotMirroredError) {
       return reply.code(404).send({ error: error.message });
     }
     if (error instanceof MetadataWriteBlockedError) {

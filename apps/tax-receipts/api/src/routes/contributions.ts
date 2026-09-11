@@ -3,15 +3,18 @@ import type { QomonApi } from '@gpo/qomon-client';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { getContributionDetail } from '../contributions/detail.js';
 import { listContributions } from '../contributions/list.js';
 import { writeContributionMetadata } from '../contributions/metadata-write-through.js';
+import { refreshContributionFromQomon } from '../contributions/refresh.js';
 import type { SessionUser } from '../plugins/auth.js';
 
 /**
- * Contributions list (ticket 1.3, screens.md 2) and metadata write-through
- * (ticket 1.2). The write route registers always but returns 501 until a
- * Qomon client is configured; the list route needs no such client (it only
- * reads the local mirror).
+ * Contributions list (ticket 1.3, screens.md 2), detail (ticket 1.5,
+ * screens.md 3), and metadata write-through (ticket 1.2). The write and
+ * refresh routes register always but return 501 until a Qomon client is
+ * configured; the read routes need no such client (they only read the
+ * local mirror).
  */
 export async function contributionRoutes(
   app: FastifyInstance,
@@ -66,6 +69,41 @@ export async function contributionRoutes(
         ridingScope: user.allRidings ? null : user.ridingGrants,
       });
       return reply.send(page);
+    },
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/contributions/:id',
+    schema: { params: z.object({ id: z.string() }) },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+
+      const detail = await getContributionDetail(
+        app.prisma,
+        request.params.id,
+        user.allRidings ? null : user.ridingGrants,
+      );
+      if (!detail) return reply.code(404).send({ error: 'not found' });
+      return reply.send(detail);
+    },
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/contributions/:id/refresh',
+    schema: { params: z.object({ id: z.string() }) },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!opts.qomon) {
+        return reply
+          .code(501)
+          .send({ error: 'Qomon is not configured (QOMON_API_KEY unset); cannot refresh' });
+      }
+      const outcome = await refreshContributionFromQomon(app.prisma, opts.qomon, request.params.id);
+      return reply.send({ outcome });
     },
   });
 

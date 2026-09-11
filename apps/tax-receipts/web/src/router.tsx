@@ -4,9 +4,11 @@ import {
   createRouter,
   Link,
   Outlet,
+  useParams,
   type RouterHistory,
 } from '@tanstack/react-router';
 import { AppShell, Group, Text, Anchor } from '@mantine/core';
+import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
 import { LoginPage } from './routes/login.js';
@@ -59,7 +61,21 @@ const contributionsRoute = createRoute({
   component: ContributionsListPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute, contributionsRoute]);
+const contributionDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/contributions/$id',
+  component: () => {
+    const { id } = useParams({ from: '/contributions/$id' });
+    return <ContributionDetailPage id={id} />;
+  },
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  contributionsRoute,
+  contributionDetailRoute,
+]);
 
 export function makeRouter(history?: RouterHistory) {
   return createRouter({ routeTree, ...(history ? { history } : {}) });
