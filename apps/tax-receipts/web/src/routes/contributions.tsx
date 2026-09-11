@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -20,10 +21,28 @@ import {
 import { api, type ContributionListFilters, type ContributionListRow } from '../api.js';
 
 /**
- * Contributions list (ticket 1.3, screens.md 2): server-side filters,
- * saved filters, column picker. Bulk edit (ticket 1.4) and the detail
- * screen (ticket 1.5) are separate, later work — this is read-only.
+ * Contributions list (ticket 1.3, screens.md 2) with bulk edit (ticket 1.4,
+ * PRD C2): server-side filters, saved filters, column picker, row
+ * selection, and a bulk-action bar. The detail screen (ticket 1.5) is
+ * linked from each donor cell.
+ *
+ * The bulk-edit bar exposes one field change at a time — the common cases
+ * (PRD C2's "reassigning periods for an election window is one operation")
+ * — not every field `POST /contributions/bulk-edit` accepts (goodsServices,
+ * processedDate, eoContributorId, exceptionReason, externalRef are edge
+ * cases better done per-row on the detail screen).
  */
+
+type BulkField = 'periodId' | 'ridingNumber' | 'entityKind' | 'receivedBy' | 'nonDeductibleCents' | 'sourceCode';
+
+const BULK_FIELDS: Array<{ value: BulkField; label: string }> = [
+  { value: 'periodId', label: 'Period id' },
+  { value: 'ridingNumber', label: 'Riding number' },
+  { value: 'entityKind', label: 'Entity kind' },
+  { value: 'receivedBy', label: 'Received by' },
+  { value: 'nonDeductibleCents', label: 'Non-deductible ($)' },
+  { value: 'sourceCode', label: 'Source code' },
+];
 
 interface Column {
   key: string;
@@ -114,6 +133,7 @@ function persistSavedFilters(filters: SavedFilter[]): void {
 }
 
 export function ContributionsListPage() {
+  const qc = useQueryClient();
   const [filters, setFilters] = useState<ContributionListFilters>({});
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => loadVisibleColumns());
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => loadSavedFilters());
@@ -121,6 +141,11 @@ export function ContributionsListPage() {
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [accumulated, setAccumulated] = useState<ContributionListRow[]>([]);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkField, setBulkField] = useState<BulkField | ''>('');
+  const [bulkValue, setBulkValue] = useState('');
+  const [bulkPartyLevel, setBulkPartyLevel] = useState(false);
+  const [bulkReason, setBulkReason] = useState('');
 
   const query = useQuery({
     queryKey: ['contributions', filters, cursor],
@@ -129,6 +154,26 @@ export function ContributionsListPage() {
 
   const rows = cursor ? [...accumulated, ...(query.data?.data ?? [])] : (query.data?.data ?? []);
   const columns = useMemo(() => COLUMNS.filter((c) => visibleColumns.has(c.key)), [visibleColumns]);
+
+  const bulkEdit = useMutation({
+    mutationFn: () => {
+      const changes: Record<string, unknown> =
+        bulkField === 'ridingNumber'
+          ? { ridingNumber: bulkPartyLevel ? null : Number(bulkValue) }
+          : bulkField === 'periodId' || bulkField === 'nonDeductibleCents'
+            ? { [bulkField]: bulkField === 'nonDeductibleCents' ? Math.round(Number(bulkValue) * 100) : Number(bulkValue) }
+            : { [bulkField as string]: bulkValue };
+      return api.bulkEditContributions({
+        contributionIds: [...selected],
+        reason: bulkReason,
+        changes,
+      });
+    },
+    onSuccess: (result) => {
+      setSelected(new Set(result.results.filter((r) => !r.ok).map((r) => r.contributionId)));
+      return qc.invalidateQueries({ queryKey: ['contributions'] });
+    },
+  });
 
   function updateFilter<K extends keyof ContributionListFilters>(key: K, value: ContributionListFilters[K]) {
     setCursor(undefined);
@@ -180,6 +225,22 @@ export function ContributionsListPage() {
     const next = savedFilters.filter((f) => f.name !== name);
     setSavedFilters(next);
     persistSavedFilters(next);
+  }
+
+  function toggleRow(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllVisible() {
+    setSelected((prev) => {
+      const allSelected = rows.length > 0 && rows.every((r) => prev.has(r.id));
+      return allSelected ? new Set() : new Set(rows.map((r) => r.id));
+    });
   }
 
   return (
@@ -322,6 +383,100 @@ export function ContributionsListPage() {
         </Paper>
       )}
 
+      {(selected.size > 0 || bulkEdit.data) && (
+        <Paper withBorder p="sm">
+          <Stack gap="xs">
+            {selected.size > 0 && <Text fw={600}>{selected.size} selected</Text>}
+            {selected.size > 0 && (
+              <>
+                <Group grow>
+                  <NativeSelect
+                    label="Field to change"
+                    data={['', ...BULK_FIELDS.map((f) => f.label)]}
+                    value={BULK_FIELDS.find((f) => f.value === bulkField)?.label ?? ''}
+                    onChange={(e) => {
+                      const found = BULK_FIELDS.find((f) => f.label === e.currentTarget.value);
+                      setBulkField(found?.value ?? '');
+                      setBulkValue('');
+                    }}
+                  />
+                  {bulkField === 'ridingNumber' ? (
+                    <Group>
+                      <Checkbox
+                        label="Party-level (no riding)"
+                        checked={bulkPartyLevel}
+                        onChange={(e) => setBulkPartyLevel(e.currentTarget.checked)}
+                      />
+                      {!bulkPartyLevel && (
+                        <NumberInput
+                          label="New riding number"
+                          min={1}
+                          max={124}
+                          value={bulkValue}
+                          onChange={(v) => setBulkValue(String(v ?? ''))}
+                        />
+                      )}
+                    </Group>
+                  ) : bulkField === 'entityKind' ? (
+                    <NativeSelect
+                      label="New entity kind"
+                      data={['', 'PARTY', 'CA', 'CAMPAIGN']}
+                      value={bulkValue}
+                      onChange={(e) => setBulkValue(e.currentTarget.value)}
+                    />
+                  ) : bulkField === 'receivedBy' ? (
+                    <NativeSelect
+                      label="New received by"
+                      data={['', 'GPO', 'ENTITY']}
+                      value={bulkValue}
+                      onChange={(e) => setBulkValue(e.currentTarget.value)}
+                    />
+                  ) : bulkField === 'periodId' || bulkField === 'nonDeductibleCents' ? (
+                    <NumberInput
+                      label="New value"
+                      value={bulkValue}
+                      onChange={(v) => setBulkValue(String(v ?? ''))}
+                    />
+                  ) : bulkField === 'sourceCode' ? (
+                    <TextInput label="New value" value={bulkValue} onChange={(e) => setBulkValue(e.currentTarget.value)} />
+                  ) : (
+                    <div />
+                  )}
+                  <TextInput
+                    label="Reason (required)"
+                    value={bulkReason}
+                    onChange={(e) => setBulkReason(e.currentTarget.value)}
+                  />
+                </Group>
+                <Group>
+                  <Button
+                    onClick={() => bulkEdit.mutate()}
+                    loading={bulkEdit.isPending}
+                    disabled={!bulkField || (!bulkValue && !bulkPartyLevel) || bulkReason.trim().length < 3}
+                  >
+                    Apply to {selected.size} row{selected.size === 1 ? '' : 's'}
+                  </Button>
+                  <Button variant="subtle" onClick={() => setSelected(new Set())}>
+                    Clear selection
+                  </Button>
+                </Group>
+              </>
+            )}
+            {bulkEdit.data && (
+              <Alert color={bulkEdit.data.failed > 0 ? 'orange' : 'green'}>
+                {bulkEdit.data.succeeded} succeeded, {bulkEdit.data.failed} failed.
+                {bulkEdit.data.failed > 0 && ' Failed rows stay selected below.'}
+                {selected.size === 0 && (
+                  <Button size="xs" variant="subtle" ml="sm" onClick={() => bulkEdit.reset()}>
+                    Dismiss
+                  </Button>
+                )}
+              </Alert>
+            )}
+          </Stack>
+        </Paper>
+      )}
+
       {query.isLoading ? (
         <Loader />
       ) : query.isError ? (
@@ -331,6 +486,13 @@ export function ContributionsListPage() {
           <Table striped highlightOnHover withTableBorder>
             <Table.Thead>
               <Table.Tr>
+                <Table.Th>
+                  <Checkbox
+                    aria-label="Select all"
+                    checked={rows.length > 0 && rows.every((r) => selected.has(r.id))}
+                    onChange={toggleAllVisible}
+                  />
+                </Table.Th>
                 {columns.map((c) => (
                   <Table.Th key={c.key}>{c.label}</Table.Th>
                 ))}
@@ -339,6 +501,13 @@ export function ContributionsListPage() {
             <Table.Tbody>
               {rows.map((row) => (
                 <Table.Tr key={row.id}>
+                  <Table.Td>
+                    <Checkbox
+                      aria-label={`Select ${row.contactName}`}
+                      checked={selected.has(row.id)}
+                      onChange={() => toggleRow(row.id)}
+                    />
+                  </Table.Td>
                   {columns.map((c) => (
                     <Table.Td key={c.key}>{c.render(row)}</Table.Td>
                   ))}

@@ -8,6 +8,7 @@ import {
 import type { PrismaClient } from './generated/prisma/index.js';
 import { IssuanceDisabledError } from './auth/kill-switch.js';
 import { ChangeLogError } from './changelog/write.js';
+import { BulkEditEmptyChangesError, BulkEditTooLargeError } from './contributions/bulk-edit.js';
 import {
   ContributionNotFoundError,
   MetadataWriteBlockedError,
@@ -58,6 +59,12 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
     if (error instanceof MetadataWriteBlockedError) {
       return reply.code(409).send({ error: error.message });
+    }
+    if (error instanceof BulkEditTooLargeError) {
+      return reply.code(413).send({ error: error.message });
+    }
+    if (error instanceof BulkEditEmptyChangesError) {
+      return reply.code(400).send({ error: error.message });
     }
     if (error instanceof QomonWriteRejectedError || error instanceof QomonWriteUnconfirmedError) {
       return reply.code(502).send({ error: error.message });

@@ -311,6 +311,46 @@ api tests + 8 web tests.
    apply directly") would have to re-implement the diff-queue check and
    metadata handling and could drift from the sweep's behaviour over time.
 
+## Ticket 1.4 — Bulk edit
+
+Spec: screens.md 2, PRD C2. STATUS.md row moved to `review`.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/contributions/bulk-edit.ts` | `bulkEditContributionMetadata`: one reason, one set of field changes, applied to every selected row. Each row merges server-side (its current metadata + the requested changes) before calling 1.2's `writeContributionMetadata` unchanged — so it gets the same write-first protocol, the same block on a receipted/reported row, and its own change-log entry (PRD C2: "one change-log entry per row"). One row's failure doesn't stop the batch; capped at `BULK_EDIT_MAX_ROWS` (500) to keep one HTTP request's synchronous processing time bounded. |
+| `apps/tax-receipts/api/src/routes/contributions.ts` | `POST /contributions/bulk-edit`. |
+| `apps/tax-receipts/web/src/routes/contributions.tsx` | Row selection checkboxes (plus "select all visible") and a bulk-action bar: pick one field, enter its new value, mandatory reason, apply. Results show as a summary alert (succeeded/failed counts); failed rows stay selected for a retry. |
+
+**"Per-row progress" reads as "you see each row's outcome," not a live
+progress bar** — there's no job-queue/SSE infrastructure to stream updates,
+so the bar shows a loading state during the request and the full per-row
+result set once it resolves. The bulk-edit bar exposes one field at a time
+from a fixed set (period, riding, entity kind, received-by, non-deductible,
+source code) — the common cases (PRD C2's period-reassignment example) —
+not every field the API accepts; `goodsServices`, `processedDate`,
+`eoContributorId`, and `exceptionReason` stay per-row edits on the detail
+screen (1.5).
+
+Tests: `bulk-edit.test.ts` (merges one field and leaves the rest alone,
+explicit null for party-level reassignment, a bad row doesn't stop the
+batch and reports its own error, a receipted row fails without being
+touched, empty changes and over-cap batches rejected), a route test, and a
+`contributions.test.tsx` case (select a row, fill the bar, apply, see the
+result). `pnpm turbo run lint typecheck test build` green, 20/20 tasks,
+104 api tests + 9 web tests.
+
+### Deviations / judgment calls
+
+1. **Server-side merge, not a client-known full object** — the client only
+   ever sends the field(s) it's changing; the server reads each row's
+   current metadata to fill in the rest. The alternative (client fetches
+   full metadata per selected row before submitting) would mean N extra
+   round trips before the batch even starts.
+2. **No "select all matching the current filter"** — only explicitly
+   checked rows are editable. Selecting across a filter spanning more than
+   what's loaded (paginated) would need a server-side by-filter bulk
+   operation; not built for v1, flagged as a possible enhancement.
+
 ## Ticket 1.9 — SpaceState ladder + state-machine tests
 
 Spec: data-model.md §2 SpaceState, workflows.md W6/W7. STATUS.md row moved

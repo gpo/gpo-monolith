@@ -3,6 +3,7 @@ import type { QomonApi } from '@gpo/qomon-client';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { BULK_EDIT_MAX_ROWS, bulkEditContributionMetadata } from '../contributions/bulk-edit.js';
 import { getContributionDetail } from '../contributions/detail.js';
 import { listContributions } from '../contributions/list.js';
 import { writeContributionMetadata } from '../contributions/metadata-write-through.js';
@@ -11,10 +12,10 @@ import type { SessionUser } from '../plugins/auth.js';
 
 /**
  * Contributions list (ticket 1.3, screens.md 2), detail (ticket 1.5,
- * screens.md 3), and metadata write-through (ticket 1.2). The write and
- * refresh routes register always but return 501 until a Qomon client is
- * configured; the read routes need no such client (they only read the
- * local mirror).
+ * screens.md 3), metadata write-through (ticket 1.2), and bulk edit
+ * (ticket 1.4). The write, bulk-edit, and refresh routes register always
+ * but return 501 until a Qomon client is configured; the read routes need
+ * no such client (they only read the local mirror).
  */
 export async function contributionRoutes(
   app: FastifyInstance,
@@ -104,6 +105,54 @@ export async function contributionRoutes(
       }
       const outcome = await refreshContributionFromQomon(app.prisma, opts.qomon, request.params.id);
       return reply.send({ outcome });
+    },
+  });
+
+  const BulkEditBody = z.object({
+    reason: z.string().min(3),
+    contributionIds: z.array(z.string()).min(1).max(BULK_EDIT_MAX_ROWS),
+    changes: z
+      .object({
+        periodId: z.number().int().optional(),
+        ridingNumber: z.number().int().min(1).max(124).nullable().optional(),
+        entityKind: EntityKind.optional(),
+        receivedBy: ReceivedBy.optional(),
+        goodsServices: z.boolean().optional(),
+        nonDeductibleCents: z.number().int().min(0).optional(),
+        processedDate: z.string().date().nullable().optional(),
+        sourceCode: z.string().optional(),
+        eoContributorId: z.string().nullable().optional(),
+        exceptionReason: z.string().nullable().optional(),
+        externalRef: z.string().nullable().optional(),
+      })
+      .partial(),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/contributions/bulk-edit',
+    schema: { body: BulkEditBody },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('update', 'ContributionMetadata')) {
+        return reply.code(403).send({ error: 'not permitted to edit contribution metadata' });
+      }
+      if (!opts.qomon) {
+        return reply
+          .code(501)
+          .send({ error: 'Qomon is not configured (QOMON_API_KEY unset); cannot write through' });
+      }
+      const result = await bulkEditContributionMetadata(
+        { prisma: app.prisma, qomon: opts.qomon },
+        {
+          contributionIds: request.body.contributionIds,
+          actorUserId: user.id,
+          reason: request.body.reason,
+          changes: request.body.changes,
+        },
+      );
+      return reply.send(result);
     },
   });
 

@@ -183,6 +183,16 @@ export const api = {
   listContributions: (filters: ContributionListFilters = {}) =>
     request<ContributionListPage>(`/contributions${filtersToQuery(filters)}`),
   getContribution: (id: string) => request<ContributionDetail>(`/contributions/${id}`),
+  bulkEditContributions: (input: {
+    contributionIds: string[];
+    reason: string;
+    changes: Record<string, unknown>;
+  }) =>
+    request<{
+      results: Array<{ contributionId: string; ok: boolean; error?: string }>;
+      succeeded: number;
+      failed: number;
+    }>('/contributions/bulk-edit', { method: 'POST', body: JSON.stringify(input) }),
   refreshContribution: (id: string) =>
     request<{ outcome: string }>(`/contributions/${id}/refresh`, { method: 'POST' }),
   editContributionMetadata: (id: string, input: MetadataEditInput) =>

@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
+import { withChangeLog } from '../changelog/write.js';
 import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
 
 const prisma = testPrisma();
@@ -168,5 +169,85 @@ describe('GET /contributions (ticket 1.3)', () => {
       cookies: { [cookie.name]: cookie.value },
     });
     expect(filtered.json().data).toHaveLength(0);
+  });
+});
+
+describe('POST /contributions/bulk-edit (ticket 1.4)', () => {
+  let app: FastifyInstance;
+  let baseline: Awaited<ReturnType<typeof seedBaseline>>;
+  let contributionId: string;
+
+  beforeEach(async () => {
+    await resetDb(prisma);
+    baseline = await seedBaseline(prisma);
+    await prisma.user.update({
+      where: { id: baseline.adminUserId },
+      data: { passwordHash: await hashPassword('admin-pass-phrase') },
+    });
+    const contact = await prisma.contact.create({ data: { qomonContactId: 500n, name: 'Dana Donor' } });
+    const contribution = await prisma.contribution.create({
+      data: {
+        qomonTransactionId: 501n,
+        qomonBundleId: 502n,
+        contactId: contact.id,
+        amountCents: 5_000,
+        acceptedAt: new Date('2026-03-01T00:00:00Z'),
+      },
+    });
+    await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
+      const after = await ctx.tx.contributionMetadata.create({
+        data: { contributionId: contribution.id, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },
+      });
+      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+    });
+    contributionId = contribution.id;
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('applies a bulk edit end to end through the HTTP layer', async () => {
+    const qomon = new InMemoryQomon();
+    qomon.seedBundle({ id: 502, transactions: [{ id: 501, contact_id: 500 }] });
+    app = await buildApp({ prisma, sessionSecret: SECRET, qomon });
+    await app.ready();
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'admin@gpo.test', password: 'admin-pass-phrase' },
+    });
+    const cookie = login.cookies[0]!;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/contributions/bulk-edit',
+      cookies: { [cookie.name]: cookie.value },
+      payload: {
+        reason: 'reassign for the by-election',
+        contributionIds: [contributionId],
+        changes: { periodId: 67 },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ succeeded: 1, failed: 0 });
+  });
+
+  it('rejects an empty changes body at the schema level', async () => {
+    app = await buildApp({ prisma, sessionSecret: SECRET, qomon: new InMemoryQomon() });
+    await app.ready();
+    const login = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'admin@gpo.test', password: 'admin-pass-phrase' },
+    });
+    const cookie = login.cookies[0]!;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/contributions/bulk-edit',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { reason: 'x', contributionIds: [contributionId], changes: {} },
+    });
+    expect(res.statusCode).toBe(400);
   });
 });

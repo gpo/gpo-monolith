@@ -37,8 +37,14 @@ beforeEach(() => {
   localStorage.clear();
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url: string) => {
+    vi.fn(async (url: string, init?: RequestInit) => {
       calls.push(String(url));
+      if (String(url).endsWith('/bulk-edit') && init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({ results: [{ contributionId: 'c1', ok: true }], succeeded: 1, failed: 0 }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
       if (String(url).includes('/contributions')) {
         return new Response(JSON.stringify(PAGE), {
           status: 200,
@@ -113,4 +119,21 @@ test('saving a filter persists it to localStorage', async () => {
   expect(localStorage.getItem('tax-receipts:contributions-list:saved-filters')).toContain(
     'My dana filter',
   );
+});
+
+test('bulk edit: selecting a row shows the bar, and applying it posts to bulk-edit', async () => {
+  renderPage();
+  await screen.findByText('Dana Donor');
+
+  fireEvent.click(screen.getByLabelText('Select Dana Donor'));
+  expect(await screen.findByText('1 selected')).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText('Field to change'), { target: { value: 'Period id' } });
+  fireEvent.change(screen.getByLabelText('New value'), { target: { value: '67' } });
+  fireEvent.change(screen.getByLabelText('Reason (required)'), { target: { value: 'reassign period' } });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Apply to 1 row' }));
+
+  await waitFor(() => expect(calls.some((u) => u.endsWith('/bulk-edit'))).toBe(true));
+  expect(await screen.findByText(/1 succeeded, 0 failed/)).toBeInTheDocument();
 });
