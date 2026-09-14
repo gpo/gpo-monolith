@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { makeRouter } from '../router.js';
+import { ME, jsonResponse } from '../test/fixtures.js';
 
 let calls: string[] = [];
 
@@ -13,16 +14,9 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (url: string) => {
       calls.push(String(url));
-      if (String(url).includes('/spaces')) {
-        return new Response(JSON.stringify({ data: [] }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      return new Response(JSON.stringify({ error: 'not authenticated' }), {
-        status: 401,
-        headers: { 'content-type': 'application/json' },
-      });
+      if (String(url).includes('/auth/me')) return jsonResponse(ME);
+      if (String(url).includes('/spaces')) return jsonResponse({ data: [] });
+      return jsonResponse({ error: 'not authenticated' }, 401);
     }),
   );
 });

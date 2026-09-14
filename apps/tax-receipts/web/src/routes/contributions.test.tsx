@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { makeRouter } from '../router.js';
+import { ME, jsonResponse } from '../test/fixtures.js';
 
 const PAGE = {
   data: [
@@ -39,6 +40,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push(String(url));
+      if (String(url).includes('/auth/me')) return jsonResponse(ME);
       if (String(url).endsWith('/bulk-edit') && init?.method === 'POST') {
         return new Response(
           JSON.stringify({ results: [{ contributionId: 'c1', ok: true }], succeeded: 1, failed: 0 }),

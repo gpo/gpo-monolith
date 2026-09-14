@@ -4,12 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { makeRouter } from '../router.js';
+import { ME, jsonResponse } from '../test/fixtures.js';
 
 let calls: Array<{ url: string; method?: string; body?: string }> = [];
-
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-}
 
 beforeEach(() => {
   calls = [];
@@ -17,6 +14,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url: String(url), method: init?.method, body: init?.body as string | undefined });
+      if (String(url).includes('/auth/me')) return jsonResponse(ME);
       if (String(url).includes('/admin/periods')) return jsonResponse({ data: [] });
       if (String(url).includes('/admin/contribution-limits')) return jsonResponse({ data: [] });
       if (String(url).includes('/admin/business-day-calendars')) return jsonResponse({ data: [] });

@@ -78,6 +78,10 @@ CASL, keyed on role plus per-riding grants. Only the party CFO or an
 authorized designate may issue receipts, and a statutory kill switch
 (`assertIssuanceEnabled`) gates every issuance path.
 
+The web app's root layout (`web/src/router.tsx`) gates every route on
+`GET /auth/me`: while signed out it renders only the login form, and the nav
+shell and all app routes stay hidden until sign-in succeeds.
+
 ## What is faked in Phase 0
 
 - The Qomon transaction `metadata` field does not exist yet, so the

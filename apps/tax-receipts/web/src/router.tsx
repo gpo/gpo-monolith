@@ -1,18 +1,24 @@
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createRootRoute,
   createRoute,
   createRouter,
   Link,
   Outlet,
+  useNavigate,
   useParams,
+  useRouterState,
   type RouterHistory,
 } from '@tanstack/react-router';
-import { AppShell, Group, Text, Anchor } from '@mantine/core';
+import { AppShell, Button, Center, Group, Loader, Text, Anchor } from '@mantine/core';
+import { api } from './api.js';
 import { AdminPage } from './routes/admin.js';
 import { ChangeLogPage } from './routes/change-log.js';
 import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
+import { DevToolsPage } from './routes/dev-tools.js';
 import { LoginPage } from './routes/login.js';
 import { WorkQueuePage } from './routes/work-queue.js';
 
@@ -21,6 +27,39 @@ const rootRoute = createRootRoute({
 });
 
 function RootLayout() {
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false });
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  // Signed-in users shouldn't land back on the login form.
+  useEffect(() => {
+    if (me.data && pathname === '/login') {
+      void navigate({ to: '/' });
+    }
+  }, [me.data, pathname, navigate]);
+
+  if (me.isLoading) {
+    return (
+      <Center h="100vh">
+        <Loader />
+      </Center>
+    );
+  }
+
+  if (!me.data) {
+    return (
+      <Center h="100vh">
+        <LoginPage />
+      </Center>
+    );
+  }
+
+  async function signOut() {
+    await api.logout();
+    await qc.invalidateQueries({ queryKey: ['me'] });
+  }
+
   return (
     <AppShell header={{ height: 56 }} padding="md">
       <AppShell.Header>
@@ -42,9 +81,14 @@ function RootLayout() {
             <Anchor component={Link} to="/admin">
               Admin
             </Anchor>
-            <Anchor component={Link} to="/login">
-              Sign in
-            </Anchor>
+            {import.meta.env.DEV && (
+              <Anchor component={Link} to="/dev-tools">
+                Dev tools
+              </Anchor>
+            )}
+            <Button variant="subtle" onClick={signOut}>
+              Sign out
+            </Button>
           </Group>
         </Group>
       </AppShell.Header>
@@ -100,6 +144,12 @@ const adminRoute = createRoute({
   component: AdminPage,
 });
 
+const devToolsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/dev-tools',
+  component: DevToolsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -108,6 +158,7 @@ const routeTree = rootRoute.addChildren([
   workQueueRoute,
   changeLogRoute,
   adminRoute,
+  ...(import.meta.env.DEV ? [devToolsRoute] : []),
 ]);
 
 export function makeRouter(history?: RouterHistory) {

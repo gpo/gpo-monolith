@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { makeRouter } from '../router.js';
+import { ME, jsonResponse } from '../test/fixtures.js';
 
 const VALIDATION_PAGE = {
   data: [
@@ -35,6 +36,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url: String(url), body: init?.body as string | undefined });
+      if (String(url).includes('/auth/me')) return jsonResponse(ME);
       if (String(url).endsWith('/resolve') && init?.method === 'POST') {
         return new Response(JSON.stringify({ ...VALIDATION_PAGE.data[0], status: 'RESOLVED' }), {
           status: 200,

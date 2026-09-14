@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
-  Alert,
   Badge,
   Card,
   Loader,
@@ -30,18 +29,11 @@ function stageColor(stage: string): string {
 }
 
 export function DashboardPage() {
-  const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false });
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: api.listSpaces });
 
   return (
     <Stack gap="lg">
       <Title order={2}>Spaces</Title>
-
-      {!me.isLoading && !me.data && (
-        <Alert color="blue" variant="light">
-          Not signed in. Use the Sign in link.
-        </Alert>
-      )}
 
       {spaces.isLoading ? (
         <Loader />

@@ -245,6 +245,17 @@ export interface BusinessDayCalendarRow {
   holidays: string[];
 }
 
+export interface SweepResult {
+  mode: 'incremental' | 'full';
+  pulled: number;
+  created: number;
+  refreshed: number;
+  diffQueued: number;
+  unchanged: number;
+  syncIncidents: number;
+  hasMore: boolean;
+}
+
 export interface AdminUserRow {
   id: string;
   name: string;
@@ -329,4 +340,9 @@ export const api = {
     ),
   changeLogExportUrl: (filters: Omit<ChangeLogFilters, 'cursor'> = {}) =>
     `${BASE}/change-log/export${filtersToQuery(filters)}`,
+  syncSweep: (mode?: 'incremental' | 'full') =>
+    request<SweepResult>('/internal/sync/sweep', {
+      method: 'POST',
+      body: JSON.stringify(mode ? { mode } : {}),
+    }),
 };

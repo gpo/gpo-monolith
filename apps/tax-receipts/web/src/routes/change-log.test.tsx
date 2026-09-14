@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { makeRouter } from '../router.js';
+import { ME, jsonResponse } from '../test/fixtures.js';
 
 const PAGE = {
   data: [
@@ -31,6 +32,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (url: string) => {
       calls.push(String(url));
+      if (String(url).includes('/auth/me')) return jsonResponse(ME);
       if (String(url).includes('/change-log')) {
         return new Response(JSON.stringify(PAGE), {
           status: 200,
