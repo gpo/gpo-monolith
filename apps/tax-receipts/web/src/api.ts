@@ -245,6 +245,12 @@ export interface BusinessDayCalendarRow {
   holidays: string[];
 }
 
+export interface ContactFetchFailure {
+  qomonTransactionId: string;
+  qomonContactId: number;
+  message: string;
+}
+
 export interface SweepResult {
   mode: 'incremental' | 'full';
   pulled: number;
@@ -254,6 +260,7 @@ export interface SweepResult {
   unchanged: number;
   syncIncidents: number;
   hasMore: boolean;
+  contactFetchFailures: ContactFetchFailure[];
 }
 
 export interface AdminUserRow {

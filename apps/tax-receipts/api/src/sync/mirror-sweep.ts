@@ -8,13 +8,14 @@ import {
   type PeriodRow,
   type QomonMetadataEnvelope,
 } from '@gpo/tax-receipts-core';
-import type {
-  ChangeCursor,
-  ChangedTransaction,
-  ChangeFeedSource,
-  QomonApi,
-  QomonContact,
-  QomonTransaction,
+import {
+  QomonNotFoundError,
+  type ChangeCursor,
+  type ChangedTransaction,
+  type ChangeFeedSource,
+  type QomonApi,
+  type QomonContact,
+  type QomonTransaction,
 } from '@gpo/qomon-client';
 import { withChangeLog } from '../changelog/write.js';
 import { descriptiveToRow, isReceiptedOrReported } from '../contributions/metadata-cache.js';
@@ -57,6 +58,12 @@ export interface MirrorSweepOptions {
   limit?: number;
 }
 
+export interface ContactFetchFailure {
+  qomonTransactionId: string;
+  qomonContactId: number;
+  message: string;
+}
+
 export interface MirrorSweepResult {
   mode: 'incremental' | 'full';
   pulled: number;
@@ -67,6 +74,11 @@ export interface MirrorSweepResult {
   syncIncidents: number;
   cursor: ChangeCursor;
   hasMore: boolean;
+  /** Transactions skipped this pass because Qomon 404'd their contact
+   *  (dangling contact_id — see `ensureContact`). Not lost: an incremental
+   *  sweep's cursor moves past them, but a `full` sweep re-pulls the whole
+   *  feed and will retry every one of these until the contact resolves. */
+  contactFetchFailures: ContactFetchFailure[];
 }
 
 const REASON_NEW_STUB = 'mirror sweep: new transaction, ticket-1.1 intake defaults applied';
@@ -101,13 +113,30 @@ export async function runMirrorSweep(
   let refreshed = 0;
   let diffQueued = 0;
   let unchanged = 0;
+  const contactFetchFailures: ContactFetchFailure[] = [];
 
   for (const change of batch.changes) {
-    const outcome = await ingestChange(prisma, qomon, periods, statusKindById, change);
-    if (outcome === 'created') created += 1;
-    else if (outcome === 'refreshed') refreshed += 1;
-    else if (outcome === 'diff-queued') diffQueued += 1;
-    else unchanged += 1;
+    try {
+      const outcome = await ingestChange(prisma, qomon, periods, statusKindById, change);
+      if (outcome === 'created') created += 1;
+      else if (outcome === 'refreshed') refreshed += 1;
+      else if (outcome === 'diff-queued') diffQueued += 1;
+      else unchanged += 1;
+    } catch (err) {
+      // A dangling contact_id (Qomon 404s the contact a transaction points
+      // at) shouldn't take the whole batch down with it — every other
+      // change in this pull is still good. Skip and report; see
+      // ContactFetchFailure above for how this transaction gets retried.
+      if (err instanceof QomonNotFoundError) {
+        contactFetchFailures.push({
+          qomonTransactionId: String(change.transaction.id),
+          qomonContactId: change.transaction.contact_id,
+          message: err.message,
+        });
+        continue;
+      }
+      throw err;
+    }
   }
 
   let syncIncidents = 0;
@@ -128,6 +157,7 @@ export async function runMirrorSweep(
     syncIncidents,
     cursor: batch.cursor,
     hasMore: batch.hasMore,
+    contactFetchFailures,
   };
 }
 

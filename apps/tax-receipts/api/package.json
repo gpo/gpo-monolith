@@ -8,13 +8,13 @@
     "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
     "test": "prisma generate && vitest run",
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --env-file=.env src/server.ts",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "migrate:dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:reset": "prisma migrate reset --force",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx --env-file=.env prisma/seed.ts"
   },
   "dependencies": {
     "@casl/ability": "^6.7.3",

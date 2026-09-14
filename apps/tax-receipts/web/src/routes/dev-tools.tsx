@@ -47,6 +47,22 @@ export function DevToolsPage() {
             <Alert color="red">{sweep.error.message}</Alert>
           )}
           {sweep.isSuccess && <SweepSummary result={sweep.data} />}
+          {sweep.isSuccess && sweep.data.contactFetchFailures.length > 0 && (
+            <Alert color="orange">
+              <Text size="sm" fw={600}>
+                {sweep.data.contactFetchFailures.length} transaction(s) skipped — Qomon 404'd
+                their contact:
+              </Text>
+              {sweep.data.contactFetchFailures.map((f) => (
+                <Text size="sm" key={f.qomonTransactionId}>
+                  transaction {f.qomonTransactionId} (contact {f.qomonContactId}): {f.message}
+                </Text>
+              ))}
+              <Text size="sm" c="dimmed">
+                Not lost — a full sweep retries these until the contact resolves.
+              </Text>
+            </Alert>
+          )}
         </Stack>
       </Card>
     </Stack>

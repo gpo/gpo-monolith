@@ -78,6 +78,33 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
     expect(await prisma.contribution.count()).toBe(2);
   });
 
+  it('skips a transaction whose contact 404s in Qomon instead of failing the whole sweep, and still mirrors the rest', async () => {
+    const qomon = new InMemoryQomon();
+    qomon.seedContact({ id: 501, firstname: 'Dana', surname: 'Donor', mail: 'dana@example.org' });
+    qomon.seedBundle({
+      transactions: [
+        // 999 is never seeded: Qomon 404s it, e.g. the contact was deleted
+        // after the transaction was created.
+        { contact_id: 999, amount: 2_500, date: '2026-03-01T12:00:00.000Z', status_id: 1 },
+      ],
+    });
+    qomon.seedBundle({
+      CreatedAt: '2026-03-02T00:00:00.000Z',
+      UpdatedAt: '2026-03-02T00:00:00.000Z',
+      transactions: [{ contact_id: 501, amount: 5_000, date: '2026-03-02T12:00:00.000Z', status_id: 1 }],
+    });
+    const feed = new QomonPollChangeFeed(qomon);
+
+    const result = await runMirrorSweep({ prisma, feed, qomon });
+
+    expect(result.created).toBe(1);
+    expect(result.contactFetchFailures).toEqual([
+      { qomonTransactionId: expect.any(String), qomonContactId: 999, message: expect.stringContaining('contact not found') },
+    ]);
+    expect(await prisma.contribution.count()).toBe(1);
+    expect((await prisma.contribution.findFirst())?.amountCents).toBe(5_000);
+  });
+
   it('mirrors a new transaction without metadata when no period covers its acceptance date, and flags it', async () => {
     const qomon = new InMemoryQomon();
     qomon.seedContact({ id: 9, firstname: 'Out', surname: 'OfRange' });
