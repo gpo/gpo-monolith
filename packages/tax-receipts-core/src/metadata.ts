@@ -3,15 +3,15 @@ import { z } from 'zod';
 import { EntityKind, ReceivedBy } from './enums.js';
 
 /**
- * The Qomon transaction `metadata` JSON object (data-model §3). Qomon is the
- * source of truth for this object (D4); the tool caches it and writes the
- * WHOLE object on every edit (no partial merges).
- *
- * `v` gates schema evolution: unknown versions are read-only to the tool.
+ * The tool's own descriptive fields for a contribution (data-model §3).
+ * Six of these round-trip through Qomon's `extra_json` custom fields on the
+ * transaction (see @gpo/qomon-client's transaction-extra-fields.ts for the
+ * mapping and which six); the rest — `received_by`, `eo_contributor_id`,
+ * `exception_reason`, `non_deductible_cents`, `external_ref` — have no Qomon
+ * counterpart and are tool-local only, cached here regardless so the whole
+ * object stays the unit of local storage, editing, and checksumming.
  */
 
-/** Descriptive fields only: the subset the `checksum` covers and the sweep
- *  compares to detect edits made by other writers (data-model §3, §5). */
 export const GpoMetadataDescriptive = z.object({
   period_id: z.number().int(),
   riding_number: z.number().int().min(1).max(124).nullable(),
@@ -26,36 +26,6 @@ export const GpoMetadataDescriptive = z.object({
   external_ref: z.string().nullable(),
 });
 export type GpoMetadataDescriptive = z.infer<typeof GpoMetadataDescriptive>;
-
-/** Denormalized echoes for staff reading inside Qomon. The tool NEVER reads
- *  these back as truth (data-model §3). */
-export const GpoMetadataEchoes = z.object({
-  rtd: z
-    .object({ filing: z.string(), reported_at: z.string() })
-    .nullable()
-    .optional(),
-  receipts: z
-    .array(
-      z.object({
-        no: z.string(),
-        status: z.string(),
-        amount_cents: z.number().int(),
-      }),
-    )
-    .optional(),
-  synced_at: z.string().datetime().optional(),
-  checksum: z.string().optional(),
-});
-export type GpoMetadataEchoes = z.infer<typeof GpoMetadataEchoes>;
-
-export const GpoMetadata = GpoMetadataDescriptive.merge(GpoMetadataEchoes);
-export type GpoMetadata = z.infer<typeof GpoMetadata>;
-
-export const QomonMetadataEnvelope = z.object({
-  v: z.literal(1),
-  gpo: GpoMetadata,
-});
-export type QomonMetadataEnvelope = z.infer<typeof QomonMetadataEnvelope>;
 
 /** Order is fixed so the checksum is stable regardless of key order in the
  *  source object. */
@@ -86,28 +56,6 @@ export function computeMetadataChecksum(m: GpoMetadataDescriptive): string {
     .update(canonicalDescriptiveJson(m))
     .digest('hex');
   return `sha256:${hash}`;
-}
-
-export interface BuildMetadataInput {
-  descriptive: GpoMetadataDescriptive;
-  echoes?: Omit<GpoMetadataEchoes, 'checksum'>;
-  syncedAt?: Date;
-}
-
-/** Produce the whole `{ v, gpo }` object to PATCH onto a Qomon bundle. */
-export function buildMetadataEnvelope(
-  input: BuildMetadataInput,
-): QomonMetadataEnvelope {
-  const checksum = computeMetadataChecksum(input.descriptive);
-  return {
-    v: 1,
-    gpo: {
-      ...input.descriptive,
-      ...input.echoes,
-      synced_at: (input.syncedAt ?? new Date()).toISOString(),
-      checksum,
-    },
-  };
 }
 
 /** True when the descriptive content of a freshly fetched object differs from

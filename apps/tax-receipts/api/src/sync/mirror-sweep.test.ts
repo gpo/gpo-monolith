@@ -258,7 +258,7 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
     expect(second).toMatchObject({ pulled: 0, created: 0, refreshed: 0, diffQueued: 0, unchanged: 0 });
   });
 
-  it('caches metadata directly from an already-present Qomon `metadata` field on first sight, deriving nothing', async () => {
+  it('caches the six Qomon-synced fields directly from an already-present `extra_json`, defaulting the tool-local fields (period_id/riding_number/entity_kind/goods_services/processed_date/source_code sync through Qomon; received_by/non_deductible_cents/eo_contributor_id/exception_reason/external_ref do not)', async () => {
     const qomon = new InMemoryQomon();
     qomon.seedContact({ id: 14, firstname: 'Al', surname: 'Ready' });
     qomon.seedBundle({
@@ -268,21 +268,13 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
           amount: 3_000,
           date: '2026-03-05T00:00:00.000Z',
           status_id: 1,
-          metadata: {
-            v: 1,
-            gpo: {
-              period_id: baseline.periodId,
-              riding_number: 84,
-              entity_kind: 'CA',
-              received_by: 'ENTITY',
-              goods_services: false,
-              non_deductible_cents: 0,
-              processed_date: null,
-              source_code: 'subspace:84',
-              eo_contributor_id: null,
-              exception_reason: null,
-              external_ref: null,
-            },
+          extra_json: {
+            'Source Code': 'subspace:84',
+            'Accounting Deposit Date': null,
+            'EO Contribution Period': String(baseline.periodId),
+            'Contribution Type': 'Monetary',
+            'Political Entity Type': 'Association',
+            'Electoral District (Riding) Number': '084',
           },
         },
       ],
@@ -294,8 +286,10 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
     expect(contribution?.metadata).toMatchObject({
       ridingNumber: 84,
       entityKind: 'CA',
-      receivedBy: 'ENTITY',
       sourceCode: 'subspace:84',
+      // no Qomon counterpart exists for received_by; defaults GPO same as
+      // intake-derivation (intake/defaults.ts), not read from extra_json
+      receivedBy: 'GPO',
     });
     expect(contribution?.metadata?.checksum).not.toBeNull();
   });

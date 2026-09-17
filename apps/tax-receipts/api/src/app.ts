@@ -1,4 +1,4 @@
-import type { QomonApi } from '@gpo/qomon-client';
+import { QomonError, type QomonApi } from '@gpo/qomon-client';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import {
   serializerCompiler,
@@ -79,6 +79,22 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
       return reply.code(400).send({ error: error.message });
     }
     if (error instanceof QomonWriteRejectedError || error instanceof QomonWriteUnconfirmedError) {
+      const cause = error.cause instanceof QomonError ? error.cause : undefined;
+      request.log.error(
+        {
+          err: error,
+          qomon: cause
+            ? {
+                kind: cause.name,
+                message: cause.message,
+                ...cause.context,
+              }
+            : undefined,
+          unconfirmed:
+            error instanceof QomonWriteUnconfirmedError ? error.diagnostics : undefined,
+        },
+        'Qomon metadata write-through failed',
+      );
       return reply.code(502).send({ error: error.message });
     }
     if (error.validation) {

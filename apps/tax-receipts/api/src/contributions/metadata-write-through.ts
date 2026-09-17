@@ -1,10 +1,10 @@
+import { computeMetadataChecksum, type GpoMetadataDescriptive } from '@gpo/tax-receipts-core';
 import {
-  buildMetadataEnvelope,
-  computeMetadataChecksum,
-  descriptiveChanged,
-  type GpoMetadataDescriptive,
-} from '@gpo/tax-receipts-core';
-import type { QomonApi } from '@gpo/qomon-client';
+  qomonToSyncedFields,
+  syncedFieldsChanged,
+  type QomonApi,
+  type QomonSyncedFields,
+} from '@gpo/qomon-client';
 import { withChangeLog } from '../changelog/write.js';
 import { runValidationForContribution } from '../validation/run.js';
 import { descriptiveToRow, isReceiptedOrReported } from './metadata-cache.js';
@@ -13,11 +13,12 @@ import type { ContributionMetadata, PrismaClient } from '../generated/prisma/ind
 /**
  * Metadata write-through (ticket 1.2, data-model §5 "Tool edit (write-first,
  * Qomon is truth)", D4). Qomon is written to FIRST, in its entirety (no
- * partial merges — the checksum covers the whole descriptive object, so a
- * partial write would silently corrupt drift detection); only once Qomon
- * confirms does the cache/snapshot/change-log commit locally, in one
- * transaction. If the Qomon write fails, or its echo doesn't match what was
- * sent, nothing local changes and the edit is rejected, visibly.
+ * partial merges of this tool's own six Qomon-synced fields — see
+ * @gpo/qomon-client's transaction-extra-fields.ts for which fields those are
+ * and why the other five stay tool-local); only once Qomon confirms does the
+ * cache/snapshot/change-log commit locally, in one transaction. If the Qomon
+ * write fails, or its echo doesn't match what was sent, nothing local
+ * changes and the edit is rejected, visibly.
  *
  * Crash-consistency: if the process dies between a confirmed Qomon write and
  * the local commit, nothing is lost — the next mirror sweep (1.1) reads
@@ -60,7 +61,16 @@ export class QomonWriteRejectedError extends Error {
  *  match what was sent. Refuses to cache an unconfirmed write. */
 export class QomonWriteUnconfirmedError extends Error {
   readonly statusCode = 502;
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly diagnostics: {
+      sent: QomonSyncedFields;
+      transactionId: number;
+      returnedTransactionIds: number[];
+      matchedTransaction: unknown;
+      echoed: unknown;
+    },
+  ) {
     super(message);
     this.name = 'QomonWriteUnconfirmedError';
   }
@@ -88,7 +98,7 @@ export async function writeContributionMetadata(
 
   const contribution = await prisma.contribution.findUnique({
     where: { id: input.contributionId },
-    include: { metadata: true },
+    include: { metadata: true, contact: true },
   });
   if (!contribution) throw new ContributionNotFoundError(input.contributionId);
 
@@ -98,7 +108,14 @@ export async function writeContributionMetadata(
     );
   }
 
-  const envelope = buildMetadataEnvelope({ descriptive: input.descriptive });
+  const syncedFields: QomonSyncedFields = {
+    period_id: input.descriptive.period_id,
+    riding_number: input.descriptive.riding_number,
+    entity_kind: input.descriptive.entity_kind,
+    goods_services: input.descriptive.goods_services,
+    processed_date: input.descriptive.processed_date,
+    source_code: input.descriptive.source_code,
+  };
   const bundleId =
     contribution.qomonBundleId != null ? Number(contribution.qomonBundleId) : null;
   if (bundleId === null) {
@@ -107,27 +124,38 @@ export async function writeContributionMetadata(
     );
   }
 
-  let patchedBundle;
+  let confirmedBundle;
   try {
-    patchedBundle = await qomon.writeTransactionMetadata(
+    confirmedBundle = await qomon.writeTransactionMetadata(
       bundleId,
       Number(contribution.qomonTransactionId),
-      envelope,
+      syncedFields,
+      {
+        amount: contribution.amountCents,
+        currency: contribution.currency,
+        contact_id: Number(contribution.contact.qomonContactId),
+        date: contribution.acceptedAt.toISOString(),
+        payment_method_kind: contribution.paymentMethodKind ?? undefined,
+      },
     );
   } catch (cause) {
     throw new QomonWriteRejectedError('Qomon rejected the metadata write', { cause });
   }
 
-  const echoed = patchedBundle.transactions.find(
-    (t) => t.id === Number(contribution.qomonTransactionId),
-  )?.metadata;
-  const confirmed =
-    echoed != null &&
-    echoed.v === 1 &&
-    !descriptiveChanged(envelope.gpo.checksum, echoed.gpo);
+  const transactionId = Number(contribution.qomonTransactionId);
+  const matched = confirmedBundle.transactions.find((t) => t.id === transactionId);
+  const echoed = qomonToSyncedFields(matched?.extra_json);
+  const confirmed = echoed != null && !syncedFieldsChanged(syncedFields, echoed);
   if (!confirmed) {
     throw new QomonWriteUnconfirmedError(
       'Qomon accepted the write but its echo did not match what was sent; not caching an unconfirmed edit',
+      {
+        sent: syncedFields,
+        transactionId,
+        returnedTransactionIds: confirmedBundle.transactions.map((t) => t.id),
+        matchedTransaction: matched,
+        echoed,
+      },
     );
   }
 

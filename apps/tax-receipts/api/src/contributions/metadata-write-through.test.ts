@@ -1,4 +1,5 @@
 import { InMemoryQomon } from '@gpo/qomon-client/fake';
+import { qomonToSyncedFields } from '@gpo/qomon-client';
 import { computeMetadataChecksum, type GpoMetadataDescriptive } from '@gpo/tax-receipts-core';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { issueReceipt, resetDb, seedBaseline, testPrisma } from '../test/db.js';
@@ -71,7 +72,7 @@ describe('metadata write-through (ticket 1.2, data-model §5 "Tool edit")', () =
     expect(result.checksum).toBe(computeMetadataChecksum(d));
 
     const bundle = await qomon.getTransactionBundle(Number(contribution.qomonBundleId));
-    expect(bundle.transactions[0]?.metadata?.gpo.riding_number).toBe(84);
+    expect(qomonToSyncedFields(bundle.transactions[0]?.extra_json)?.riding_number).toBe(84);
 
     const entries = await prisma.changeLogEntry.findMany({ where: { subjectType: 'ContributionMetadata' } });
     expect(entries).toHaveLength(1);
@@ -113,12 +114,12 @@ describe('metadata write-through (ticket 1.2, data-model §5 "Tool edit")', () =
   it('refuses to cache an edit whose Qomon echo does not confirm the write', async () => {
     const qomon = new InMemoryQomon();
     const { contribution } = await seedContribution(qomon);
-    // simulate a Qomon that silently drops part of the write: patch succeeds
-    // but returns a bundle whose transaction has no metadata at all
+    // simulate a Qomon whose write response can't be trusted as confirmation:
+    // the PATCH succeeds, but what comes back shows no extra_json at all
     const originalPatch = qomon.patchTransactionBundle.bind(qomon);
     qomon.patchTransactionBundle = async (patch) => {
       const result = await originalPatch(patch);
-      result.transactions = result.transactions.map((t) => ({ ...t, metadata: undefined }));
+      result.transactions = result.transactions.map((t) => ({ ...t, extra_json: undefined }));
       return result;
     };
 
@@ -151,7 +152,7 @@ describe('metadata write-through (ticket 1.2, data-model §5 "Tool edit")', () =
 
     // the Qomon side was never touched either: the block happens before the PATCH
     const bundle = await qomon.getTransactionBundle(Number(contribution.qomonBundleId));
-    expect(bundle.transactions[0]?.metadata).toBeUndefined();
+    expect(bundle.transactions[0]?.extra_json).toBeUndefined();
   });
 
   it('throws ContributionNotFoundError for an unknown id', async () => {

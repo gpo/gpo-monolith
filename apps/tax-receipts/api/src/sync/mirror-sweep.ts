@@ -2,26 +2,32 @@ import {
   computeContributionSyncHash,
   computeMetadataChecksum,
   deriveIntakeDefaults,
-  descriptiveChanged,
   type ContributionSyncFields,
+  type GpoMetadataDescriptive,
   type IntakeFlag,
   type PeriodRow,
-  type QomonMetadataEnvelope,
 } from '@gpo/tax-receipts-core';
 import {
   QomonNotFoundError,
+  qomonToSyncedFields,
+  syncedFieldsChanged,
   type ChangeCursor,
   type ChangedTransaction,
   type ChangeFeedSource,
   type QomonApi,
   type QomonContact,
+  type QomonSyncedFields,
   type QomonTransaction,
 } from '@gpo/qomon-client';
 import { withChangeLog } from '../changelog/write.js';
 import { descriptiveToRow, isReceiptedOrReported } from '../contributions/metadata-cache.js';
 import { runValidationForContribution } from '../validation/run.js';
 import type { Prisma } from '../generated/prisma/index.js';
-import type { ContributionStatusKind, PrismaClient } from '../generated/prisma/index.js';
+import type {
+  ContributionMetadata,
+  ContributionStatusKind,
+  PrismaClient,
+} from '../generated/prisma/index.js';
 
 /**
  * Mirror sweep (ticket 1.1, data-model §5): the inbound half of the Qomon
@@ -191,8 +197,9 @@ export async function ingestChange(
 
   const incoming = parseIncomingMetadata(transaction);
   const metadataMissing = existing.metadata === null;
-  const metadataChanged = existing.metadata
-    ? incoming !== null && descriptiveChanged(existing.metadata.checksum, incoming.gpo)
+  const cachedSynced = existing.metadata ? cachedRowToSyncedFields(existing.metadata) : null;
+  const metadataChanged = cachedSynced
+    ? incoming !== null && syncedFieldsChanged(cachedSynced, incoming)
     : incoming !== null;
   const transactionChanged = existing.syncHash !== syncHash;
 
@@ -231,13 +238,12 @@ export async function ingestChange(
   if (incoming && metadataChanged) {
     await withChangeLog(prisma, { userId: null, reason: REASON_REFRESH }, async (ctx) => {
       const before = existing.metadata;
+      const merged = mergeSyncedWithLocalDefaults(incoming, existing.metadata, existing.externalRef);
+      const row = descriptiveToRow(merged, computeMetadataChecksum(merged));
       const after = await ctx.tx.contributionMetadata.upsert({
         where: { contributionId: existing.id },
-        create: {
-          contributionId: existing.id,
-          ...descriptiveToRow(incoming.gpo, computeMetadataChecksum(incoming.gpo)),
-        },
-        update: descriptiveToRow(incoming.gpo, computeMetadataChecksum(incoming.gpo)),
+        create: { contributionId: existing.id, ...row },
+        update: row,
       });
       await ctx.log({
         subjectType: 'ContributionMetadata',
@@ -303,11 +309,9 @@ async function ingestNewContribution(
   const incoming = parseIncomingMetadata(transaction);
   if (incoming) {
     await withChangeLog(prisma, { userId: null, reason: REASON_NEW_FROM_QOMON }, async (ctx) => {
+      const merged = mergeSyncedWithLocalDefaults(incoming, null, externalRef);
       const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: contribution.id,
-          ...descriptiveToRow(incoming.gpo, computeMetadataChecksum(incoming.gpo)),
-        },
+        data: { contributionId: contribution.id, ...descriptiveToRow(merged, computeMetadataChecksum(merged)) },
       });
       await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
     });
@@ -526,10 +530,42 @@ function mirrorUpdateData(
   };
 }
 
-function parseIncomingMetadata(transaction: QomonTransaction): QomonMetadataEnvelope | null {
-  const m = transaction.metadata;
-  if (!m || m.v !== 1) return null;
-  return m;
+function parseIncomingMetadata(transaction: QomonTransaction): QomonSyncedFields | null {
+  return qomonToSyncedFields(transaction.extra_json);
+}
+
+/** The cached row's six Qomon-synced fields, for drift comparison against a
+ *  freshly-parsed incoming QomonSyncedFields (see
+ *  @gpo/qomon-client's transaction-extra-fields.ts). */
+function cachedRowToSyncedFields(row: ContributionMetadata): QomonSyncedFields {
+  return {
+    period_id: row.periodId,
+    riding_number: row.ridingNumber,
+    entity_kind: row.entityKind,
+    goods_services: row.goodsServices,
+    processed_date: row.processedDate ? row.processedDate.toISOString().slice(0, 10) : null,
+    source_code: row.sourceCode,
+  };
+}
+
+/** Combines Qomon's six synced fields with this tool's five local-only
+ *  fields (see transaction-extra-fields.ts) to produce a full descriptive
+ *  object to cache. Local-only fields come from the existing cached row when
+ *  there is one, or the same static defaults intake-derivation uses
+ *  (intake/defaults.ts) when there isn't — never guessed beyond that. */
+function mergeSyncedWithLocalDefaults(
+  synced: QomonSyncedFields,
+  cachedRow: ContributionMetadata | null,
+  externalRef: string | null,
+): GpoMetadataDescriptive {
+  return {
+    ...synced,
+    received_by: cachedRow?.receivedBy ?? 'GPO',
+    non_deductible_cents: cachedRow?.nonDeductibleCents ?? 0,
+    eo_contributor_id: cachedRow?.eoContributorId ?? null,
+    exception_reason: cachedRow?.exceptionReason ?? null,
+    external_ref: externalRef,
+  };
 }
 
 async function loadCursor(prisma: PrismaClient, feedKind: string): Promise<ChangeCursor | null> {

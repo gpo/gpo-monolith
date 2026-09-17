@@ -15,9 +15,105 @@ import {
   Table,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { api, ApiError, type MetadataEditInput } from '../api.js';
+
+/** Metadata field help text — kept next to the form so it stays in sync with
+ * what the fields actually do (packages/tax-receipts-core/src/metadata.ts). */
+const METADATA_HELP = {
+  entityKind:
+    'Who received the contribution: the party centrally (province-wide, no riding), a constituency association (tied to a riding), or a candidate’s campaign (tied to a riding).',
+  ridingNumber:
+    'Electoral district (1–124) this contribution is attributed to. Required for a constituency association or campaign; not applicable when the recipient is the party (rule A2).',
+  receivedBy:
+    'Who physically processed the contribution — independent of who it’s attributed to above. GPO: entered centrally by the party office. Entity: entered directly by a constituency association or campaign’s own CFO/subspace (this can happen even when the recipient kind above is Party, e.g. intake can’t yet always tell which subspace handled it).',
+  periodId: 'The receipting period (tax year) this contribution is attributed to.',
+  nonDeductibleCents:
+    'Portion of the amount that is not eligible for a tax receipt, e.g. the value of goods or services the donor received in exchange.',
+  goodsServices:
+    'Check if the donor received goods or services in exchange for this contribution — affects the non-deductible amount.',
+  sourceCode:
+    'Qomon/EO source code identifying the campaign or intake channel this contribution came in through; may also encode a riding number (rule A7).',
+} as const;
+
+/** Enum values stay PARTY/CA/CAMPAIGN on the wire (ContributionMetadata,
+ * packages/tax-receipts-core/src/enums.ts) — only the on-screen labels are
+ * natural language. */
+const RECIPIENT_KIND_OPTIONS = [
+  { value: 'PARTY', label: 'Party (province-wide)' },
+  { value: 'CA', label: 'Constituency association' },
+  { value: 'CAMPAIGN', label: 'Campaign' },
+];
+
+/** The ENTITY label for PARTY deliberately does NOT say "Party (central)" —
+ * receivedBy tracks processing provenance (who entered it), not attribution.
+ * ENTITY means "a subspace/CFO entry, not GPO centrally," which can be true
+ * even when the recipient kind above is Party (intake defaults entity_kind
+ * to PARTY whenever it can't yet identify the real subspace — see
+ * packages/tax-receipts-core/src/intake/defaults.ts, invariant 8). Labelling
+ * it as if it meant "the party" would claim the opposite of what it means. */
+function receivedByOptions(entityKind: string): { value: string; label: string }[] {
+  const entityLabel =
+    entityKind === 'CA'
+      ? 'Constituency association'
+      : entityKind === 'CAMPAIGN'
+        ? 'Campaign'
+        : 'Entity / subspace entry (not GPO)';
+  return [
+    { value: 'GPO', label: 'GPO (party office, central)' },
+    { value: 'ENTITY', label: entityLabel },
+  ];
+}
+
+function FieldLabel({ label, help, required }: { label: string; help: string; required?: boolean }) {
+  return (
+    <Group gap={4} wrap="nowrap">
+      <Text component="span" size="sm" fw={500}>
+        {required && (
+          <Text component="span" c="red" span aria-hidden>
+            *{' '}
+          </Text>
+        )}
+        {label}
+      </Text>
+      <Tooltip label={help} multiline w={260} withArrow events={{ hover: true, focus: true, touch: true }}>
+        <ThemeIcon
+          component="span"
+          size={16}
+          radius="xl"
+          variant="light"
+          color="gray"
+          style={{ cursor: 'help' }}
+          tabIndex={0}
+          aria-label={`About ${label}`}
+        >
+          <Text size="10px" fw={700} span>
+            ?
+          </Text>
+        </ThemeIcon>
+      </Tooltip>
+    </Group>
+  );
+}
+
+/** Client-side mirror of rule A2 (checkA2RidingEntityConsistency in
+ * @gpo/tax-receipts-core) so the form can hint at the mismatch before save;
+ * the authoritative check still runs server-side post-save as a work item. */
+function a2RidingEntityWarning(
+  entityKind: string,
+  ridingNumber: number | null,
+): string | null {
+  if (entityKind === 'PARTY' && ridingNumber !== null) {
+    return 'Entity kind PARTY must not carry a riding number.';
+  }
+  if (entityKind !== 'PARTY' && ridingNumber === null) {
+    return `Entity kind ${entityKind} requires a riding number.`;
+  }
+  return null;
+}
 
 /**
  * Contribution detail (ticket 1.5, screens.md 3): Qomon facts read-only,
@@ -36,6 +132,7 @@ export function ContributionDetailPage({ id }: { id: string }) {
     queryKey: ['contribution', id],
     queryFn: () => api.getContribution(id),
   });
+  const periods = useQuery({ queryKey: ['admin-periods'], queryFn: api.listPeriods });
 
   const [reason, setReason] = useState('');
   const [form, setForm] = useState<Omit<MetadataEditInput, 'reason'> | null>(null);
@@ -61,6 +158,12 @@ export function ContributionDetailPage({ id }: { id: string }) {
           externalRef: detail.externalRef,
         }
       : null);
+
+  const periodOptions = periods.data?.data.map((p) => ({ value: String(p.id), label: p.name })) ?? [];
+  const periodSelectData =
+    activeForm && !periodOptions.some((o) => o.value === String(activeForm.periodId))
+      ? [...periodOptions, { value: String(activeForm.periodId), label: `Period ${activeForm.periodId} (not in list)` }]
+      : periodOptions;
 
   function updateForm<K extends keyof Omit<MetadataEditInput, 'reason'>>(
     key: K,
@@ -143,47 +246,68 @@ export function ContributionDetailPage({ id }: { id: string }) {
             </Text>
           ) : (
             <>
-              <Group grow>
-                <NumberInput
-                  label="Period id"
-                  value={activeForm.periodId}
-                  onChange={(v) => updateForm('periodId', typeof v === 'number' ? v : activeForm.periodId)}
+              <Group grow align="flex-start">
+                <NativeSelect
+                  label={<FieldLabel label="Recipient kind" help={METADATA_HELP.entityKind} />}
+                  data={RECIPIENT_KIND_OPTIONS}
+                  value={activeForm.entityKind}
+                  onChange={(e) => {
+                    const entityKind = e.currentTarget.value;
+                    setForm({
+                      ...activeForm,
+                      entityKind,
+                      // Rule A2: a party-level recipient never carries a riding number.
+                      ridingNumber: entityKind === 'PARTY' ? null : activeForm.ridingNumber,
+                    });
+                  }}
                 />
                 <NumberInput
-                  label="Riding number"
+                  label={
+                    <FieldLabel
+                      label="Riding number"
+                      help={METADATA_HELP.ridingNumber}
+                      required={activeForm.entityKind !== 'PARTY'}
+                    />
+                  }
                   min={1}
                   max={124}
+                  required={activeForm.entityKind !== 'PARTY'}
+                  withAsterisk={false}
+                  disabled={activeForm.entityKind === 'PARTY'}
+                  placeholder={activeForm.entityKind === 'PARTY' ? 'N/A for party' : undefined}
                   value={activeForm.ridingNumber ?? undefined}
                   onChange={(v) => updateForm('ridingNumber', typeof v === 'number' ? v : null)}
+                  error={a2RidingEntityWarning(activeForm.entityKind, activeForm.ridingNumber)}
                 />
                 <NativeSelect
-                  label="Entity kind"
-                  data={['PARTY', 'CA', 'CAMPAIGN']}
-                  value={activeForm.entityKind}
-                  onChange={(e) => updateForm('entityKind', e.currentTarget.value)}
-                />
-                <NativeSelect
-                  label="Received by"
-                  data={['GPO', 'ENTITY']}
+                  label={<FieldLabel label="Received by" help={METADATA_HELP.receivedBy} />}
+                  data={receivedByOptions(activeForm.entityKind)}
                   value={activeForm.receivedBy}
                   onChange={(e) => updateForm('receivedBy', e.currentTarget.value)}
+                />
+                <NativeSelect
+                  label={<FieldLabel label="Period" help={METADATA_HELP.periodId} />}
+                  data={periodSelectData}
+                  disabled={periods.isLoading}
+                  value={String(activeForm.periodId)}
+                  onChange={(e) => updateForm('periodId', Number(e.currentTarget.value))}
                 />
               </Group>
               <Group grow align="flex-end">
                 <NumberInput
-                  label="Non-deductible ($)"
+                  label={<FieldLabel label="Non-deductible ($)" help={METADATA_HELP.nonDeductibleCents} />}
                   value={activeForm.nonDeductibleCents / 100}
                   onChange={(v) =>
                     updateForm('nonDeductibleCents', typeof v === 'number' ? Math.round(v * 100) : 0)
                   }
                 />
                 <Checkbox
-                  label="Goods &amp; services"
+                  label={<FieldLabel label="Goods & services" help={METADATA_HELP.goodsServices} />}
                   checked={activeForm.goodsServices}
                   onChange={(e) => updateForm('goodsServices', e.currentTarget.checked)}
                 />
                 <TextInput
-                  label="Source code"
+                  label={<FieldLabel label="Source code" help={METADATA_HELP.sourceCode} />}
                   value={activeForm.sourceCode}
                   onChange={(e) => updateForm('sourceCode', e.currentTarget.value)}
                 />

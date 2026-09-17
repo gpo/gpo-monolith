@@ -1,4 +1,3 @@
-import type { QomonMetadataEnvelope } from '@gpo/tax-receipts-core';
 import type {
   QomonBundle,
   QomonCodeCampaign,
@@ -7,6 +6,7 @@ import type {
   QomonTransactionSettings,
   QomonTransactionStatus,
 } from './types.js';
+import type { QomonSyncedFields } from './transaction-extra-fields.js';
 
 export interface ListPage<T> {
   data: T[];
@@ -34,6 +34,18 @@ export interface CreateBundleInput {
   memberships?: Array<Record<string, unknown>>;
 }
 
+/** The transaction fields Qomon re-validates as required on every PATCH to an
+ *  existing item, metadata-only edits included (live sandbox fact, not
+ *  documented in qomon-api-reference: PATCH is additive across bundle items,
+ *  but each patched item must itself carry its required fields). */
+export interface TransactionCoreFields {
+  amount: number;
+  currency: string;
+  contact_id: number;
+  date: string;
+  payment_method_kind?: string;
+}
+
 /**
  * The contract the tool depends on. `QomonClient` (real REST) and
  * `InMemoryQomon` (contract-test fake) both implement it, and the contract
@@ -50,12 +62,22 @@ export interface QomonApi {
   listCodeCampaigns(): Promise<QomonCodeCampaign[]>;
   getTransactionSettings(): Promise<QomonTransactionSettings>;
 
-  /** Whole-object metadata write onto one transaction in a bundle (D4: the
-   *  tool always writes the entire object, never a partial merge). */
+  /** Writes this tool's synced descriptive fields onto one transaction's
+   *  `extra_json` (D4: the tool always writes the whole synced-field subset,
+   *  never a partial merge of ITS OWN fields). Internally reads the
+   *  transaction's current extra_json first and merges onto it, preserving
+   *  keys this tool doesn't own (Qomon staff-edited fields like "Target
+   *  Entity"), then re-reads after the write to return confirmed state:
+   *  Qomon's PATCH response never carries extra_json regardless of whether
+   *  the write succeeded (live sandbox fact), so it can't be trusted as an
+   *  echo. `core` must be the transaction's current amount/currency/contact/
+   *  date: Qomon re-validates the whole item on PATCH, so it has to be
+   *  resent even when only extra_json is changing. */
   writeTransactionMetadata(
     bundleId: number,
     transactionId: number,
-    metadata: QomonMetadataEnvelope,
+    syncedFields: QomonSyncedFields,
+    core: TransactionCoreFields,
   ): Promise<QomonBundle>;
 
   /** Synchronous create; returns the new contact id in one round trip. */

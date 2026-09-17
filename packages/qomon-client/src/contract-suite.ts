@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildMetadataEnvelope } from '@gpo/tax-receipts-core';
 import type { QomonApi } from './api.js';
 import { collectBundles, paginateBundles } from './pagination.js';
 import { QomonPollChangeFeed } from './ingestion-source.js';
+import { qomonToSyncedFields, type QomonSyncedFields } from './transaction-extra-fields.js';
 
 /**
  * The Qomon contract. Runs against the in-memory fake in CI (no network) and
@@ -89,25 +89,26 @@ export function runQomonContractSuite(
       const h = await setup();
       if (!h.metadataSupported) return;
       const { bundleId, transactionId } = await h.makeBundle();
-      const envelope = buildMetadataEnvelope({
-        descriptive: {
-          period_id: 67,
-          riding_number: 84,
-          entity_kind: 'CA',
-          received_by: 'GPO',
-          goods_services: false,
-          non_deductible_cents: 0,
-          processed_date: null,
-          source_code: 'contract:test',
-          eo_contributor_id: null,
-          exception_reason: null,
-          external_ref: null,
-        },
+      const before = await h.api.getTransactionBundle(bundleId);
+      const existing = before.transactions.find((t) => t.id === transactionId)!;
+      const syncedFields: QomonSyncedFields = {
+        period_id: 67,
+        riding_number: 84,
+        entity_kind: 'CA',
+        goods_services: false,
+        processed_date: null,
+        source_code: 'contract:test',
+      };
+      await h.api.writeTransactionMetadata(bundleId, transactionId, syncedFields, {
+        amount: existing.amount,
+        currency: existing.currency,
+        contact_id: existing.contact_id,
+        date: existing.date,
+        payment_method_kind: existing.payment_method_kind ?? undefined,
       });
-      await h.api.writeTransactionMetadata(bundleId, transactionId, envelope);
       const after = await h.api.getTransactionBundle(bundleId);
       const tx = after.transactions.find((t) => t.id === transactionId);
-      expect(tx?.metadata?.gpo.checksum).toBe(envelope.gpo.checksum);
+      expect(qomonToSyncedFields(tx?.extra_json)).toEqual(syncedFields);
     });
 
     it('the poll change feed reports new work and then catches up', async () => {
