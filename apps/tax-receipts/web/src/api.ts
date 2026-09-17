@@ -263,6 +263,15 @@ export interface SweepResult {
   contactFetchFailures: ContactFetchFailure[];
 }
 
+export interface RidingRow {
+  ridingNumber: number;
+  name: string;
+  qomonApiBase: string | null;
+  active: boolean;
+  qomonApiKeySet: boolean;
+  updatedAt: string;
+}
+
 export interface AdminUserRow {
   id: string;
   name: string;
@@ -347,9 +356,22 @@ export const api = {
     ),
   changeLogExportUrl: (filters: Omit<ChangeLogFilters, 'cursor'> = {}) =>
     `${BASE}/change-log/export${filtersToQuery(filters)}`,
-  syncSweep: (mode?: 'incremental' | 'full') =>
+  syncSweep: (mode?: 'incremental' | 'full', ridingNumber?: number) =>
     request<SweepResult>('/internal/sync/sweep', {
       method: 'POST',
-      body: JSON.stringify(mode ? { mode } : {}),
+      body: JSON.stringify({ ...(mode ? { mode } : {}), ...(ridingNumber ? { ridingNumber } : {}) }),
     }),
+  listRidings: () => request<{ data: RidingRow[] }>('/admin/ridings'),
+  saveRiding: (
+    ridingNumber: number,
+    input: { name: string; qomonApiKey: string; qomonApiBase?: string | null; active?: boolean },
+  ) =>
+    request<RidingRow>(`/admin/ridings/${ridingNumber}`, { method: 'PUT', body: JSON.stringify(input) }),
+  updateRiding: (
+    ridingNumber: number,
+    input: Partial<{ name: string; qomonApiKey: string; qomonApiBase: string | null; active: boolean }>,
+  ) =>
+    request<RidingRow>(`/admin/ridings/${ridingNumber}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  deleteRiding: (ridingNumber: number) =>
+    request<void>(`/admin/ridings/${ridingNumber}`, { method: 'DELETE' }),
 };

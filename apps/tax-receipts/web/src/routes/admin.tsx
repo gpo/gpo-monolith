@@ -16,20 +16,20 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { api } from '../api.js';
+import { api, type RidingRow } from '../api.js';
 
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
- * ContributionLimit buckets, users/roles, the RTD holiday calendar, and the
- * kill switch. All writes are sysadmin-only server-side; a 403 here just
- * means "ask a sysadmin."
+ * ContributionLimit buckets, users/roles, the RTD holiday calendar,
+ * per-riding Qomon spaces, and the kill switch. All writes are sysadmin-only
+ * server-side; a 403 here just means "ask a sysadmin."
  *
  * Not built: the receipt letter template (Phase 3, no template system
  * exists) and RTD "CFO name" / sign-off threshold (no schema field or spec
  * value for either — see api/src/routes/admin.ts).
  */
 
-const SECTIONS = ['Periods', 'Contribution limits', 'RTD holidays', 'Users', 'Kill switch'] as const;
+const SECTIONS = ['Periods', 'Contribution limits', 'RTD holidays', 'Ridings', 'Users', 'Kill switch'] as const;
 type Section = (typeof SECTIONS)[number];
 
 function KillSwitchSection() {
@@ -309,6 +309,113 @@ function HolidaysSection() {
   );
 }
 
+function RidingsSection() {
+  const qc = useQueryClient();
+  const ridings = useQuery({ queryKey: ['admin-ridings'], queryFn: api.listRidings });
+  const [form, setForm] = useState({ ridingNumber: '', name: '', qomonApiKey: '', qomonApiBase: '' });
+  const save = useMutation({
+    mutationFn: () =>
+      api.saveRiding(Number(form.ridingNumber), {
+        name: form.name,
+        qomonApiKey: form.qomonApiKey,
+        qomonApiBase: form.qomonApiBase || null,
+      }),
+    onSuccess: () => {
+      setForm({ ridingNumber: '', name: '', qomonApiKey: '', qomonApiBase: '' });
+      return qc.invalidateQueries({ queryKey: ['admin-ridings'] });
+    },
+  });
+  const toggleActive = useMutation({
+    mutationFn: ({ riding, active }: { riding: RidingRow; active: boolean }) =>
+      api.updateRiding(riding.ridingNumber, { active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-ridings'] }),
+  });
+  const remove = useMutation({
+    mutationFn: (ridingNumber: number) => api.deleteRiding(ridingNumber),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-ridings'] }),
+  });
+
+  return (
+    <Card withBorder>
+      <Stack gap="sm">
+        <Text fw={600}>Ridings (per-riding Qomon spaces)</Text>
+        <Text size="sm" c="dimmed">
+          A riding here runs its own Qomon space, separate from the party-level space
+          (QOMON_API_KEY). A mirror sweep can target one by riding number instead of the
+          party space (see Dev tools). The API key is never shown again once saved.
+        </Text>
+        {ridings.isLoading ? (
+          <Loader />
+        ) : (
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Riding #</Table.Th>
+                <Table.Th>Name</Table.Th>
+                <Table.Th>Api base</Table.Th>
+                <Table.Th>Key on file</Table.Th>
+                <Table.Th>Active</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {ridings.data?.data.map((r) => (
+                <Table.Tr key={r.ridingNumber}>
+                  <Table.Td>{r.ridingNumber}</Table.Td>
+                  <Table.Td>{r.name}</Table.Td>
+                  <Table.Td>{r.qomonApiBase ?? '(default)'}</Table.Td>
+                  <Table.Td>{r.qomonApiKeySet ? 'yes' : '—'}</Table.Td>
+                  <Table.Td>
+                    <Checkbox
+                      checked={r.active}
+                      onChange={(e) => toggleActive.mutate({ riding: r, active: e.currentTarget.checked })}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <Button size="xs" color="red" variant="subtle" onClick={() => remove.mutate(r.ridingNumber)}>
+                      Remove
+                    </Button>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+        <Text size="sm" fw={600} mt="sm">
+          Add or replace a riding's space (re-enter the key even when only changing the name)
+        </Text>
+        <Group grow>
+          <NumberInput
+            label="Riding # (1-124)"
+            value={form.ridingNumber}
+            onChange={(v) => setForm({ ...form, ridingNumber: String(v ?? '') })}
+          />
+          <TextInput label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.currentTarget.value })} />
+          <TextInput
+            label="Qomon API key"
+            value={form.qomonApiKey}
+            onChange={(e) => setForm({ ...form, qomonApiKey: e.currentTarget.value })}
+          />
+          <TextInput
+            label="Qomon API base (optional)"
+            value={form.qomonApiBase}
+            onChange={(e) => setForm({ ...form, qomonApiBase: e.currentTarget.value })}
+          />
+        </Group>
+        <Group>
+          <Button
+            onClick={() => save.mutate()}
+            loading={save.isPending}
+            disabled={!form.ridingNumber || !form.name || !form.qomonApiKey}
+          >
+            Save riding
+          </Button>
+        </Group>
+      </Stack>
+    </Card>
+  );
+}
+
 function UsersSection() {
   const qc = useQueryClient();
   const users = useQuery({ queryKey: ['admin-users'], queryFn: api.listUsers });
@@ -414,6 +521,7 @@ export function AdminPage() {
       {section === 'Periods' && <PeriodsSection />}
       {section === 'Contribution limits' && <ContributionLimitsSection />}
       {section === 'RTD holidays' && <HolidaysSection />}
+      {section === 'Ridings' && <RidingsSection />}
       {section === 'Users' && <UsersSection />}
       {section === 'Kill switch' && <KillSwitchSection />}
     </Stack>

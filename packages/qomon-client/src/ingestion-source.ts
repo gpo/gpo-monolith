@@ -43,12 +43,16 @@ function bundleChangedAt(b: QomonBundle): string {
 }
 
 export class QomonPollChangeFeed implements ChangeFeedSource {
-  readonly kind = 'qomon-poll';
+  readonly kind: string;
 
   constructor(
     private readonly api: Pick<QomonApi, 'listTransactionBundles'>,
-    private readonly opts: { pageSize?: number } = {},
-  ) {}
+    /** `kind` defaults to `'qomon-poll'`; pass one per Qomon space (e.g. a
+     *  riding's own space) so each gets its own SyncCursor. */
+    private readonly opts: { pageSize?: number; kind?: string } = {},
+  ) {
+    this.kind = opts.kind ?? 'qomon-poll';
+  }
 
   async pull(
     cursor: ChangeCursor | null,

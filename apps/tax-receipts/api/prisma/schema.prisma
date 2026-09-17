@@ -674,6 +674,26 @@ model SyncCursor {
   @@map("sync_cursor")
 }
 
+/// A riding-specific Qomon space (some ridings run their own Qomon account,
+/// separate from the party-level space configured by QOMON_API_KEY). One row
+/// per riding that needs its own credentials; a riding absent here has no
+/// space of its own and isn't sweepable individually. Not a data-model §2
+/// entity: sync bookkeeping/config, in the same vein as SyncCursor above.
+model Riding {
+  /// Ontario provincial riding number (1-124)
+  ridingNumber Int      @id
+  name         String
+  qomonApiKey  String
+  /// overrides the default QOMON_API_BASE when this riding's space lives on
+  /// a different host; null uses the default.
+  qomonApiBase String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("riding")
+}
+
 /// Stateful auth session store (ticket 0.5). Backs @fastify/session.
 model Session {
   sid       String   @id

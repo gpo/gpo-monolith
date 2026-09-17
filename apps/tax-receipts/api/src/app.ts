@@ -38,8 +38,14 @@ export interface BuildAppOptions {
   secureCookie?: boolean;
   trustProxy?: boolean;
   logger?: boolean;
-  /** when provided, registers the manual mirror-sweep trigger (ticket 1.1). */
+  /** the party-level Qomon space; the mirror-sweep trigger (ticket 1.1)
+   *  registers regardless, but a party sweep 404s without this. */
   qomon?: QomonApi;
+  /** default base URL for a riding's own Qomon space when the riding row
+   *  doesn't override it (see routes/sync.ts). */
+  qomonApiBase?: string;
+  /** overrides how a riding's own Qomon client is built (tests only). */
+  buildRidingQomon?: (riding: { qomonApiKey: string; qomonApiBase: string | null }) => QomonApi;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -122,7 +128,11 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(healthRoutes);
   await app.register(sessionRoutes);
   await app.register(killSwitchRoutes);
-  await app.register(syncRoutes, { qomon: opts.qomon });
+  await app.register(syncRoutes, {
+    qomon: opts.qomon,
+    qomonApiBase: opts.qomonApiBase,
+    buildRidingQomon: opts.buildRidingQomon,
+  });
   await app.register(contributionRoutes, { qomon: opts.qomon });
   await app.register(validationRoutes);
   await app.register(workItemRoutes);

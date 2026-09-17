@@ -9,11 +9,13 @@ import { runValidationForAllContributions } from '../validation/run.js';
 
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
- * ContributionLimit buckets, users/roles, and the RTD holiday calendar. All
- * writes are sysadmin-only (`administer`, the action `auth/abilities.ts`
- * already names for "users, periods, limits, kill switch" — sysadmin's
- * documented role, `enums.ts`: "full config + user admin"); reads need only
- * authentication, matching every other list route.
+ * ContributionLimit buckets, users/roles, the RTD holiday calendar, and
+ * per-riding Qomon spaces. All writes are sysadmin-only (`administer`, the
+ * action `auth/abilities.ts` already names for "users, periods, limits, kill
+ * switch" — sysadmin's documented role, `enums.ts`: "full config + user
+ * admin"); reads need only authentication, matching every other list route.
+ * The one exception is a riding's `qomonApiKey`: never round-tripped back
+ * out of a GET, sysadmin-only or not (see `redactRiding` below).
  *
  * Not built here: the receipt letter template (Phase 3 — no template
  * system exists yet, and template changes route through the EO
@@ -140,6 +142,94 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         update: { holidays: request.body.holidays },
       });
       return reply.send(row);
+    },
+  });
+
+  // ---- Ridings (per-riding Qomon spaces) -------------------------------
+
+  function redactRiding(riding: {
+    ridingNumber: number;
+    name: string;
+    qomonApiKey: string;
+    qomonApiBase: string | null;
+    active: boolean;
+    updatedAt: Date;
+  }) {
+    // the key itself is never round-tripped once set (same principle as
+    // User.passwordHash) — callers see only whether one is on file.
+    const { qomonApiKey, ...rest } = riding;
+    return { ...rest, qomonApiKeySet: qomonApiKey.length > 0 };
+  }
+
+  r.get('/admin/ridings', async (request, reply) => {
+    if (!request.user) return reply.code(401).send({ error: 'authentication required' });
+    const ridings = await app.prisma.riding.findMany({ orderBy: { ridingNumber: 'asc' } });
+    return reply.send({ data: ridings.map(redactRiding) });
+  });
+
+  const RidingBody = z.object({
+    name: z.string().min(1),
+    qomonApiKey: z.string().min(1),
+    qomonApiBase: z.string().url().nullish(),
+    active: z.boolean().default(true),
+  });
+
+  r.route({
+    method: 'PUT',
+    url: '/admin/ridings/:ridingNumber',
+    schema: {
+      params: z.object({ ridingNumber: z.coerce.number().int().min(1).max(124) }),
+      body: RidingBody,
+    },
+    handler: async (request, reply) => {
+      const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const { ridingNumber } = request.params;
+      const riding = await app.prisma.riding.upsert({
+        where: { ridingNumber },
+        create: { ridingNumber, ...request.body },
+        update: request.body,
+      });
+      return reply.send(redactRiding(riding));
+    },
+  });
+
+  const UpdateRidingBody = z.object({
+    name: z.string().min(1).optional(),
+    /** omit to leave the existing key in place; it is never read back, so a
+     *  rotate is the only way for a caller to know they're changing it. */
+    qomonApiKey: z.string().min(1).optional(),
+    qomonApiBase: z.string().url().nullish(),
+    active: z.boolean().optional(),
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/admin/ridings/:ridingNumber',
+    schema: {
+      params: z.object({ ridingNumber: z.coerce.number().int() }),
+      body: UpdateRidingBody,
+    },
+    handler: async (request, reply) => {
+      const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const riding = await app.prisma.riding.update({
+        where: { ridingNumber: request.params.ridingNumber },
+        data: request.body,
+      });
+      return reply.send(redactRiding(riding));
+    },
+  });
+
+  r.route({
+    method: 'DELETE',
+    url: '/admin/ridings/:ridingNumber',
+    schema: { params: z.object({ ridingNumber: z.coerce.number().int() }) },
+    handler: async (request, reply) => {
+      const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      await app.prisma.riding.delete({ where: { ridingNumber: request.params.ridingNumber } });
+      return reply.code(204).send();
     },
   });
 

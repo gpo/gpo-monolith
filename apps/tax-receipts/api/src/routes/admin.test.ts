@@ -126,9 +126,50 @@ describe('admin routes (ticket 1.12)', () => {
   });
 
   it('requires authentication for every admin GET route', async () => {
-    for (const url of ['/admin/periods', '/admin/contribution-limits', '/admin/business-day-calendars', '/admin/users']) {
+    for (const url of ['/admin/periods', '/admin/contribution-limits', '/admin/business-day-calendars', '/admin/users', '/admin/ridings']) {
       const res = await app.inject({ method: 'GET', url });
       expect(res.statusCode).toBe(401);
     }
+  });
+
+  it('rejects an administrator (non-sysadmin) from writing ridings, but allows reading', async () => {
+    const cookie = await login('admin@gpo.test', 'admin-pass-phrase');
+    const read = await app.inject({ method: 'GET', url: '/admin/ridings', cookies: { [cookie.name]: cookie.value } });
+    expect(read.statusCode).toBe(200);
+
+    const write = await app.inject({
+      method: 'PUT',
+      url: '/admin/ridings/7',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: 'Test Riding', qomonApiKey: 'secret-key' },
+    });
+    expect(write.statusCode).toBe(403);
+  });
+
+  it('a sysadmin can upsert and delete a riding, and the api key never round-trips', async () => {
+    const cookie = await login('sysadmin@gpo.test', 'sysadmin-pass-phrase');
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/admin/ridings/7',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: 'Test Riding', qomonApiKey: 'secret-key' },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json()).toMatchObject({ ridingNumber: 7, name: 'Test Riding', active: true, qomonApiKeySet: true });
+    expect(put.json().qomonApiKey).toBeUndefined();
+
+    const list = await app.inject({ method: 'GET', url: '/admin/ridings', cookies: { [cookie.name]: cookie.value } });
+    expect(list.json().data).toContainEqual(
+      expect.objectContaining({ ridingNumber: 7, name: 'Test Riding', qomonApiKeySet: true }),
+    );
+    expect(JSON.stringify(list.json())).not.toContain('secret-key');
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: '/admin/ridings/7',
+      cookies: { [cookie.name]: cookie.value },
+    });
+    expect(del.statusCode).toBe(204);
+    expect(await prisma.riding.findUnique({ where: { ridingNumber: 7 } })).toBeNull();
   });
 });

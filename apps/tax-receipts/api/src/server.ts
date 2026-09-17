@@ -16,6 +16,7 @@ async function main(): Promise<void> {
     qomon: env.QOMON_API_KEY
       ? new QomonClient({ apiKey: env.QOMON_API_KEY, baseUrl: env.QOMON_API_BASE })
       : undefined,
+    qomonApiBase: env.QOMON_API_BASE,
   });
 
   await app.listen({ host: env.HOST, port: env.PORT });

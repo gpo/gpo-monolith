@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Group, NativeSelect, Stack, Table, Text, Title } from '@mantine/core';
 import { ApiError, api, type SweepResult } from '../api.js';
 
@@ -10,7 +10,10 @@ import { ApiError, api, type SweepResult } from '../api.js';
  */
 export function DevToolsPage() {
   const [mode, setMode] = useState<'incremental' | 'full'>('incremental');
-  const sweep = useMutation({ mutationFn: () => api.syncSweep(mode) });
+  const [target, setTarget] = useState('party');
+  const ridings = useQuery({ queryKey: ['admin-ridings'], queryFn: api.listRidings });
+  const ridingNumber = target === 'party' ? undefined : Number(target);
+  const sweep = useMutation({ mutationFn: () => api.syncSweep(mode, ridingNumber) });
 
   const notConfigured = sweep.error instanceof ApiError && sweep.error.status === 404;
 
@@ -22,14 +25,28 @@ export function DevToolsPage() {
           <Text fw={600}>Qomon mirror sweep</Text>
           <Text size="sm" c="dimmed">
             Manually triggers POST /internal/sync/sweep (sysadmin only, ticket 1.1). No
-            cron exists yet, so this is the only way to pull new spaces in locally.
+            cron exists yet, so this is the only way to pull new spaces in locally. A
+            riding with its own Qomon space (Admin &gt; Ridings) can be swept on its own
+            instead of the party space.
           </Text>
-          <Group grow maw={300}>
+          <Group grow maw={450}>
             <NativeSelect
               label="Mode"
               data={['incremental', 'full']}
               value={mode}
               onChange={(e) => setMode(e.currentTarget.value as 'incremental' | 'full')}
+            />
+            <NativeSelect
+              label="Space"
+              data={[
+                { value: 'party', label: 'Party space (QOMON_API_KEY)' },
+                ...(ridings.data?.data.map((r) => ({
+                  value: String(r.ridingNumber),
+                  label: `Riding ${r.ridingNumber} — ${r.name}${r.active ? '' : ' (inactive)'}`,
+                })) ?? []),
+              ]}
+              value={target}
+              onChange={(e) => setTarget(e.currentTarget.value)}
             />
           </Group>
           <Group>
@@ -39,8 +56,9 @@ export function DevToolsPage() {
           </Group>
           {notConfigured && (
             <Alert color="yellow">
-              404 — no Qomon client is configured on the API. Set QOMON_API_KEY (and
-              QOMON_API_BASE) in apps/tax-receipts/api/.env and restart the API.
+              404 — {ridingNumber
+                ? `no riding ${ridingNumber} on file (Admin > Ridings).`
+                : 'no Qomon client is configured on the API. Set QOMON_API_KEY (and QOMON_API_BASE) in apps/tax-receipts/api/.env and restart the API.'}
             </Alert>
           )}
           {sweep.isError && !notConfigured && (
