@@ -1,3 +1,4 @@
+import { formatAddress, type FormattedAddress } from '../contacts/address.js';
 import type { PrismaClient } from '../generated/prisma/index.js';
 
 /**
@@ -11,7 +12,7 @@ export interface ContributionDetail {
   id: string;
   qomonTransactionId: string;
   qomonBundleId: string | null;
-  contact: { id: string; name: string; email: string | null };
+  contact: { id: string; name: string; email: string | null; address: FormattedAddress | null };
   amountCents: number;
   currency: string;
   acceptedAt: string;
@@ -112,7 +113,12 @@ export async function getContributionDetail(
     id: row.id,
     qomonTransactionId: row.qomonTransactionId.toString(),
     qomonBundleId: row.qomonBundleId != null ? row.qomonBundleId.toString() : null,
-    contact: { id: row.contact.id, name: row.contact.name, email: row.contact.email },
+    contact: {
+      id: row.contact.id,
+      name: row.contact.name,
+      email: row.contact.email,
+      address: formatAddress(row.contact.addresses),
+    },
     amountCents: row.amountCents,
     currency: row.currency,
     acceptedAt: row.acceptedAt.toISOString(),

@@ -14,6 +14,7 @@ dist/
 *.tsbuildinfo
 apps/tax-receipts/api/src/generated/
 apps/tax-receipts/web/dist/
+apps/tax-receipts/api/storage/
 qomon-sandbox.env
 
 # Logs

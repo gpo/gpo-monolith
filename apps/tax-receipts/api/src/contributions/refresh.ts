@@ -1,5 +1,10 @@
-import type { QomonApi } from '@gpo/qomon-client';
-import { ingestChange, loadPeriods, type IngestOutcome } from '../sync/mirror-sweep.js';
+import { QomonNotFoundError, type QomonApi } from '@gpo/qomon-client';
+import {
+  ingestChange,
+  loadPeriods,
+  refreshContactFromQomon,
+  type IngestOutcome,
+} from '../sync/mirror-sweep.js';
 import type { PrismaClient } from '../generated/prisma/index.js';
 
 /**
@@ -9,6 +14,14 @@ import type { PrismaClient } from '../generated/prisma/index.js';
  * immediately before acting"). Reusing `ingestChange` keeps this identical
  * to what the sweep would do on its next pass — same diff-queue protection,
  * same metadata handling — just on demand instead of on a schedule.
+ *
+ * Also re-fetches the contribution's contact (ticket 3.1 follow-up): unlike
+ * the bulk sweep, which fetches a contact only once (ever) to bound its
+ * Qomon call volume, a one-off "refresh this contribution now" click is
+ * exactly the moment a corrected address in Qomon should actually land
+ * locally. A 404 on the contact fetch (deleted in Qomon) doesn't fail the
+ * whole refresh — it just leaves the cached contact as-is, same tolerance
+ * the sweep gives a dangling contact_id.
  */
 
 export class ContributionNotMirroredError extends Error {
@@ -26,6 +39,13 @@ export async function refreshContributionFromQomon(
 ): Promise<IngestOutcome> {
   const existing = await prisma.contribution.findUnique({ where: { id: contributionId } });
   if (!existing) throw new ContributionNotMirroredError(contributionId);
+
+  try {
+    await refreshContactFromQomon(prisma, qomon, existing.contactId);
+  } catch (err) {
+    if (!(err instanceof QomonNotFoundError)) throw err;
+  }
+
   if (existing.qomonBundleId == null) {
     // never had a bundle id on record (shouldn't happen post-1.1, but the
     // schema allows it): nothing to re-fetch from.
