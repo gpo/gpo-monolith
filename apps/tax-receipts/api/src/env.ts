@@ -17,6 +17,11 @@ const EnvSchema = z.object({
    *  route (ticket 1.1) registers only when this is present. */
   QOMON_API_KEY: z.string().optional(),
   QOMON_API_BASE: z.string().url().optional(),
+  /** where Artifact bytes (receipt PDFs, etc.) are written. A local-disk
+   *  stand-in (ticket 3.1) — object storage is a later infra ticket; the
+   *  Artifact.uri pointer stays storage-agnostic so that swap needs no
+   *  schema change. */
+  ARTIFACT_STORAGE_DIR: z.string().default('./storage/artifacts'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

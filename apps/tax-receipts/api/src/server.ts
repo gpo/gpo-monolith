@@ -17,6 +17,7 @@ async function main(): Promise<void> {
       ? new QomonClient({ apiKey: env.QOMON_API_KEY, baseUrl: env.QOMON_API_BASE })
       : undefined,
     qomonApiBase: env.QOMON_API_BASE,
+    artifactStorageDir: env.ARTIFACT_STORAGE_DIR,
   });
 
   await app.listen({ host: env.HOST, port: env.PORT });

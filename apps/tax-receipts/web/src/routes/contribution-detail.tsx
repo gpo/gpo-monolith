@@ -19,7 +19,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { api, ApiError, type MetadataEditInput } from '../api.js';
+import { api, ApiError, type ContributionDetail, type MetadataEditInput } from '../api.js';
 
 /** Metadata field help text — kept next to the form so it stays in sync with
  * what the fields actually do (packages/tax-receipts-core/src/metadata.ts). */
@@ -126,6 +126,25 @@ function money(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+/** Mirrors the server's `remainingEligibleCents` (invariant 1,
+ * @gpo/tax-receipts-core) so the issue-receipt form can prefill/cap the
+ * amount; the server re-checks this authoritatively on submit. */
+function remainingEligibleCents(detail: ContributionDetail): number {
+  if (!detail.metadata) return 0;
+  const eligible = detail.amountCents - detail.metadata.nonDeductibleCents;
+  const issued = detail.allocations
+    .filter((a) => a.receipt.status === 'ISSUED')
+    .reduce((sum, a) => sum + a.amountCents, 0);
+  return Math.max(0, eligible - issued);
+}
+
+/** A starting point only — the issuer can (and for CA/campaign, must) change
+ * it. The exact EO-facing wording is a compliance question, not something to
+ * bake in silently (see PHASE-3-NOTES.md). */
+function defaultPoliticalEntityLabel(entityKind: string): string {
+  return entityKind === 'PARTY' ? 'Green Party of Ontario' : '';
+}
+
 export function ContributionDetailPage({ id }: { id: string }) {
   const qc = useQueryClient();
   const query = useQuery({
@@ -133,10 +152,17 @@ export function ContributionDetailPage({ id }: { id: string }) {
     queryFn: () => api.getContribution(id),
   });
   const periods = useQuery({ queryKey: ['admin-periods'], queryFn: api.listPeriods });
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me });
 
   const [reason, setReason] = useState('');
   const [form, setForm] = useState<Omit<MetadataEditInput, 'reason'> | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+
+  const [receiptReason, setReceiptReason] = useState('');
+  const [receiptAmount, setReceiptAmount] = useState<number | ''>('');
+  const [receiptDelivery, setReceiptDelivery] = useState<'MAIL' | 'EMAIL'>('MAIL');
+  const [politicalEntityLabel, setPoliticalEntityLabel] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
 
   const detail = query.data;
   const activeForm =
@@ -173,9 +199,20 @@ export function ContributionDetailPage({ id }: { id: string }) {
     setForm({ ...activeForm, [key]: value });
   }
 
+  const [refreshOutcome, setRefreshOutcome] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
   const refresh = useMutation({
     mutationFn: () => api.refreshContribution(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['contribution', id] }),
+    onSuccess: ({ outcome }) => {
+      setRefreshError(null);
+      setRefreshOutcome(outcome);
+      return qc.invalidateQueries({ queryKey: ['contribution', id] });
+    },
+    onError: (err) => {
+      setRefreshOutcome(null);
+      setRefreshError(err instanceof ApiError ? err.message : 'Failed to refresh from Qomon.');
+    },
   });
 
   const save = useMutation({
@@ -191,6 +228,30 @@ export function ContributionDetailPage({ id }: { id: string }) {
     },
     onError: (err) => {
       setEditError(err instanceof ApiError ? err.message : 'Failed to save.');
+    },
+  });
+
+  const issueReceipt = useMutation({
+    mutationFn: () => {
+      const effectiveLabel = (
+        politicalEntityLabel ?? defaultPoliticalEntityLabel(detail?.metadata?.entityKind ?? '')
+      ).trim();
+      return api.issueReceipt(id, {
+        reason: receiptReason,
+        amountCents: receiptAmount === '' ? undefined : Math.round(receiptAmount * 100),
+        delivery: receiptDelivery,
+        politicalEntityLabel: effectiveLabel,
+      });
+    },
+    onSuccess: () => {
+      setReceiptError(null);
+      setReceiptReason('');
+      setReceiptAmount('');
+      setPoliticalEntityLabel(null);
+      return qc.invalidateQueries({ queryKey: ['contribution', id] });
+    },
+    onError: (err) => {
+      setReceiptError(err instanceof ApiError ? err.message : 'Failed to issue receipt.');
     },
   });
 
@@ -212,11 +273,25 @@ export function ContributionDetailPage({ id }: { id: string }) {
               <Text size="xs" c="dimmed">
                 last synced: {detail.lastSyncedAt ? new Date(detail.lastSyncedAt).toLocaleString() : 'never'}
               </Text>
-              <Button size="xs" variant="light" onClick={() => refresh.mutate()} loading={refresh.isPending}>
+              <Button
+                size="xs"
+                variant="light"
+                onClick={() => {
+                  setRefreshOutcome(null);
+                  refresh.mutate();
+                }}
+                loading={refresh.isPending}
+              >
                 Refresh from Qomon
               </Button>
             </Group>
           </Group>
+          {refreshOutcome && (
+            <Text size="xs" c="green">
+              Refreshed — outcome: {refreshOutcome}.
+            </Text>
+          )}
+          {refreshError && <Alert color="red">{refreshError}</Alert>}
           {detail.deletedInQomonAt && (
             <Alert color="red">
               Sync incident: absent from Qomon as of {new Date(detail.deletedInQomonAt).toLocaleString()}.
@@ -233,6 +308,12 @@ export function ContributionDetailPage({ id }: { id: string }) {
             <Text>Code campaign: {detail.codeCampaign ?? '—'}</Text>
             <Text>External ref: {detail.externalRef ?? '—'}</Text>
           </Group>
+          <Text size="sm" c={detail.contact.address ? undefined : 'orange'}>
+            Address on file:{' '}
+            {detail.contact.address
+              ? `${detail.contact.address.line1}, ${detail.contact.address.city} ${detail.contact.address.province} ${detail.contact.address.postalCode}, ${detail.contact.address.country}`
+              : 'none — a receipt cannot be issued until this donor has an address in Qomon'}
+          </Text>
           {detail.comment && <Text size="sm">Comment: {detail.comment}</Text>}
         </Stack>
       </Card>
@@ -365,24 +446,100 @@ export function ContributionDetailPage({ id }: { id: string }) {
       </Card>
 
       <Card withBorder>
-        <Text fw={600} mb="xs">
-          Allocations &amp; receipts
-        </Text>
-        {detail.allocations.length === 0 ? (
-          <Text c="dimmed">None issued yet.</Text>
-        ) : (
-          <Table>
-            <Table.Tbody>
-              {detail.allocations.map((a) => (
-                <Table.Tr key={a.id}>
-                  <Table.Td>{a.receipt.receiptNumber}</Table.Td>
-                  <Table.Td>{a.receipt.status}</Table.Td>
-                  <Table.Td>{money(a.amountCents)}</Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        )}
+        <Stack gap="sm">
+          <Text fw={600}>Allocations &amp; receipts</Text>
+          {detail.allocations.length === 0 ? (
+            <Text c="dimmed">None issued yet.</Text>
+          ) : (
+            <Table>
+              <Table.Tbody>
+                {detail.allocations.map((a) => (
+                  <Table.Tr key={a.id}>
+                    <Table.Td>{a.receipt.receiptNumber}</Table.Td>
+                    <Table.Td>{a.receipt.status}</Table.Td>
+                    <Table.Td>{money(a.amountCents)}</Table.Td>
+                    <Table.Td>{new Date(a.receipt.issueDate).toLocaleDateString()}</Table.Td>
+                    <Table.Td>
+                      <Text
+                        component="a"
+                        href={api.receiptPdfUrl(a.receipt.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                        c="blue"
+                        size="sm"
+                      >
+                        View PDF
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
+
+          {me.data?.can.issueReceipts && (
+            <>
+              <Text fw={600} mt="sm">
+                Issue a receipt
+              </Text>
+              {!detail.metadata ? (
+                <Text c="dimmed">Waiting on metadata (intake derivation) before a receipt can be issued.</Text>
+              ) : remainingEligibleCents(detail) <= 0 ? (
+                <Text c="dimmed">Nothing left to receipt — the full eligible amount is already issued.</Text>
+              ) : (
+                <>
+                  <Text size="sm" c="dimmed">
+                    Remaining eligible: {money(remainingEligibleCents(detail))}
+                  </Text>
+                  <Group grow align="flex-start">
+                    <NumberInput
+                      label="Amount ($, blank = full remaining amount)"
+                      min={0.01}
+                      max={remainingEligibleCents(detail) / 100}
+                      value={receiptAmount}
+                      onChange={(v) => setReceiptAmount(typeof v === 'number' ? v : '')}
+                    />
+                    <NativeSelect
+                      label="Delivery"
+                      data={[
+                        { value: 'MAIL', label: 'Mail' },
+                        { value: 'EMAIL', label: 'Email' },
+                      ]}
+                      value={receiptDelivery}
+                      onChange={(e) => setReceiptDelivery(e.currentTarget.value as 'MAIL' | 'EMAIL')}
+                    />
+                    <TextInput
+                      label="Received-by label (as it should print on the receipt)"
+                      placeholder="e.g. Green Party of Ontario"
+                      value={politicalEntityLabel ?? defaultPoliticalEntityLabel(detail.metadata.entityKind)}
+                      onChange={(e) => setPoliticalEntityLabel(e.currentTarget.value)}
+                    />
+                  </Group>
+                  <TextInput
+                    label="Reason for issuing this receipt (required)"
+                    placeholder="e.g. donor requested annual receipt"
+                    value={receiptReason}
+                    onChange={(e) => setReceiptReason(e.currentTarget.value)}
+                  />
+                  {receiptError && <Alert color="red">{receiptError}</Alert>}
+                  <Group>
+                    <Button
+                      onClick={() => issueReceipt.mutate()}
+                      loading={issueReceipt.isPending}
+                      disabled={
+                        receiptReason.trim().length < 3 ||
+                        (politicalEntityLabel ?? defaultPoliticalEntityLabel(detail.metadata.entityKind)).trim()
+                          .length === 0
+                      }
+                    >
+                      Issue receipt
+                    </Button>
+                  </Group>
+                </>
+              )}
+            </>
+          )}
+        </Stack>
       </Card>
 
       <Card withBorder>

@@ -18,8 +18,15 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
+    // Only claim a JSON body when one is actually being sent — Fastify's
+    // default JSON body parser 400s ("Body cannot be empty when
+    // content-type is set to 'application/json'") on a bodyless request
+    // (e.g. POST /refresh, POST /logout) that still carries this header.
+    headers: {
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init?.headers,
+    },
   });
   const body = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
@@ -101,7 +108,12 @@ export interface ContributionDetail {
   id: string;
   qomonTransactionId: string;
   qomonBundleId: string | null;
-  contact: { id: string; name: string; email: string | null };
+  contact: {
+    id: string;
+    name: string;
+    email: string | null;
+    address: { line1: string; city: string; province: string; postalCode: string; country: string } | null;
+  };
   amountCents: number;
   currency: string;
   acceptedAt: string;
@@ -152,6 +164,20 @@ export interface ContributionDetail {
     at: string;
     correlationId: string;
   }>;
+}
+
+export interface IssueReceiptInput {
+  reason: string;
+  amountCents?: number;
+  delivery?: 'EMAIL' | 'MAIL';
+  politicalEntityLabel: string;
+}
+
+export interface IssuedReceipt {
+  id: string;
+  receiptNumber: string;
+  amountCents: number;
+  pdfArtifactId: string;
 }
 
 export interface MetadataEditInput {
@@ -319,6 +345,12 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
+  issueReceipt: (contributionId: string, input: IssueReceiptInput) =>
+    request<IssuedReceipt>(`/contributions/${contributionId}/receipts`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  receiptPdfUrl: (receiptId: string) => `${BASE}/receipts/${receiptId}/pdf`,
   listWorkItems: (filters: { kind?: string; status?: string; cursor?: string } = {}) => {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);

@@ -84,6 +84,69 @@ describe('refreshContributionFromQomon (ticket 1.5 "refresh from Qomon")', () =>
     expect(await prisma.workItem.count({ where: { kind: 'DIFF', subjectId: contribution.id } })).toBe(1);
   });
 
+  it('also refreshes the contact, picking up an address corrected in Qomon after first sync', async () => {
+    const qomon = new InMemoryQomon();
+    qomon.seedContact({
+      id: 4,
+      firstname: 'Riley',
+      surname: 'Regular',
+      address: { city: 'Waterloo', postalcode: 'N2L6H5', country: 'CAN' },
+    });
+    const bundle = qomon.seedBundle({
+      transactions: [{ contact_id: 4, amount: 5_000, date: '2026-03-01T00:00:00.000Z', status_id: 1 }],
+    });
+    const contact = await prisma.contact.create({
+      data: {
+        qomonContactId: 4n,
+        name: 'Riley Regular',
+        addresses: [{ city: 'Waterloo', postalcode: 'N2L6H5', country: 'CAN' }],
+      },
+    });
+    const contribution = await prisma.contribution.create({
+      data: {
+        contactId: contact.id,
+        qomonTransactionId: BigInt(bundle.transactions[0]!.id),
+        qomonBundleId: BigInt(bundle.id),
+        amountCents: 5_000,
+        acceptedAt: new Date('2026-03-01T00:00:00Z'),
+      },
+    });
+
+    // the street gets added in Qomon after the contact was first synced
+    qomon.seedContact({
+      id: 4,
+      firstname: 'Riley',
+      surname: 'Regular',
+      address: { street: 'Main St', city: 'Waterloo', postalcode: 'N2L6H5', country: 'CAN' },
+    });
+
+    await refreshContributionFromQomon(prisma, qomon, contribution.id);
+
+    const updated = await prisma.contact.findUniqueOrThrow({ where: { id: contact.id } });
+    expect((updated.addresses as Array<{ street?: string }>)[0]).toMatchObject({ street: 'Main St' });
+  });
+
+  it('tolerates a contact 404 in Qomon without failing the refresh', async () => {
+    const qomon = new InMemoryQomon();
+    const bundle = qomon.seedBundle({
+      transactions: [{ contact_id: 5, amount: 5_000, date: '2026-03-01T00:00:00.000Z', status_id: 1 }],
+    });
+    // note: contact 5 was never seeded in Qomon, so getContact 404s.
+    const contact = await prisma.contact.create({ data: { qomonContactId: 5n, name: 'Ghost Contact' } });
+    const contribution = await prisma.contribution.create({
+      data: {
+        contactId: contact.id,
+        qomonTransactionId: BigInt(bundle.transactions[0]!.id),
+        qomonBundleId: BigInt(bundle.id),
+        amountCents: 5_000,
+        acceptedAt: new Date('2026-03-01T00:00:00Z'),
+      },
+    });
+
+    const outcome = await refreshContributionFromQomon(prisma, qomon, contribution.id);
+    expect(typeof outcome).toBe('string');
+  });
+
   it('is a no-op when the transaction is no longer in its bundle', async () => {
     const qomon = new InMemoryQomon();
     const bundle = qomon.seedBundle({ transactions: [] });

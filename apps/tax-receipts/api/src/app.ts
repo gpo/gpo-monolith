@@ -16,6 +16,11 @@ import {
   QomonWriteUnconfirmedError,
 } from './contributions/metadata-write-through.js';
 import { ContributionNotMirroredError } from './contributions/refresh.js';
+import {
+  AllocationOverageError,
+  MissingAddressError,
+  ReceiptIssuanceValidationError,
+} from './receipts/issue.js';
 import { WorkItemAlreadyClosedError, WorkItemNotFoundError } from './work-items/resolve.js';
 import authPlugin from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
@@ -24,6 +29,7 @@ import { changeLogRoutes } from './routes/change-log.js';
 import { contributionRoutes } from './routes/contributions.js';
 import { healthRoutes } from './routes/health.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
+import { receiptRoutes } from './routes/receipts.js';
 import { sessionRoutes } from './routes/session.js';
 import { spaceRoutes } from './routes/spaces.js';
 import { syncRoutes } from './routes/sync.js';
@@ -46,6 +52,8 @@ export interface BuildAppOptions {
   qomonApiBase?: string;
   /** overrides how a riding's own Qomon client is built (tests only). */
   buildRidingQomon?: (riding: { qomonApiKey: string; qomonApiBase: string | null }) => QomonApi;
+  /** where receipt PDF artifacts are written (ticket 3.1); see env.ts. */
+  artifactStorageDir?: string;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -77,6 +85,15 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
     if (error instanceof MetadataWriteBlockedError) {
       return reply.code(409).send({ error: error.message });
+    }
+    if (error instanceof AllocationOverageError) {
+      return reply.code(409).send({ error: error.message });
+    }
+    if (error instanceof ReceiptIssuanceValidationError) {
+      return reply.code(400).send({ error: error.message });
+    }
+    if (error instanceof MissingAddressError) {
+      return reply.code(422).send({ error: error.message });
     }
     if (error instanceof BulkEditTooLargeError) {
       return reply.code(413).send({ error: error.message });
@@ -134,6 +151,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     buildRidingQomon: opts.buildRidingQomon,
   });
   await app.register(contributionRoutes, { qomon: opts.qomon });
+  await app.register(receiptRoutes, {
+    storageDir: opts.artifactStorageDir ?? './storage/artifacts',
+  });
   await app.register(validationRoutes);
   await app.register(workItemRoutes);
   await app.register(spaceRoutes);

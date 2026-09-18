@@ -400,6 +400,14 @@ async function backfillMetadataIfPossible(
   return true;
 }
 
+function contactFieldsFromQomon(fetched: QomonContact, fallbackId: number) {
+  return {
+    name: contactDisplayName(fetched, fallbackId),
+    email: fetched.mail ?? null,
+    addresses: (fetched.address ? [fetched.address] : []) as Prisma.InputJsonValue,
+  };
+}
+
 async function ensureContact(
   prisma: PrismaClient,
   qomon: Pick<QomonApi, 'getContact'>,
@@ -413,13 +421,36 @@ async function ensureContact(
   const created = await prisma.contact.create({
     data: {
       qomonContactId: id,
-      name: contactDisplayName(fetched, qomonContactId),
-      email: fetched.mail ?? null,
-      addresses: (fetched.address ? [fetched.address] : []) as Prisma.InputJsonValue,
+      ...contactFieldsFromQomon(fetched, qomonContactId),
       lastSyncedAt: new Date(),
     },
   });
   return created.id;
+}
+
+/**
+ * Re-fetches one contact from Qomon and overwrites the cached name/email/
+ * address. Deliberately separate from `ensureContact`, which the bulk sweep
+ * uses and which fetches a contact only the first time it's seen (ticket
+ * 1.1: bounding the sweep's Qomon call volume across potentially thousands
+ * of already-known contacts). A single "Refresh from Qomon" click on one
+ * contribution has no such volume concern, and "refresh, right now" should
+ * actually mean that for the donor's address too — otherwise a corrected
+ * address in Qomon can never reach a contact created before the fix.
+ */
+export async function refreshContactFromQomon(
+  prisma: PrismaClient,
+  qomon: Pick<QomonApi, 'getContact'>,
+  contactId: string,
+): Promise<void> {
+  const contact = await prisma.contact.findUnique({ where: { id: contactId } });
+  if (!contact) return;
+  const qomonContactId = Number(contact.qomonContactId);
+  const fetched = await qomon.getContact(qomonContactId);
+  await prisma.contact.update({
+    where: { id: contactId },
+    data: { ...contactFieldsFromQomon(fetched, qomonContactId), lastSyncedAt: new Date() },
+  });
 }
 
 function contactDisplayName(c: QomonContact, fallbackId: number): string {
