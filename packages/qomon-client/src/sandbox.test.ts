@@ -44,8 +44,11 @@ suite('sandbox', { timeout: 30_000 }, () => {
     });
     return {
       api,
-      // Qomon has not shipped the transaction metadata field yet (A1 / R1).
-      metadataSupported: false,
+      // Qomon shipped real, staff-editable custom fields under `extra_json`,
+      // not the named columns discussed nor this tool's originally-planned
+      // {v,gpo} envelope (A1 / R1 superseded; 2026-08/09 investigation with
+      // Qomon). See transaction-extra-fields.ts.
+      metadataSupported: true,
       async makeBundle() {
         const settings = await api.getTransactionSettings();
         const paymentMethod = settings.payment_method_kinds[0] ?? 'VIR';

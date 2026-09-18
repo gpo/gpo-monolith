@@ -43,7 +43,8 @@ export type AppSubject =
   | 'Period'
   | 'ContributionLimit'
   | 'User'
-  | 'IssuanceKillSwitch';
+  | 'IssuanceKillSwitch'
+  | 'Riding';
 
 export type AppAbility = MongoAbility<[AppAction, AppSubject]>;
 

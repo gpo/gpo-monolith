@@ -1,14 +1,15 @@
 import { z } from 'zod';
-import type { QomonMetadataEnvelope } from '@gpo/tax-receipts-core';
 import type {
   BundlePatch,
   CreateBundleInput,
   ListBundlesParams,
   ListPage,
   QomonApi,
+  TransactionCoreFields,
 } from './api.js';
 import { GuardedContactWriter } from './contact-write.js';
 import { QomonHttp, type QomonHttpOptions } from './http.js';
+import { syncedFieldsToQomon, type QomonSyncedFields } from './transaction-extra-fields.js';
 import {
   QomonBundle,
   QomonCodeCampaign,
@@ -144,12 +145,23 @@ export class QomonClient implements QomonApi {
   async writeTransactionMetadata(
     bundleId: number,
     transactionId: number,
-    metadata: QomonMetadataEnvelope,
+    syncedFields: QomonSyncedFields,
+    core: TransactionCoreFields,
   ): Promise<QomonBundle> {
-    return this.patchTransactionBundle({
+    const current = await this.getTransactionBundle(bundleId);
+    const currentExtraJson = current.transactions.find((t) => t.id === transactionId)?.extra_json;
+    const mergedExtraJson = {
+      ...(typeof currentExtraJson === 'object' && currentExtraJson !== null ? currentExtraJson : {}),
+      ...syncedFieldsToQomon(syncedFields),
+    };
+    await this.patchTransactionBundle({
       id: bundleId,
-      transactions: [{ id: transactionId, metadata }],
+      transactions: [{ id: transactionId, ...core, extra_json: mergedExtraJson }],
     });
+    // Qomon's PATCH response is a reduced transaction representation that
+    // never carries extra_json, regardless of whether the write succeeded
+    // (live sandbox fact, 2026-09) — re-fetch to return confirmed state.
+    return this.getTransactionBundle(bundleId);
   }
 
   createContact(contact: QomonContact) {

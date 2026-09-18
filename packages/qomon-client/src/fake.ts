@@ -1,16 +1,17 @@
-import type { QomonMetadataEnvelope } from '@gpo/tax-receipts-core';
 import type {
   BundlePatch,
   CreateBundleInput,
   ListBundlesParams,
   ListPage,
   QomonApi,
+  TransactionCoreFields,
 } from './api.js';
 import {
   QomonAuthError,
   QomonNotFoundError,
   QomonValidationError,
 } from './errors.js';
+import { syncedFieldsToQomon, type QomonSyncedFields } from './transaction-extra-fields.js';
 import type {
   QomonBundle,
   QomonCodeCampaign,
@@ -260,11 +261,18 @@ export class InMemoryQomon implements QomonApi {
   async writeTransactionMetadata(
     bundleId: number,
     transactionId: number,
-    metadata: QomonMetadataEnvelope,
+    syncedFields: QomonSyncedFields,
+    core: TransactionCoreFields,
   ): Promise<QomonBundle> {
+    const current = await this.getTransactionBundle(bundleId);
+    const currentExtraJson = current.transactions.find((t) => t.id === transactionId)?.extra_json;
+    const mergedExtraJson = {
+      ...(typeof currentExtraJson === 'object' && currentExtraJson !== null ? currentExtraJson : {}),
+      ...syncedFieldsToQomon(syncedFields),
+    };
     return this.patchTransactionBundle({
       id: bundleId,
-      transactions: [{ id: transactionId, metadata }],
+      transactions: [{ id: transactionId, ...core, extra_json: mergedExtraJson }],
     });
   }
 

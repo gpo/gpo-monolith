@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildMetadataEnvelope,
   computeMetadataChecksum,
   descriptiveChanged,
-  QomonMetadataEnvelope,
   type GpoMetadataDescriptive,
 } from './metadata.js';
 
@@ -44,18 +42,5 @@ describe('metadata checksum', () => {
       true,
     );
     expect(descriptiveChanged(null, descriptive)).toBe(true);
-  });
-});
-
-describe('buildMetadataEnvelope', () => {
-  it('produces a valid v1 envelope with a checksum and synced_at', () => {
-    const env = buildMetadataEnvelope({
-      descriptive,
-      echoes: { receipts: [{ no: 'GPO-00386964', status: 'ISSUED', amount_cents: 25000 }] },
-      syncedAt: new Date('2026-08-20T21:04:00Z'),
-    });
-    expect(() => QomonMetadataEnvelope.parse(env)).not.toThrow();
-    expect(env.gpo.checksum).toBe(computeMetadataChecksum(descriptive));
-    expect(env.gpo.synced_at).toBe('2026-08-20T21:04:00.000Z');
   });
 });

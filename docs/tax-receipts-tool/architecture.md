@@ -35,12 +35,27 @@ resolves from every package. Node version is pinned in `.nvmrc`.
 pnpm install
 pnpm turbo run lint typecheck test build     # everything
 
-# the api's DB tests and migrations need Postgres:
-pnpm db:test:up                              # Postgres on :5433 via Docker
+# the api's tests need a Postgres on :5433 (docker-compose.test.yml).
+# TRUNCATEd before every test file and tmpfs-backed: never persisted, never
+# for dev data.
+pnpm db:test:up
 export DATABASE_URL="postgresql://gpo:gpo@localhost:5433/tax_receipts_test"
-pnpm --filter @gpo/tax-receipts-api migrate:deploy
-pnpm --filter @gpo/tax-receipts-api db:seed  # dev/eval seed data
+pnpm --filter @gpo/tax-receipts-api test
 
+# day-to-day dev/manual-testing data is a SEPARATE Postgres on :5434
+# (docker-compose.dev.yml), with a persistent named volume. This is what
+# apps/tax-receipts/api/.env's DATABASE_URL points at.
+pnpm db:dev:up
+# migrate/seed go through the Prisma CLI, which (prisma.config.ts is
+# present) does NOT read .env itself — export DATABASE_URL for these two:
+export DATABASE_URL="postgresql://gpo:gpo@localhost:5434/tax_receipts_dev"
+pnpm --filter @gpo/tax-receipts-api migrate:deploy
+pnpm --filter @gpo/tax-receipts-api db:seed  # dev/eval seed data (sysadmin@gpo.test, etc.)
+
+# `dev`/`db:seed` load apps/tax-receipts/api/.env themselves (tsx --env-file)
+# — but env vars already exported in your shell win over .env, so if you
+# exported DATABASE_URL above (or ever, in this shell), `unset DATABASE_URL`
+# before running `dev` or it'll keep pointing at whatever you last exported.
 pnpm --filter @gpo/tax-receipts-api dev      # Fastify on :3000
 pnpm --filter @gpo/tax-receipts-web dev      # Vite on :5173, proxies /api -> :3000
 ```
@@ -77,6 +92,10 @@ Passport local + bcrypt, stateful sessions in Postgres. Authorization is
 CASL, keyed on role plus per-riding grants. Only the party CFO or an
 authorized designate may issue receipts, and a statutory kill switch
 (`assertIssuanceEnabled`) gates every issuance path.
+
+The web app's root layout (`web/src/router.tsx`) gates every route on
+`GET /auth/me`: while signed out it renders only the login form, and the nav
+shell and all app routes stay hidden until sign-in succeeds.
 
 ## What is faked in Phase 0
 

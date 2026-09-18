@@ -1,0 +1,31 @@
+# Local Postgres for day-to-day development (`pnpm --filter @gpo/tax-receipts-api dev`,
+# db:seed, manual testing via the UI). Separate from docker-compose.test.yml,
+# whose database is TRUNCATEd by every test run and lives on tmpfs by design
+# (never persisted) — this one uses a named volume so dev data survives
+# restarts and isn't wiped by `pnpm test`.
+#
+# Explicit project `name` below: without it, Compose derives the project
+# name from this directory ("api") for both this file and
+# docker-compose.test.yml, so they'd resolve to the same container name
+# (api-db-1) and `docker compose up` on one would silently recreate —
+# i.e. destroy — the other's container.
+name: tax-receipts-api-dev
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: gpo
+      POSTGRES_PASSWORD: gpo
+      POSTGRES_DB: tax_receipts_dev
+    ports:
+      - '5434:5432'
+    volumes:
+      - tax_receipts_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U gpo -d tax_receipts_dev']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  tax_receipts_dev_data:

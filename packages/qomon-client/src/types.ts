@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { QomonMetadataEnvelope } from '@gpo/tax-receipts-core';
 
 /**
  * Qomon REST shapes. Grounded in the confidential OpenAPI digest
@@ -11,9 +10,8 @@ import { QomonMetadataEnvelope } from '@gpo/tax-receipts-core';
  *  - transactions DO expose a readable `status_id`
  *  - transaction status `kind` can be a value outside the documented enum
  *    (the sandbox has `cancel`), so we keep it an open string
- *  - there is NO `metadata` field on transactions yet (assumption A1 / R1);
- *    the schema below allows it and the fake implements it so the tool is
- *    ready the day it ships.
+ *  - transactions carry a staff-editable `extra_json` custom-fields object
+ *    (assumption A1 / R1 superseded 2026-09; see transaction-extra-fields.ts)
  */
 
 export const QomonSuccess = <T extends z.ZodTypeAny>(data: T) =>
@@ -64,8 +62,13 @@ export const QomonTransaction = z
     unpaid_amount: z.number().int().nullish(),
     external_transaction_id: z.number().int().nullish(),
     status_id: z.number().int().nullish(),
-    /** Not shipped by Qomon yet (A1). Opaque JSON; the tool owns the blob. */
-    metadata: QomonMetadataEnvelope.nullish(),
+    /** Qomon's real staff-editable custom fields (2026-08/09 investigation:
+     *  the named columns discussed with Qomon and this tool's originally-
+     *  planned envelope shape both never shipped). A flat object keyed by
+     *  literal UI field labels, defaulting to `{}` until something writes to
+     *  it; typed loosely here and parsed with transaction-extra-fields.ts's
+     *  qomonToSyncedFields. */
+    extra_json: z.unknown().nullish(),
   })
   .passthrough();
 export type QomonTransaction = z.infer<typeof QomonTransaction>;
