@@ -6,9 +6,11 @@ import {
   type DuplicateContactCandidate,
   type DuplicateContributionCandidate,
   type PeriodRow,
+  type RidingRow,
   type ValidationFinding,
 } from '@gpo/tax-receipts-core';
 import { withChangeLog } from '../changelog/write.js';
+import { formatAddress } from '../contacts/address.js';
 import type { PrismaClient } from '../generated/prisma/index.js';
 
 /**
@@ -103,6 +105,14 @@ export async function runValidationForContribution(
     }));
   const limitRows = await prisma.contributionLimit.findMany({ where: { year } });
 
+  let riding: RidingRow | undefined;
+  if (contribution.metadata.ridingNumber !== null) {
+    const row = await prisma.riding.findUnique({
+      where: { ridingNumber: contribution.metadata.ridingNumber },
+    });
+    riding = row ? { ridingNumber: row.ridingNumber, active: row.active } : undefined;
+  }
+
   const contactCandidates = contribution.contact.email
     ? await prisma.contact.findMany({
         where: { email: contribution.contact.email, id: { not: contribution.contactId } },
@@ -132,8 +142,11 @@ export async function runValidationForContribution(
       },
     },
     contactId: contribution.contactId,
+    contactName: contribution.contact.name,
     contactEmail: contribution.contact.email,
+    address: formatAddress(contribution.contact.addresses),
     period: periodRow,
+    riding,
     duplicateContributionCandidates,
     duplicateContactCandidates,
     overLimit: limitRows.length > 0 ? { contributionYear: year, otherContributionsThisYear, limits: limitRows } : null,

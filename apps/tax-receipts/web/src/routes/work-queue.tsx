@@ -13,6 +13,7 @@ import {
   Title,
 } from '@mantine/core';
 import { api, type WorkItemRow } from '../api.js';
+import { describeRuleRef } from '../rule-labels.js';
 
 /**
  * Work queue (ticket 1.8, screens.md 5): the unified WorkItem screen, tabs
@@ -61,7 +62,18 @@ function WorkItemRowView({ item }: { item: WorkItemRow }) {
         </Link>
       </Table.Td>
       <Table.Td>{item.contactName ?? '—'}</Table.Td>
-      <Table.Td>{item.ruleRef ?? '—'}</Table.Td>
+      <Table.Td>
+        {item.ruleRef ? (
+          <Group gap={6} wrap="nowrap">
+            <Text size="sm">{describeRuleRef(item.ruleRef)}</Text>
+            <Text size="xs" c="dimmed">
+              ({item.ruleRef})
+            </Text>
+          </Group>
+        ) : (
+          '—'
+        )}
+      </Table.Td>
       <Table.Td>{new Date(item.openedAt).toLocaleDateString()}</Table.Td>
       <Table.Td>{item.dueAt ? new Date(item.dueAt).toLocaleDateString() : '—'}</Table.Td>
       <Table.Td>

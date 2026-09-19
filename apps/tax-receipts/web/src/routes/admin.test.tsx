@@ -32,8 +32,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderPage() {
-  const router = makeRouter(createMemoryHistory({ initialEntries: ['/admin'] }));
+function renderPage(initialPath = '/admin') {
+  const router = makeRouter(createMemoryHistory({ initialEntries: [initialPath] }));
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <MantineProvider>
@@ -42,21 +42,29 @@ function renderPage() {
       </QueryClientProvider>
     </MantineProvider>,
   );
+  return router;
 }
 
-test('shows the periods section by default', async () => {
-  renderPage();
-  expect(await screen.findByRole('button', { name: 'Periods' })).toHaveAttribute(
+test('shows the periods section by default, redirecting bare /admin to /admin/periods', async () => {
+  const router = renderPage();
+  expect(await screen.findByRole('link', { name: 'Periods' })).toHaveAttribute(
     'data-variant',
     'filled',
   );
   await waitFor(() => expect(calls.some((c) => c.url.includes('/admin/periods'))).toBe(true));
+  expect(router.state.location.pathname).toBe('/admin/periods');
+});
+
+test('linking straight to a section path renders that section', async () => {
+  renderPage('/admin/kill-switch');
+  expect(await screen.findByText('disengaged')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Kill switch' })).toHaveAttribute('data-variant', 'filled');
 });
 
 test('switching to the kill switch section loads its status and can engage it', async () => {
   renderPage();
-  await screen.findByRole('button', { name: 'Periods' });
-  fireEvent.click(screen.getByRole('button', { name: 'Kill switch' }));
+  await screen.findByRole('link', { name: 'Periods' });
+  fireEvent.click(screen.getByRole('link', { name: 'Kill switch' }));
 
   expect(await screen.findByText('disengaged')).toBeInTheDocument();
 
@@ -72,4 +80,17 @@ test('switching to the kill switch section loads its status and can engage it', 
   );
   const call = calls.find((c) => c.url.includes('/admin/kill-switch') && c.method === 'POST');
   expect(JSON.parse(call!.body!)).toMatchObject({ engaged: true, reason: 'CEO request' });
+});
+
+test('validation rules section lists rules without fetching anything new', async () => {
+  renderPage();
+  await screen.findByRole('link', { name: 'Periods' });
+  await waitFor(() => expect(calls.some((c) => c.url.includes('/admin/periods'))).toBe(true));
+  const callsBeforeSwitch = calls.length;
+
+  fireEvent.click(screen.getByRole('link', { name: 'Validation rules' }));
+
+  expect(await screen.findByText('A1')).toBeInTheDocument();
+  expect(screen.getByText("Acceptance date is outside its period's window")).toBeInTheDocument();
+  expect(calls.length).toBe(callsBeforeSwitch);
 });

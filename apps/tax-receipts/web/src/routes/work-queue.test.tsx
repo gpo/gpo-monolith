@@ -76,7 +76,8 @@ function renderPage() {
 test('shows the validation tab by default with its items', async () => {
   renderPage();
   expect(await screen.findByText('Dana Donor')).toBeInTheDocument();
-  expect(screen.getByText('A8')).toBeInTheDocument();
+  expect(screen.getByText('Cash contribution exceeds the $25 EFA limit')).toBeInTheDocument();
+  expect(screen.getByText('(A8)')).toBeInTheDocument();
 });
 
 test('switching tabs re-queries by kind', async () => {

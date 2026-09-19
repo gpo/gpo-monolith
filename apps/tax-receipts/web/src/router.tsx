@@ -6,6 +6,7 @@ import {
   createRouter,
   Link,
   Outlet,
+  redirect,
   useNavigate,
   useParams,
   useRouterState,
@@ -13,7 +14,7 @@ import {
 } from '@tanstack/react-router';
 import { AppShell, Button, Center, Group, Loader, Text, Anchor } from '@mantine/core';
 import { api } from './api.js';
-import { AdminPage } from './routes/admin.js';
+import { ADMIN_SECTIONS, AdminLayout } from './routes/admin.js';
 import { ChangeLogPage } from './routes/change-log.js';
 import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
@@ -141,8 +142,28 @@ const changeLogRoute = createRoute({
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin',
-  component: AdminPage,
+  component: AdminLayout,
 });
+
+// Bare /admin has no section of its own — send it to the first one so the
+// nav and Outlet always have a matching child route to render.
+const adminIndexRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/',
+  beforeLoad: () => {
+    throw redirect({ to: `/admin/${ADMIN_SECTIONS[0].slug}` });
+  },
+});
+
+const adminSectionRoutes = ADMIN_SECTIONS.map((section) =>
+  createRoute({
+    getParentRoute: () => adminRoute,
+    path: section.slug,
+    component: section.component,
+  }),
+);
+
+const adminRouteWithChildren = adminRoute.addChildren([adminIndexRoute, ...adminSectionRoutes]);
 
 const devToolsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -157,7 +178,7 @@ const routeTree = rootRoute.addChildren([
   contributionDetailRoute,
   workQueueRoute,
   changeLogRoute,
-  adminRoute,
+  adminRouteWithChildren,
   ...(import.meta.env.DEV ? [devToolsRoute] : []),
 ]);
 

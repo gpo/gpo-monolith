@@ -30,3 +30,16 @@ export interface ContributionForValidationRules {
   externalRef: string | null;
   metadata: ContributionMetadataForValidation;
 }
+
+/** Structurally matches `FormattedAddress`
+ *  (apps/tax-receipts/api/src/contacts/address.ts) so callers can pass that
+ *  straight through — this package has no dependency on qomon-client, so it
+ *  can't import the type, only its shape. No `line2`: `formatAddress`
+ *  doesn't expose one (it folds housenumber+street into `line1`). */
+export interface AddressForValidation {
+  line1: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  country: string;
+}

@@ -15,7 +15,17 @@ describe('validation engine v1 (ticket 1.7)', () => {
 
   async function seedContact(qomonContactId: bigint, email: string | null = null) {
     return prisma.contact.create({
-      data: { qomonContactId, name: 'Dana Donor', email },
+      data: {
+        qomonContactId,
+        name: 'Dana Donor',
+        email,
+        // a complete address (raw Qomon shape, per contacts/address.ts's
+        // addressFrom) so B1/C1-C3 don't also fire in tests targeting other
+        // rules; tests for those rules override this explicitly.
+        addresses: [
+          { housenumber: '123', street: 'Main St', city: 'Toronto', state: 'ON', postalcode: 'M5V 2T6', country: 'CA' },
+        ],
+      },
     });
   }
 

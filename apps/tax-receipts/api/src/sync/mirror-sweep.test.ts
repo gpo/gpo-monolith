@@ -16,7 +16,15 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
 
   it('mirrors a new transaction, applies the 1.6-stub intake defaults, opens a validation work item, and fetches the contact on demand', async () => {
     const qomon = new InMemoryQomon();
-    qomon.seedContact({ id: 501, firstname: 'Dana', surname: 'Donor', mail: 'dana@example.org' });
+    qomon.seedContact({
+      id: 501,
+      firstname: 'Dana',
+      surname: 'Donor',
+      mail: 'dana@example.org',
+      // a complete address so this sweep's validation run doesn't also open
+      // a C1 (address-complete) work item alongside the intake flags below
+      address: { housenumber: '123', street: 'Main St', city: 'Toronto', state: 'ON', postalcode: 'M5V 2T6', country: 'CA' },
+    });
     qomon.seedBundle({
       transactions: [
         {

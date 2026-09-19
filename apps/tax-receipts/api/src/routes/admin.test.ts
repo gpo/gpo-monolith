@@ -172,4 +172,86 @@ describe('admin routes (ticket 1.12)', () => {
     expect(del.statusCode).toBe(204);
     expect(await prisma.riding.findUnique({ where: { ridingNumber: 7 } })).toBeNull();
   });
+
+  it('requires an api key for an active riding, but allows an inactive one without one', async () => {
+    const cookie = await login('sysadmin@gpo.test', 'sysadmin-pass-phrase');
+
+    const missingKey = await app.inject({
+      method: 'PUT',
+      url: '/admin/ridings/8',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: 'Test Riding', qomonApiKey: '' },
+    });
+    expect(missingKey.statusCode).toBe(400);
+
+    const inactiveNoKey = await app.inject({
+      method: 'PUT',
+      url: '/admin/ridings/8',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: 'Test Riding', qomonApiKey: '', active: false },
+    });
+    expect(inactiveNoKey.statusCode).toBe(200);
+    expect(inactiveNoKey.json()).toMatchObject({ ridingNumber: 8, active: false, qomonApiKeySet: false });
+  });
+
+  it('treats a whitespace-only api key as not set, for both an active riding and qomonApiKeySet', async () => {
+    const cookie = await login('sysadmin@gpo.test', 'sysadmin-pass-phrase');
+
+    const whitespaceKeyActive = await app.inject({
+      method: 'PUT',
+      url: '/admin/ridings/10',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: 'Test Riding', qomonApiKey: '   ' },
+    });
+    expect(whitespaceKeyActive.statusCode).toBe(400);
+
+    const whitespaceKeyInactive = await app.inject({
+      method: 'PUT',
+      url: '/admin/ridings/10',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: 'Test Riding', qomonApiKey: '   ', active: false },
+    });
+    expect(whitespaceKeyInactive.statusCode).toBe(200);
+    expect(whitespaceKeyInactive.json()).toMatchObject({ qomonApiKeySet: false });
+    expect(await prisma.riding.findUnique({ where: { ridingNumber: 10 } })).toMatchObject({ qomonApiKey: '' });
+  });
+
+  it('PATCH leaves the api key in place when omitted, and blocks activating a riding with no key on file', async () => {
+    const cookie = await login('sysadmin@gpo.test', 'sysadmin-pass-phrase');
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/admin/ridings/9',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: 'Test Riding', qomonApiKey: 'secret-key' },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const renameOnly = await app.inject({
+      method: 'PATCH',
+      url: '/admin/ridings/9',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: 'Renamed Riding' },
+    });
+    expect(renameOnly.statusCode).toBe(200);
+    expect(renameOnly.json()).toMatchObject({ name: 'Renamed Riding', qomonApiKeySet: true });
+
+    // clearing the key outright is only reachable via PUT, since an inactive
+    // riding may be saved with no key on file
+    const clearKeyAndDeactivate = await app.inject({
+      method: 'PUT',
+      url: '/admin/ridings/9',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: 'Renamed Riding', qomonApiKey: '', active: false },
+    });
+    expect(clearKeyAndDeactivate.statusCode).toBe(200);
+    expect(clearKeyAndDeactivate.json()).toMatchObject({ active: false, qomonApiKeySet: false });
+
+    const reactivateNoKey = await app.inject({
+      method: 'PATCH',
+      url: '/admin/ridings/9',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { active: true },
+    });
+    expect(reactivateNoKey.statusCode).toBe(400);
+  });
 });
