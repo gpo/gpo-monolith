@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./validation/rules.js": {
+      "types": "./dist/validation/rules.d.ts",
+      "default": "./dist/validation/rules.js"
     }
   },
   "files": ["dist"],

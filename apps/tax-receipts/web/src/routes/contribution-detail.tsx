@@ -11,6 +11,7 @@ import {
   Loader,
   NativeSelect,
   NumberInput,
+  Select,
   Stack,
   Table,
   Text,
@@ -20,6 +21,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { api, ApiError, type ContributionDetail, type MetadataEditInput } from '../api.js';
+import { describeRuleRef } from '../rule-labels.js';
 
 /** Metadata field help text — kept next to the form so it stays in sync with
  * what the fields actually do (packages/tax-receipts-core/src/metadata.ts). */
@@ -152,6 +154,8 @@ export function ContributionDetailPage({ id }: { id: string }) {
     queryFn: () => api.getContribution(id),
   });
   const periods = useQuery({ queryKey: ['admin-periods'], queryFn: api.listPeriods });
+  // Same queryKey as admin.tsx's RidingsSection so the two share a cache entry.
+  const ridings = useQuery({ queryKey: ['admin-ridings'], queryFn: api.listRidings });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
 
   const [reason, setReason] = useState('');
@@ -190,6 +194,22 @@ export function ContributionDetailPage({ id }: { id: string }) {
     activeForm && !periodOptions.some((o) => o.value === String(activeForm.periodId))
       ? [...periodOptions, { value: String(activeForm.periodId), label: `Period ${activeForm.periodId} (not in list)` }]
       : periodOptions;
+
+  const ridingOptions =
+    ridings.data?.data.map((r) => ({
+      value: String(r.ridingNumber),
+      label: `${r.ridingNumber} — ${r.name}${r.active ? '' : ' (inactive)'}`,
+    })) ?? [];
+  // Only flag a riding as unknown once the ridings list has actually loaded —
+  // otherwise every riding would flash "Unknown" while the query is pending.
+  const ridingUnknown =
+    activeForm?.ridingNumber != null &&
+    ridings.data !== undefined &&
+    !ridings.data.data.some((r) => r.ridingNumber === activeForm.ridingNumber);
+  const ridingSelectData =
+    ridingUnknown && activeForm?.ridingNumber != null
+      ? [...ridingOptions, { value: String(activeForm.ridingNumber), label: `${activeForm.ridingNumber} — Unknown` }]
+      : ridingOptions;
 
   function updateForm<K extends keyof Omit<MetadataEditInput, 'reason'>>(
     key: K,
@@ -342,7 +362,7 @@ export function ContributionDetailPage({ id }: { id: string }) {
                     });
                   }}
                 />
-                <NumberInput
+                <Select
                   label={
                     <FieldLabel
                       label="Riding number"
@@ -350,15 +370,26 @@ export function ContributionDetailPage({ id }: { id: string }) {
                       required={activeForm.entityKind !== 'PARTY'}
                     />
                   }
-                  min={1}
-                  max={124}
+                  data={ridingSelectData}
+                  searchable
+                  clearable
+                  nothingFoundMessage="No matching riding"
                   required={activeForm.entityKind !== 'PARTY'}
                   withAsterisk={false}
-                  disabled={activeForm.entityKind === 'PARTY'}
-                  placeholder={activeForm.entityKind === 'PARTY' ? 'N/A for party' : undefined}
-                  value={activeForm.ridingNumber ?? undefined}
-                  onChange={(v) => updateForm('ridingNumber', typeof v === 'number' ? v : null)}
-                  error={a2RidingEntityWarning(activeForm.entityKind, activeForm.ridingNumber)}
+                  disabled={activeForm.entityKind === 'PARTY' || ridings.isLoading}
+                  placeholder={
+                    activeForm.entityKind === 'PARTY'
+                      ? 'N/A for party'
+                      : ridings.isLoading
+                        ? 'Loading ridings…'
+                        : 'Search by number or name'
+                  }
+                  value={activeForm.ridingNumber !== null ? String(activeForm.ridingNumber) : null}
+                  onChange={(v) => updateForm('ridingNumber', v !== null ? Number(v) : null)}
+                  error={
+                    a2RidingEntityWarning(activeForm.entityKind, activeForm.ridingNumber) ??
+                    (ridingUnknown ? `Riding ${activeForm.ridingNumber} — Unknown (no matching riding on file)` : null)
+                  }
                 />
                 <NativeSelect
                   label={<FieldLabel label="Received by" help={METADATA_HELP.receivedBy} />}
@@ -431,7 +462,18 @@ export function ContributionDetailPage({ id }: { id: string }) {
               {detail.workItems.map((w) => (
                 <Table.Tr key={w.id}>
                   <Table.Td>{w.kind}</Table.Td>
-                  <Table.Td>{w.ruleRef ?? '—'}</Table.Td>
+                  <Table.Td>
+                    {w.ruleRef ? (
+                      <>
+                        {describeRuleRef(w.ruleRef)}{' '}
+                        <Text span size="xs" c="dimmed">
+                          ({w.ruleRef})
+                        </Text>
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </Table.Td>
                   <Table.Td>
                     <Badge color={w.status === 'OPEN' ? 'orange' : w.status === 'EXCEPTION' ? 'yellow' : 'green'}>
                       {w.status}

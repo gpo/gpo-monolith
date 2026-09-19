@@ -156,9 +156,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     updatedAt: Date;
   }) {
     // the key itself is never round-tripped once set (same principle as
-    // User.passwordHash) — callers see only whether one is on file.
+    // User.passwordHash) — callers see only whether one is on file. Trimmed
+    // defensively: a whitespace-only value is not a usable key.
     const { qomonApiKey, ...rest } = riding;
-    return { ...rest, qomonApiKeySet: qomonApiKey.length > 0 };
+    return { ...rest, qomonApiKeySet: qomonApiKey.trim().length > 0 };
   }
 
   r.get('/admin/ridings', async (request, reply) => {
@@ -167,12 +168,20 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ data: ridings.map(redactRiding) });
   });
 
-  const RidingBody = z.object({
-    name: z.string().min(1),
-    qomonApiKey: z.string().min(1),
-    qomonApiBase: z.string().url().nullish(),
-    active: z.boolean().default(true),
-  });
+  const RidingBody = z
+    .object({
+      name: z.string().min(1),
+      // required for an active riding; an inactive one may be saved without
+      // a key (e.g. not yet live, or retired) — see qomonApiKeySet above.
+      // trimmed so a whitespace-only value doesn't count as "set".
+      qomonApiKey: z.string().trim(),
+      qomonApiBase: z.string().url().nullish(),
+      active: z.boolean().default(true),
+    })
+    .refine((body) => body.active === false || body.qomonApiKey.length > 0, {
+      message: 'Qomon API key is required for an active riding',
+      path: ['qomonApiKey'],
+    });
 
   r.route({
     method: 'PUT',
@@ -198,7 +207,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     name: z.string().min(1).optional(),
     /** omit to leave the existing key in place; it is never read back, so a
      *  rotate is the only way for a caller to know they're changing it. */
-    qomonApiKey: z.string().min(1).optional(),
+    qomonApiKey: z.string().trim().min(1).optional(),
     qomonApiBase: z.string().url().nullish(),
     active: z.boolean().optional(),
   });
@@ -213,6 +222,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     handler: async (request, reply) => {
       const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const current = await app.prisma.riding.findUnique({ where: { ridingNumber: request.params.ridingNumber } });
+      if (!current) return reply.code(404).send({ error: 'riding not found' });
+      // qomonApiKey is omitted from most patches (it leaves the key in place),
+      // so the active-requires-a-key check has to look at the merged result,
+      // not the patch body in isolation.
+      const nextActive = request.body.active ?? current.active;
+      const nextKey = request.body.qomonApiKey ?? current.qomonApiKey;
+      if (nextActive && nextKey.trim().length === 0) {
+        return reply.code(400).send({ error: 'Qomon API key is required for an active riding' });
+      }
       const riding = await app.prisma.riding.update({
         where: { ridingNumber: request.params.ridingNumber },
         data: request.body,

@@ -6,6 +6,16 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { makeRouter } from '../router.js';
 import { ME, jsonResponse } from '../test/fixtures.js';
 
+// The riding-number field is a Mantine Select (Combobox), and under this
+// repo's jsdom test environment any Combobox/Popover-based Mantine
+// component (Select, Menu, Popover — reproduced independently of this
+// page) takes ~20-50s of real wall-clock time to settle, well past the
+// default 5s testTimeout, even though the final rendered output is
+// correct. This is an environment gap (jsdom + @floating-ui/react
+// timing), not a bug in this page or these tests — flagged separately
+// for a real fix; bumping the timeout here keeps the suite green.
+vi.setConfig({ testTimeout: 60_000 });
+
 const DETAIL = {
   id: 'c1',
   qomonTransactionId: '1',
@@ -60,6 +70,13 @@ const DETAIL = {
   ],
 };
 
+const RIDINGS = {
+  data: [
+    { ridingNumber: 7, name: 'Test Riding', qomonApiBase: null, active: true, qomonApiKeySet: true, updatedAt: '2026-01-01T00:00:00.000Z' },
+    { ridingNumber: 12, name: 'Other Riding', qomonApiBase: null, active: true, qomonApiKeySet: true, updatedAt: '2026-01-01T00:00:00.000Z' },
+  ],
+};
+
 let calls: string[] = [];
 
 beforeEach(() => {
@@ -69,6 +86,7 @@ beforeEach(() => {
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push(String(url));
       if (String(url).includes('/auth/me')) return jsonResponse(ME);
+      if (String(url).includes('/admin/ridings')) return jsonResponse(RIDINGS);
       if (String(url).endsWith('/refresh') && init?.method === 'POST') {
         return new Response(JSON.stringify({ outcome: 'unchanged' }), {
           status: 200,
@@ -115,7 +133,8 @@ test('shows Qomon facts, metadata, work items, and change-log', async () => {
   renderPage();
   expect(await screen.findByText('Donor: Dana Donor')).toBeInTheDocument();
   expect(screen.getByText('Amount: $50.00')).toBeInTheDocument();
-  expect(screen.getByText('A8')).toBeInTheDocument();
+  expect(screen.getByText(/Cash contribution exceeds the \$25 EFA limit/)).toBeInTheDocument();
+  expect(screen.getByText('(A8)')).toBeInTheDocument();
   expect(screen.getByText(/mirror sweep: new transaction/)).toBeInTheDocument();
 });
 
@@ -133,6 +152,7 @@ test('a failed refresh shows an error instead of failing silently', async () => 
     vi.fn(async (url: string) => {
       calls.push(String(url));
       if (String(url).includes('/auth/me')) return jsonResponse(ME);
+      if (String(url).includes('/admin/ridings')) return jsonResponse(RIDINGS);
       if (String(url).endsWith('/refresh')) {
         return new Response(JSON.stringify({ error: 'Qomon rejected the request' }), {
           status: 502,
@@ -159,6 +179,31 @@ test('the save button is disabled until a reason is entered', async () => {
     target: { value: 'fixing riding' },
   });
   expect(save).not.toBeDisabled();
+});
+
+test('riding number renders as a searchable select showing the riding name', async () => {
+  renderPage();
+  await screen.findByText('Donor: Dana Donor');
+  expect(screen.getByDisplayValue('7 — Test Riding')).toBeInTheDocument();
+});
+
+test('a riding number with no matching riding shows an Unknown error state', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      calls.push(String(url));
+      if (String(url).includes('/auth/me')) return jsonResponse(ME);
+      if (String(url).includes('/admin/ridings')) return jsonResponse(RIDINGS);
+      if (String(url).includes('/contributions/')) {
+        return jsonResponse({ ...DETAIL, metadata: { ...DETAIL.metadata, ridingNumber: 99 } });
+      }
+      return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+    }),
+  );
+  renderPage();
+  await screen.findByText('Donor: Dana Donor');
+  expect(screen.getByDisplayValue('99 — Unknown')).toBeInTheDocument();
+  expect(screen.getByText('Riding 99 — Unknown (no matching riding on file)')).toBeInTheDocument();
 });
 
 test('a permitted user can issue a receipt from the contribution page', async () => {

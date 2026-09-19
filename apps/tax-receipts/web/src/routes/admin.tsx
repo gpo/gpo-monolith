@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import {
   Alert,
   Badge,
@@ -8,6 +9,7 @@ import {
   Checkbox,
   Group,
   Loader,
+  Modal,
   NativeSelect,
   NumberInput,
   Stack,
@@ -16,7 +18,14 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+// Imported from the validation/rules.js subpath, not the package barrel
+// ('@gpo/tax-receipts-core') — the barrel re-exports metadata.ts, whose
+// node:crypto usage Vite can't tree-shake out of a browser build (see
+// rule-labels.ts's doc comment). validation/rules.js's own dependency
+// chain has no node:crypto import, so this subpath is browser-safe.
+import { IMPLEMENTED_RULE_REFS } from '@gpo/tax-receipts-core/validation/rules.js';
 import { api, type RidingRow } from '../api.js';
+import { RULE_LABELS } from '../rule-labels.js';
 
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
@@ -24,13 +33,30 @@ import { api, type RidingRow } from '../api.js';
  * per-riding Qomon spaces, and the kill switch. All writes are sysadmin-only
  * server-side; a 403 here just means "ask a sysadmin."
  *
+ * The "Validation rules" section is a read-only reference (no writes, no
+ * fetch) — see ValidationRulesSection's own doc comment below.
+ *
  * Not built: the receipt letter template (Phase 3, no template system
  * exists) and RTD "CFO name" / sign-off threshold (no schema field or spec
  * value for either — see api/src/routes/admin.ts).
  */
 
-const SECTIONS = ['Periods', 'Contribution limits', 'RTD holidays', 'Ridings', 'Users', 'Kill switch'] as const;
-type Section = (typeof SECTIONS)[number];
+/**
+ * Each admin section lives at its own path under /admin (e.g. /admin/ridings)
+ * rather than behind in-page tab state, so a section can be linked to or
+ * reloaded directly. router.tsx builds the child routes from this array;
+ * AdminLayout below builds the nav from it too, so a new section only needs
+ * an entry here.
+ */
+export const ADMIN_SECTIONS = [
+  { slug: 'periods', label: 'Periods', component: () => <PeriodsSection /> },
+  { slug: 'contribution-limits', label: 'Contribution limits', component: () => <ContributionLimitsSection /> },
+  { slug: 'rtd-holidays', label: 'RTD holidays', component: () => <HolidaysSection /> },
+  { slug: 'ridings', label: 'Ridings', component: () => <RidingsSection /> },
+  { slug: 'users', label: 'Users', component: () => <UsersSection /> },
+  { slug: 'kill-switch', label: 'Kill switch', component: () => <KillSwitchSection /> },
+  { slug: 'validation-rules', label: 'Validation rules', component: () => <ValidationRulesSection /> },
+] as const satisfies ReadonlyArray<{ slug: string; label: string; component: () => JSX.Element }>;
 
 function KillSwitchSection() {
   const qc = useQueryClient();
@@ -309,36 +335,84 @@ function HolidaysSection() {
   );
 }
 
+const EMPTY_RIDING_FORM = { ridingNumber: '', name: '', qomonApiKey: '', qomonApiBase: '', active: true };
+
 function RidingsSection() {
   const qc = useQueryClient();
   const ridings = useQuery({ queryKey: ['admin-ridings'], queryFn: api.listRidings });
-  const [form, setForm] = useState({ ridingNumber: '', name: '', qomonApiKey: '', qomonApiBase: '' });
+  const [modalOpened, setModalOpened] = useState(false);
+  const [editingRiding, setEditingRiding] = useState<RidingRow | null>(null);
+  const [form, setForm] = useState(EMPTY_RIDING_FORM);
   const save = useMutation({
-    mutationFn: () =>
-      api.saveRiding(Number(form.ridingNumber), {
+    mutationFn: () => {
+      const qomonApiBase = form.qomonApiBase || null;
+      const qomonApiKey = form.qomonApiKey.trim();
+      // Editing goes through PATCH so a blank key field leaves the existing
+      // key in place instead of wiping it (PUT always overwrites it).
+      if (editingRiding) {
+        return api.updateRiding(editingRiding.ridingNumber, {
+          name: form.name,
+          qomonApiBase,
+          active: form.active,
+          ...(qomonApiKey ? { qomonApiKey } : {}),
+        });
+      }
+      return api.saveRiding(Number(form.ridingNumber), {
         name: form.name,
-        qomonApiKey: form.qomonApiKey,
-        qomonApiBase: form.qomonApiBase || null,
-      }),
+        qomonApiKey,
+        qomonApiBase,
+        active: form.active,
+      });
+    },
     onSuccess: () => {
-      setForm({ ridingNumber: '', name: '', qomonApiKey: '', qomonApiBase: '' });
+      setModalOpened(false);
+      setForm(EMPTY_RIDING_FORM);
       return qc.invalidateQueries({ queryKey: ['admin-ridings'] });
     },
-  });
-  const toggleActive = useMutation({
-    mutationFn: ({ riding, active }: { riding: RidingRow; active: boolean }) =>
-      api.updateRiding(riding.ridingNumber, { active }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-ridings'] }),
   });
   const remove = useMutation({
     mutationFn: (ridingNumber: number) => api.deleteRiding(ridingNumber),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-ridings'] }),
   });
 
+  const openAddModal = () => {
+    setEditingRiding(null);
+    setForm(EMPTY_RIDING_FORM);
+    setModalOpened(true);
+  };
+  const openEditModal = (riding: RidingRow) => {
+    setEditingRiding(riding);
+    setForm({
+      ridingNumber: String(riding.ridingNumber),
+      name: riding.name,
+      qomonApiKey: '',
+      qomonApiBase: riding.qomonApiBase ?? '',
+      active: riding.active,
+    });
+    setModalOpened(true);
+  };
+  const closeModal = () => {
+    setModalOpened(false);
+    setEditingRiding(null);
+    setForm(EMPTY_RIDING_FORM);
+  };
+
+  const hasKeyOnFile = editingRiding?.qomonApiKeySet ?? false;
+  const trimmedKey = form.qomonApiKey.trim();
+  const keyMissing = form.active && !trimmedKey && !hasKeyOnFile;
+  const keyLabel = hasKeyOnFile
+    ? 'Qomon API key (leave blank to keep the current one)'
+    : `Qomon API key${form.active ? '' : ' (optional while inactive)'}`;
+
   return (
     <Card withBorder>
       <Stack gap="sm">
-        <Text fw={600}>Ridings (per-riding Qomon spaces)</Text>
+        <Group justify="space-between">
+          <Text fw={600}>Ridings (per-riding Qomon spaces)</Text>
+          <Button size="xs" onClick={openAddModal}>
+            Add riding
+          </Button>
+        </Group>
         <Text size="sm" c="dimmed">
           A riding here runs its own Qomon space, separate from the party-level space
           (QOMON_API_KEY). A mirror sweep can target one by riding number instead of the
@@ -364,35 +438,53 @@ function RidingsSection() {
                   <Table.Td>{r.ridingNumber}</Table.Td>
                   <Table.Td>{r.name}</Table.Td>
                   <Table.Td>{r.qomonApiBase ?? '(default)'}</Table.Td>
-                  <Table.Td>{r.qomonApiKeySet ? 'yes' : '—'}</Table.Td>
                   <Table.Td>
-                    <Checkbox
-                      checked={r.active}
-                      onChange={(e) => toggleActive.mutate({ riding: r, active: e.currentTarget.checked })}
-                    />
+                    {r.qomonApiKeySet ? (
+                      <Text c="green" fw={700} span aria-label="Key on file">
+                        ✓
+                      </Text>
+                    ) : (
+                      <Text c="dimmed" span aria-label="No key on file">
+                        —
+                      </Text>
+                    )}
                   </Table.Td>
                   <Table.Td>
-                    <Button size="xs" color="red" variant="subtle" onClick={() => remove.mutate(r.ridingNumber)}>
-                      Remove
-                    </Button>
+                    <Badge color={r.active ? 'green' : 'gray'}>{r.active ? 'Active' : 'Inactive'}</Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap="xs" wrap="nowrap">
+                      <Button size="xs" variant="subtle" onClick={() => openEditModal(r)}>
+                        Edit
+                      </Button>
+                      <Button size="xs" color="red" variant="subtle" onClick={() => remove.mutate(r.ridingNumber)}>
+                        Remove
+                      </Button>
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
         )}
-        <Text size="sm" fw={600} mt="sm">
-          Add or replace a riding's space (re-enter the key even when only changing the name)
-        </Text>
-        <Group grow>
+      </Stack>
+
+      <Modal opened={modalOpened} onClose={closeModal} title={editingRiding ? `Edit riding ${editingRiding.ridingNumber}` : 'Add riding'}>
+        <Stack gap="sm">
+          <Text size="sm" c="dimmed">
+            {editingRiding
+              ? 'The API key is never shown again once saved, so it stays as-is unless you enter a new one.'
+              : 'Adding a riding number that already exists replaces its space. An inactive riding may be saved without an API key.'}
+          </Text>
           <NumberInput
             label="Riding # (1-124)"
             value={form.ridingNumber}
             onChange={(v) => setForm({ ...form, ridingNumber: String(v ?? '') })}
+            disabled={!!editingRiding}
           />
           <TextInput label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.currentTarget.value })} />
           <TextInput
-            label="Qomon API key"
+            label={keyLabel}
             value={form.qomonApiKey}
             onChange={(e) => setForm({ ...form, qomonApiKey: e.currentTarget.value })}
           />
@@ -401,17 +493,25 @@ function RidingsSection() {
             value={form.qomonApiBase}
             onChange={(e) => setForm({ ...form, qomonApiBase: e.currentTarget.value })}
           />
-        </Group>
-        <Group>
-          <Button
-            onClick={() => save.mutate()}
-            loading={save.isPending}
-            disabled={!form.ridingNumber || !form.name || !form.qomonApiKey}
-          >
-            Save riding
-          </Button>
-        </Group>
-      </Stack>
+          <Checkbox
+            label="Active"
+            checked={form.active}
+            onChange={(e) => setForm({ ...form, active: e.currentTarget.checked })}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={closeModal}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => save.mutate()}
+              loading={save.isPending}
+              disabled={!form.ridingNumber || !form.name || keyMissing}
+            >
+              Save riding
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Card>
   );
 }
@@ -504,26 +604,102 @@ function UsersSection() {
   );
 }
 
-export function AdminPage() {
-  const [section, setSection] = useState<Section>('Periods');
+const RULE_CATEGORY_LABELS: Record<string, string> = {
+  A: 'Contribution-level (A)',
+  B: 'Donor-level (B)',
+  C: 'Receipt & address (C)',
+  E: 'Entity / sync integrity (E)',
+  REP: 'Report-time (REP)',
+};
+
+function ruleCategory(ruleRef: string): string {
+  return /^[A-Z]+/.exec(ruleRef)?.[0] ?? ruleRef;
+}
+
+const IMPLEMENTED_RULE_REF_SET: ReadonlySet<string> = new Set(IMPLEMENTED_RULE_REFS);
+
+/** Static reference table, not a live rule engine (ticket asked for a
+ *  reference, not dynamic evaluation). Sourced from RULE_LABELS
+ *  (rule-labels.ts) rather than restated here, and RULE_LABELS is checked
+ *  against @gpo/tax-receipts-core's IMPLEMENTED_RULE_REFS in
+ *  rule-labels.test.ts — so a rule the engine can actually raise never
+ *  goes undocumented on this page, even though the page itself doesn't
+ *  re-run any rule logic. */
+function ValidationRulesSection() {
+  const groups = new Map<string, Array<{ ruleRef: string; label: string }>>();
+  for (const [ruleRef, label] of Object.entries(RULE_LABELS)) {
+    const category = ruleCategory(ruleRef);
+    const entries = groups.get(category) ?? [];
+    entries.push({ ruleRef, label });
+    groups.set(category, entries);
+  }
+
+  return (
+    <Card withBorder>
+      <Stack gap="lg">
+        <div>
+          <Text fw={600}>Validation rules</Text>
+          <Text size="sm" c="dimmed">
+            Every rule the validation engine can raise against a contribution, grouped as in
+            validation-rules.md. This is a static reference — it does not re-run any checks.
+          </Text>
+        </div>
+        {[...groups.entries()].map(([category, rules]) => (
+          <div key={category}>
+            <Text size="sm" fw={600} mb="xs">
+              {RULE_CATEGORY_LABELS[category] ?? category}
+            </Text>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={80}>Rule</Table.Th>
+                  <Table.Th>Description</Table.Th>
+                  <Table.Th w={140}>Status</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {rules.map((r) => (
+                  <Table.Tr key={r.ruleRef}>
+                    <Table.Td>{r.ruleRef}</Table.Td>
+                    <Table.Td>{r.label}</Table.Td>
+                    <Table.Td>
+                      <Badge color={IMPLEMENTED_RULE_REF_SET.has(r.ruleRef) ? 'green' : 'gray'}>
+                        {IMPLEMENTED_RULE_REF_SET.has(r.ruleRef) ? 'Implemented' : 'Not yet implemented'}
+                      </Badge>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </div>
+        ))}
+      </Stack>
+    </Card>
+  );
+}
+
+export function AdminLayout() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   return (
     <Stack gap="lg">
       <Title order={2}>Annual settings &amp; admin</Title>
       <Group>
-        {SECTIONS.map((s) => (
-          <Button key={s} variant={section === s ? 'filled' : 'default'} onClick={() => setSection(s)}>
-            {s}
-          </Button>
-        ))}
+        {ADMIN_SECTIONS.map((s) => {
+          const to = `/admin/${s.slug}`;
+          return (
+            <Button
+              key={s.slug}
+              component={Link}
+              to={to}
+              variant={pathname === to ? 'filled' : 'default'}
+            >
+              {s.label}
+            </Button>
+          );
+        })}
       </Group>
-
-      {section === 'Periods' && <PeriodsSection />}
-      {section === 'Contribution limits' && <ContributionLimitsSection />}
-      {section === 'RTD holidays' && <HolidaysSection />}
-      {section === 'Ridings' && <RidingsSection />}
-      {section === 'Users' && <UsersSection />}
-      {section === 'Kill switch' && <KillSwitchSection />}
+      <Outlet />
     </Stack>
   );
 }
