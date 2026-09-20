@@ -21,6 +21,7 @@ import {
   MissingAddressError,
   ReceiptIssuanceValidationError,
 } from './receipts/issue.js';
+import { SpaceIssuanceBlockedError } from './space/issuance.js';
 import { WorkItemAlreadyClosedError, WorkItemNotFoundError } from './work-items/resolve.js';
 import authPlugin from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
@@ -95,6 +96,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     if (error instanceof MissingAddressError) {
       return reply.code(422).send({ error: error.message });
     }
+    if (error instanceof SpaceIssuanceBlockedError) {
+      return reply.code(409).send({ error: error.message, blockers: error.blockers });
+    }
     if (error instanceof BulkEditTooLargeError) {
       return reply.code(413).send({ error: error.message });
     }
@@ -156,7 +160,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   });
   await app.register(validationRoutes);
   await app.register(workItemRoutes);
-  await app.register(spaceRoutes);
+  await app.register(spaceRoutes, {
+    storageDir: opts.artifactStorageDir ?? './storage/artifacts',
+  });
   await app.register(changeLogRoutes);
   await app.register(adminRoutes);
 

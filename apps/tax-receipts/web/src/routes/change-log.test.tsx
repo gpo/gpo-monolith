@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 function renderPage() {
-  const router = makeRouter(createMemoryHistory({ initialEntries: ['/change-log'] }));
+  const router = makeRouter(createMemoryHistory({ initialEntries: ['/admin/change-log'] }));
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <MantineProvider>

@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   Checkbox,
+  FileButton,
   Group,
   Loader,
   Modal,
@@ -24,7 +25,9 @@ import {
 // rule-labels.ts's doc comment). validation/rules.js's own dependency
 // chain has no node:crypto import, so this subpath is browser-safe.
 import { IMPLEMENTED_RULE_REFS } from '@gpo/tax-receipts-core/validation/rules.js';
-import { api, type RidingRow } from '../api.js';
+import { api, type RidingImportRow, type RidingRow } from '../api.js';
+import { ChangeLogPage } from './change-log.js';
+import { DevToolsPage } from './dev-tools.js';
 import { RULE_LABELS } from '../rule-labels.js';
 
 /**
@@ -46,17 +49,23 @@ import { RULE_LABELS } from '../rule-labels.js';
  * rather than behind in-page tab state, so a section can be linked to or
  * reloaded directly. router.tsx builds the child routes from this array;
  * AdminLayout below builds the nav from it too, so a new section only needs
- * an entry here.
+ * an entry here. `devOnly` sections (Dev tools) are kept out of both in
+ * production — see visibleAdminSections below.
  */
 export const ADMIN_SECTIONS = [
-  { slug: 'periods', label: 'Periods', component: () => <PeriodsSection /> },
-  { slug: 'contribution-limits', label: 'Contribution limits', component: () => <ContributionLimitsSection /> },
-  { slug: 'rtd-holidays', label: 'RTD holidays', component: () => <HolidaysSection /> },
-  { slug: 'ridings', label: 'Ridings', component: () => <RidingsSection /> },
-  { slug: 'users', label: 'Users', component: () => <UsersSection /> },
-  { slug: 'kill-switch', label: 'Kill switch', component: () => <KillSwitchSection /> },
-  { slug: 'validation-rules', label: 'Validation rules', component: () => <ValidationRulesSection /> },
-] as const satisfies ReadonlyArray<{ slug: string; label: string; component: () => JSX.Element }>;
+  { slug: 'periods', label: 'Periods', component: () => <PeriodsSection />, devOnly: false },
+  { slug: 'contribution-limits', label: 'Contribution limits', component: () => <ContributionLimitsSection />, devOnly: false },
+  { slug: 'rtd-holidays', label: 'RTD holidays', component: () => <HolidaysSection />, devOnly: false },
+  { slug: 'ridings', label: 'Ridings', component: () => <RidingsSection />, devOnly: false },
+  { slug: 'users', label: 'Users', component: () => <UsersSection />, devOnly: false },
+  { slug: 'kill-switch', label: 'Kill switch', component: () => <KillSwitchSection />, devOnly: false },
+  { slug: 'validation-rules', label: 'Validation rules', component: () => <ValidationRulesSection />, devOnly: false },
+  { slug: 'change-log', label: 'Change log', component: () => <ChangeLogPage />, devOnly: false },
+  { slug: 'dev-tools', label: 'Dev tools', component: () => <DevToolsPage />, devOnly: true },
+] as const satisfies ReadonlyArray<{ slug: string; label: string; component: () => JSX.Element; devOnly: boolean }>;
+
+/** Sections actually shown/routed: devOnly ones only outside production. */
+export const visibleAdminSections = ADMIN_SECTIONS.filter((s) => !s.devOnly || import.meta.env.DEV);
 
 function KillSwitchSection() {
   const qc = useQueryClient();
@@ -375,6 +384,29 @@ function RidingsSection() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-ridings'] }),
   });
 
+  const [importParseError, setImportParseError] = useState<string | null>(null);
+  const importRidings = useMutation({
+    mutationFn: (rows: RidingImportRow[]) => api.importRidings(rows),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-ridings'] }),
+  });
+  const handleImportFile = async (file: File | null) => {
+    if (!file) return;
+    setImportParseError(null);
+    importRidings.reset();
+    let rows: unknown;
+    try {
+      rows = JSON.parse(await file.text());
+    } catch {
+      setImportParseError(`${file.name} is not valid JSON`);
+      return;
+    }
+    if (!Array.isArray(rows)) {
+      setImportParseError(`${file.name} must contain a JSON array of ridings`);
+      return;
+    }
+    importRidings.mutate(rows as RidingImportRow[]);
+  };
+
   const openAddModal = () => {
     setEditingRiding(null);
     setForm(EMPTY_RIDING_FORM);
@@ -409,15 +441,34 @@ function RidingsSection() {
       <Stack gap="sm">
         <Group justify="space-between">
           <Text fw={600}>Ridings (per-riding Qomon spaces)</Text>
-          <Button size="xs" onClick={openAddModal}>
-            Add riding
-          </Button>
+          <Group gap="xs">
+            <FileButton onChange={handleImportFile} accept="application/json">
+              {(props) => (
+                <Button size="xs" variant="default" loading={importRidings.isPending} {...props}>
+                  Import from file
+                </Button>
+              )}
+            </FileButton>
+            <Button size="xs" onClick={openAddModal}>
+              Add riding
+            </Button>
+          </Group>
         </Group>
         <Text size="sm" c="dimmed">
           A riding here runs its own Qomon space, separate from the party-level space
           (QOMON_API_KEY). A mirror sweep can target one by riding number instead of the
-          party space (see Dev tools). The API key is never shown again once saved.
+          party space (see Dev tools). The API key is never shown again once saved. Import
+          upserts by riding number — re-importing an updated file never creates duplicates,
+          and a blank key in the file leaves an existing riding's key in place.
         </Text>
+        {importParseError && <Alert color="red">{importParseError}</Alert>}
+        {importRidings.isError && <Alert color="red">{importRidings.error.message}</Alert>}
+        {importRidings.isSuccess && (
+          <Alert color="green">
+            Imported {importRidings.data.imported} riding{importRidings.data.imported === 1 ? '' : 's'} (
+            {importRidings.data.created} added, {importRidings.data.updated} updated).
+          </Alert>
+        )}
         {ridings.isLoading ? (
           <Loader />
         ) : (
@@ -685,7 +736,7 @@ export function AdminLayout() {
     <Stack gap="lg">
       <Title order={2}>Annual settings &amp; admin</Title>
       <Group>
-        {ADMIN_SECTIONS.map((s) => {
+        {visibleAdminSections.map((s) => {
           const to = `/admin/${s.slug}`;
           return (
             <Button

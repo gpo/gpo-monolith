@@ -7,13 +7,14 @@ import {
 } from '@tanstack/react-router';
 import { afterEach, expect, test, vi } from 'vitest';
 import { makeRouter } from './router.js';
+import { theme } from './theme.js';
 import { ME, jsonResponse } from './test/fixtures.js';
 
 function renderApp() {
   const router = makeRouter(createMemoryHistory({ initialEntries: ['/'] }));
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <MantineProvider>
+    <MantineProvider theme={theme}>
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />
       </QueryClientProvider>
@@ -39,7 +40,7 @@ test('a logged-out visit shows only the login form, not the site', async () => {
   renderApp();
 
   expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
-  expect(screen.queryByText('GPO Tax Receipts & Contributions')).not.toBeInTheDocument();
+  expect(screen.queryByRole('img', { name: 'Green Party of Ontario' })).not.toBeInTheDocument();
   expect(screen.queryByText('Spaces')).not.toBeInTheDocument();
 });
 
@@ -72,7 +73,7 @@ test('a signed-in visit shows the shell and the space dashboard', async () => {
   renderApp();
 
   expect(
-    await screen.findByText('GPO Tax Receipts & Contributions'),
+    await screen.findByRole('img', { name: 'Green Party of Ontario' }),
   ).toBeInTheDocument();
   expect(await screen.findByText('CA')).toBeInTheDocument();
   expect(screen.getByText('3')).toBeInTheDocument();

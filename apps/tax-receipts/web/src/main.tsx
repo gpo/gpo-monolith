@@ -5,6 +5,7 @@ import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 import { makeRouter } from './router.js';
+import { theme } from './theme.js';
 
 const queryClient = new QueryClient();
 const router = makeRouter();
@@ -14,7 +15,7 @@ if (!container) throw new Error('missing #root');
 
 createRoot(container).render(
   <StrictMode>
-    <MantineProvider>
+    <MantineProvider theme={theme}>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
       </QueryClientProvider>

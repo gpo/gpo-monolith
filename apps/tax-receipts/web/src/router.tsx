@@ -10,18 +10,46 @@ import {
   useNavigate,
   useParams,
   useRouterState,
+  useSearch,
   type RouterHistory,
 } from '@tanstack/react-router';
-import { AppShell, Button, Center, Group, Loader, Text, Anchor } from '@mantine/core';
+import { AppShell, Button, Center, Group, Loader, Anchor } from '@mantine/core';
+import gpoLogo from './assets/gpo-logo-EN-horizontal-green.svg';
 import { api } from './api.js';
-import { ADMIN_SECTIONS, AdminLayout } from './routes/admin.js';
-import { ChangeLogPage } from './routes/change-log.js';
+import { ADMIN_SECTIONS, AdminLayout, visibleAdminSections } from './routes/admin.js';
 import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
-import { DevToolsPage } from './routes/dev-tools.js';
 import { LoginPage } from './routes/login.js';
+import { SpaceIssuancePage } from './routes/space-issuance.js';
 import { WorkQueuePage } from './routes/work-queue.js';
+
+/**
+ * A header nav item styled as a plain top-bar link rather than a bordered
+ * button: muted until active/hovered, with a soft highlight pill instead of
+ * an underline.
+ */
+function HeaderLink({ to, children }: { to: string; children: React.ReactNode }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const active = pathname === to || pathname.startsWith(`${to}/`);
+  return (
+    <Anchor
+      component={Link}
+      to={to}
+      underline="never"
+      fw={500}
+      c={active ? 'gpoGreen.8' : 'dimmed'}
+      px="sm"
+      py={4}
+      style={{
+        borderRadius: 'var(--mantine-radius-sm)',
+        backgroundColor: active ? 'var(--mantine-color-gpoGreen-0)' : undefined,
+      }}
+    >
+      {children}
+    </Anchor>
+  );
+}
 
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -65,28 +93,13 @@ function RootLayout() {
     <AppShell header={{ height: 56 }} padding="md">
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
-          <Text fw={700}>GPO Tax Receipts &amp; Contributions</Text>
-          <Group>
-            <Anchor component={Link} to="/">
-              Dashboard
-            </Anchor>
-            <Anchor component={Link} to="/contributions">
-              Contributions
-            </Anchor>
-            <Anchor component={Link} to="/work-queue">
-              Work queue
-            </Anchor>
-            <Anchor component={Link} to="/change-log">
-              Change-log
-            </Anchor>
-            <Anchor component={Link} to="/admin">
-              Admin
-            </Anchor>
-            {import.meta.env.DEV && (
-              <Anchor component={Link} to="/dev-tools">
-                Dev tools
-              </Anchor>
-            )}
+          <Link to="/" style={{ display: 'flex', alignItems: 'center' }}>
+            <img src={gpoLogo} alt="Green Party of Ontario" height={32} />
+          </Link>
+          <Group gap="xs">
+            <HeaderLink to="/contributions">Contributions</HeaderLink>
+            <HeaderLink to="/work-queue">Work queue</HeaderLink>
+            <HeaderLink to="/admin">Admin</HeaderLink>
             <Button variant="subtle" onClick={signOut}>
               Sign out
             </Button>
@@ -133,10 +146,20 @@ const workQueueRoute = createRoute({
   component: WorkQueuePage,
 });
 
-const changeLogRoute = createRoute({
+const spaceIssuanceRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/change-log',
-  component: ChangeLogPage,
+  path: '/spaces/$periodId/$entityKind/issue',
+  component: () => {
+    const { periodId, entityKind } = useParams({ from: '/spaces/$periodId/$entityKind/issue' });
+    const search = useSearch({ strict: false }) as { ridingNumber?: number };
+    return (
+      <SpaceIssuancePage
+        periodId={Number(periodId)}
+        entityKind={entityKind}
+        ridingNumber={search.ridingNumber ?? null}
+      />
+    );
+  },
 });
 
 const adminRoute = createRoute({
@@ -155,7 +178,7 @@ const adminIndexRoute = createRoute({
   },
 });
 
-const adminSectionRoutes = ADMIN_SECTIONS.map((section) =>
+const adminSectionRoutes = visibleAdminSections.map((section) =>
   createRoute({
     getParentRoute: () => adminRoute,
     path: section.slug,
@@ -165,21 +188,14 @@ const adminSectionRoutes = ADMIN_SECTIONS.map((section) =>
 
 const adminRouteWithChildren = adminRoute.addChildren([adminIndexRoute, ...adminSectionRoutes]);
 
-const devToolsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/dev-tools',
-  component: DevToolsPage,
-});
-
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   contributionsRoute,
   contributionDetailRoute,
   workQueueRoute,
-  changeLogRoute,
+  spaceIssuanceRoute,
   adminRouteWithChildren,
-  ...(import.meta.env.DEV ? [devToolsRoute] : []),
 ]);
 
 export function makeRouter(history?: RouterHistory) {

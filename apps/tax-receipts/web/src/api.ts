@@ -226,6 +226,58 @@ export interface SpaceDashboardRow {
   openWorkItemCount: number;
 }
 
+export interface SpaceIssuanceBlocker {
+  workItemId: string;
+  contributionId: string;
+  contactId: string | null;
+  contactName: string | null;
+  kind: string;
+  ruleRef: string | null;
+}
+
+export interface SpaceIssuanceLine {
+  contributionId: string;
+  contactId: string;
+  contactName: string;
+  amountCents: number;
+  delivery: 'EMAIL' | 'MAIL';
+}
+
+export interface SpaceIssuanceTotals {
+  receiptCount: number;
+  amountCents: number;
+  emailCount: number;
+  mailCount: number;
+}
+
+export interface SpaceIssuancePreview {
+  blocked: boolean;
+  blockers: SpaceIssuanceBlocker[];
+  lines: SpaceIssuanceLine[];
+  totals: SpaceIssuanceTotals;
+}
+
+export interface SpaceIssuanceRowResult {
+  contributionId: string;
+  ok: boolean;
+  receiptId?: string;
+  receiptNumber?: string;
+  amountCents?: number;
+  error?: string;
+}
+
+export interface SpaceIssuanceResult {
+  results: SpaceIssuanceRowResult[];
+  succeeded: number;
+  failed: number;
+}
+
+export interface IssueSpaceReceiptsInput {
+  reason: string;
+  politicalEntityLabel: string;
+  delivery?: 'EMAIL' | 'MAIL';
+}
+
 export interface ChangeLogRow {
   id: string;
   subjectType: string;
@@ -298,6 +350,21 @@ export interface RidingRow {
   updatedAt: string;
 }
 
+export interface RidingImportRow {
+  ridingNumber: number;
+  name: string;
+  qomonApiKey?: string;
+  qomonApiBase?: string | null;
+  active?: boolean;
+}
+
+export interface RidingImportResult {
+  imported: number;
+  created: number;
+  updated: number;
+  data: RidingRow[];
+}
+
 export interface AdminUserRow {
   id: string;
   name: string;
@@ -360,6 +427,20 @@ export const api = {
   resolveWorkItem: (id: string, input: { reason: string; outcome: 'RESOLVED' | 'EXCEPTION' }) =>
     request<WorkItemRow>(`/work-items/${id}/resolve`, { method: 'POST', body: JSON.stringify(input) }),
   listSpaces: () => request<{ data: SpaceDashboardRow[] }>('/spaces'),
+  previewSpaceIssuance: (periodId: number, entityKind: string, ridingNumber: number | null) =>
+    request<SpaceIssuancePreview>(
+      `/spaces/${periodId}/${entityKind}/issuance-preview${ridingNumber !== null ? `?ridingNumber=${ridingNumber}` : ''}`,
+    ),
+  issueSpaceReceipts: (
+    periodId: number,
+    entityKind: string,
+    ridingNumber: number | null,
+    input: IssueSpaceReceiptsInput,
+  ) =>
+    request<SpaceIssuanceResult>(
+      `/spaces/${periodId}/${entityKind}/receipts${ridingNumber !== null ? `?ridingNumber=${ridingNumber}` : ''}`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
   listPeriods: () => request<{ data: PeriodRow[] }>('/admin/periods'),
   savePeriod: (id: number, input: Omit<PeriodRow, 'id'>) =>
     request<{ period: PeriodRow; revalidation: unknown }>(`/admin/periods/${id}`, {
@@ -406,4 +487,6 @@ export const api = {
     request<RidingRow>(`/admin/ridings/${ridingNumber}`, { method: 'PATCH', body: JSON.stringify(input) }),
   deleteRiding: (ridingNumber: number) =>
     request<void>(`/admin/ridings/${ridingNumber}`, { method: 'DELETE' }),
+  importRidings: (rows: RidingImportRow[]) =>
+    request<RidingImportResult>('/admin/ridings/import', { method: 'POST', body: JSON.stringify(rows) }),
 };

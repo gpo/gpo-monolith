@@ -56,3 +56,57 @@ unknown contribution; missing metadata), `src/routes/receipts.test.ts`
    started this ticket — the contribution-detail screen's "Allocations/
    receipts" panel is still the documented empty state until a UI ticket
    wires it to this route.
+
+## Ticket 3.12 — Per-space issuance (first slice)
+
+Screen 6's gate check + pre-issuance preview + generate, for one space
+(period, riding, entity kind) at a time. Delivery (email/print, Qomon
+activity logging, tickets 3.5/3.6) and the donor pre-check (3.9) are still
+open — same gap 3.1 already left, just at space scale now.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/space/issuance.ts` | `getSpaceIssuanceGate` (any OPEN work item on a contribution in the space blocks the whole space — recomputed live, since `state-machine.ts` enforces no gates of its own), `previewSpaceIssuance` (gate + exactly what would issue, replacing trial receipts per O12), `issueReceiptsForSpace` (loops `issueReceipt` per still-eligible contribution; all-or-nothing on the gate, per-row-tolerant on issuance failures, same shape as ticket 1.4's bulk edit). |
+| `apps/tax-receipts/api/src/routes/spaces.ts` | `GET /spaces/:periodId/:entityKind/issuance-preview` (any authenticated user, riding-scoped) and `POST /spaces/:periodId/:entityKind/receipts` (CASL `issue Receipt`, ridingNumber as a query param since it's optional — party-level spaces have none). |
+| `apps/tax-receipts/web/src/routes/space-issuance.tsx` | The wizard itself: a Mantine `Stepper` with Review (blockers or preview totals/lines) → Generate (label, delivery override, mandatory reason) → Done (per-row results with PDF links). Reachable from a new "Issue" button on each space-dashboard row (`dashboard.tsx`). |
+
+Tests: `space/issuance.test.ts` (gate, preview, generate, stragglers,
+partial-failure tolerance), route tests appended to `routes/spaces.test.ts`
+(auth, CASL 403, riding scope 403, 409 on a dirty gate), and a web test
+(`routes/space-issuance.test.tsx`) covering the blocked state, the clear
+preview, and a full generate round-trip. `pnpm turbo run lint typecheck
+test build` green (api and web).
+
+### Deviations / judgment calls
+
+1. **Whole-space gate, not per-contribution.** One open work item anywhere
+   in the space blocks issuance for everyone in it, not just its own
+   contribution — matches the W6 ladder's "queue-clear" being a
+   precondition for the whole space, not a per-row state.
+2. **`politicalEntityLabel` is one value per space call**, not per
+   contribution like 3.1. A space is exactly one entity/riding, so this is
+   a small win over 3.1's awkward per-contribution input — still caller-
+   supplied, same open compliance-wording gap.
+3. **No delivery actually happens.** A generated receipt gets a delivery
+   value (the donor's `DonorCyclePreference`, an override, or MAIL) stored
+   on the row, but nothing is emailed or queued for print — that's tickets
+   3.5/3.6, still open.
+4. **The wizard is a single page, not a guarded multi-page flow.** Screens.md
+   describes gate → preview → generate → deliver → done; without a deliver
+   step to build yet, three `Stepper` steps (Review, Generate, Done) cover
+   what exists without inventing UI for work that isn't there.
+
+### Fixture data for manual testing
+
+`apps/tax-receipts/api/prisma/seed-phase-3-fixtures.ts`
+(`pnpm db:seed:phase-3-fixtures`) seeds five spaces — clean, blocked,
+partial-failure-on-generate, and a donor spanning three spaces across
+different periods/ridings/entities — to exercise the wizard above without
+hand-entering data per session. See
+[`PHASE-3-MANUAL-TEST-PLAN.md`](PHASE-3-MANUAL-TEST-PLAN.md) §1 for what
+each seeded donor demonstrates. One thing this surfaced worth flagging: a
+"clean" PARTY-level space can't be guaranteed on a dev database that's seen
+any real use, since every PARTY-level fixture and every real Qomon-mirrored
+contribution shares that one space — the fixture's "ready to issue" case
+needed its own reserved, date-isolated period (9002) to actually stay
+clean.
