@@ -75,7 +75,7 @@ test('a signed-in visit shows the shell and the space dashboard', async () => {
   expect(
     await screen.findByRole('img', { name: 'Green Party of Ontario' }),
   ).toBeInTheDocument();
-  expect(await screen.findByText('CA')).toBeInTheDocument();
+  expect(await screen.findByText('Constituency association')).toBeInTheDocument();
   expect(screen.getByText('3')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
 });
