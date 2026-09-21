@@ -13,7 +13,20 @@ import {
   useSearch,
   type RouterHistory,
 } from '@tanstack/react-router';
-import { AppShell, Button, Center, Group, Loader, Anchor } from '@mantine/core';
+import {
+  AppShell,
+  Avatar,
+  Center,
+  Group,
+  Loader,
+  Anchor,
+  Menu,
+  Switch,
+  Text,
+  UnstyledButton,
+  useComputedColorScheme,
+  useMantineColorScheme,
+} from '@mantine/core';
 import gpoLogo from './assets/gpo-logo-EN-horizontal-green.svg';
 import { api } from './api.js';
 import { ADMIN_SECTIONS, AdminLayout, visibleAdminSections } from './routes/admin.js';
@@ -48,6 +61,48 @@ function HeaderLink({ to, children }: { to: string; children: React.ReactNode })
     >
       {children}
     </Anchor>
+  );
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? '';
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
+  return (first + last).toUpperCase();
+}
+
+/**
+ * Avatar menu holding account-level actions (theme, sign out) that don't
+ * belong in the main nav.
+ */
+function AccountMenu({ name, onSignOut }: { name: string; onSignOut: () => void }) {
+  const { setColorScheme } = useMantineColorScheme();
+  const computedColorScheme = useComputedColorScheme('light');
+  const dark = computedColorScheme === 'dark';
+
+  return (
+    <Menu position="bottom-end" withArrow>
+      <Menu.Target>
+        <UnstyledButton aria-label="Account menu">
+          <Avatar color="gpoGreen" radius="xl">
+            {initials(name)}
+          </Avatar>
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>{name}</Menu.Label>
+        <Group justify="space-between" wrap="nowrap" px="sm" py={4}>
+          <Text size="sm">Dark mode</Text>
+          <Switch
+            aria-label="Dark mode"
+            checked={dark}
+            onChange={(e) => setColorScheme(e.currentTarget.checked ? 'dark' : 'light')}
+          />
+        </Group>
+        <Menu.Divider />
+        <Menu.Item onClick={onSignOut}>Sign out</Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
   );
 }
 
@@ -94,15 +149,13 @@ function RootLayout() {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Link to="/" style={{ display: 'flex', alignItems: 'center' }}>
-            <img src={gpoLogo} alt="Green Party of Ontario" height={32} />
+            <img src={gpoLogo} alt="Green Party of Ontario" height={22} />
           </Link>
           <Group gap="xs">
             <HeaderLink to="/contributions">Contributions</HeaderLink>
             <HeaderLink to="/work-queue">Work queue</HeaderLink>
             <HeaderLink to="/admin">Admin</HeaderLink>
-            <Button variant="subtle" onClick={signOut}>
-              Sign out
-            </Button>
+            <AccountMenu name={me.data.name} onSignOut={signOut} />
           </Group>
         </Group>
       </AppShell.Header>
