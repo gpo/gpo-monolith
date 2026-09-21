@@ -182,3 +182,34 @@ build` green.
    Matches eo-reporting.md's "failures block export" language and the
    existing `SpaceIssuanceBlockedError` precedent (ticket 3.12) rather than
    adding a force-generate escape hatch nothing has asked for yet.
+
+## Ticket 4.4 — ALL column-layout decision
+
+Decided as decisions.md D10: emit EO's written 21-column spec layout for
+the ALL file (adds `General_Meetings`, column F, always `N`), not the
+20-column layout GPO's 2025/2024 filings actually used. Rationale: the
+Evaluation Tool's rows 68/69 score reports against the spec document
+itself, and the extra constant column is free insurance against a literal
+column-count mismatch — see D10 for the full reasoning and the residual
+risk (EO's actual answer to this question, asked directly in the
+preliminary meeting brief, is still pending).
+
+| Where | What |
+|---|---|
+| `packages/tax-receipts-core/src/reports/all-report.ts` | `ALL_REPORT_HEADER` gained `General_Meetings` between `Agency_Contribution` and `Political_Entity_Type`; `buildAllReportRow` emits it as a constant `'N'`. |
+
+Two things noticed while doing this, neither addressed here (out of scope,
+tracked as open questions):
+
+1. **O41**: EO's spec's `Receipt_Status` column also allows a third value,
+   `L` for "lost", which the tool doesn't emit — `Receipt.lost` is a
+   separate boolean today. Natural to fold in alongside ticket 3.11.
+2. The **S2P2 half of this same question** (spec says `Contributor_Type`
+   should be `I`; GPO's accepted filings use the entity letter) is
+   unchanged — ticket 4.2 already matches the accepted filings, and unlike
+   the ALL column count, no default was recorded favouring the spec's
+   reading there. Revisit both together if/when EO actually answers.
+
+Tests: updated `all-report.test.ts` in both packages for the new column
+(21-column header, the constant, and every hardcoded CSV-row assertion).
+`pnpm turbo run lint typecheck test build` green.
