@@ -131,6 +131,20 @@ export interface LoadedReceiptRow {
   postalCode: string;
 }
 
+/** `EntityReport.includedSet`'s shape (ticket 4.5): not just which receipts
+ *  fed the report (`receiptIds`, needed for `EntityReportReceipt` links) but
+ *  the actual rendered rows — a true point-in-time snapshot (the schema's
+ *  own doc comment already called for this: "recorded as a point-in-time
+ *  snapshot"). `entity-reports.ts`'s drift check rebuilds fresh rows for the
+ *  same scope and diffs them against `rows` to answer rule E5's "did
+ *  anything included change" — no separate hook is wired into every mutation
+ *  path that could affect a reported row; the check is live, recomputed on
+ *  read, matching how `space/issuance.ts`'s gate already works. */
+export interface EntityReportIncludedSet<Row> {
+  receiptIds: string[];
+  rows: Row[];
+}
+
 export interface LoadedReport {
   rows: LoadedReceiptRow[];
   /** REP6's non-blocking receivable flags (see rep-gate.ts's header

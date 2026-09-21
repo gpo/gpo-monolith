@@ -7,7 +7,12 @@ export const ME: Me = {
   role: 'ADMIN',
   allRidings: true,
   ridingGrants: [],
-  can: { issueReceipts: true, administerKillSwitch: true },
+  can: {
+    issueReceipts: true,
+    administerKillSwitch: true,
+    generateEntityReports: true,
+    shareEntityReports: true,
+  },
 };
 
 export function jsonResponse(body: unknown, status = 200): Response {

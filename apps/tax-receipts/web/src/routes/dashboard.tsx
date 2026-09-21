@@ -114,6 +114,15 @@ export function DashboardPage() {
                         Issue
                       </Button>
                     </Link>
+                    <Link
+                      to="/spaces/$periodId/$entityKind/entity-reports"
+                      params={{ periodId: String(s.periodId), entityKind: s.entityKind }}
+                      search={s.ridingNumber ? { ridingNumber: s.ridingNumber } : {}}
+                    >
+                      <Button size="xs" variant="default">
+                        Reports
+                      </Button>
+                    </Link>
                   </Group>
                 </Table.Td>
               </Table.Tr>

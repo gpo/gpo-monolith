@@ -213,3 +213,58 @@ tracked as open questions):
 Tests: updated `all-report.test.ts` in both packages for the new column
 (21-column header, the constant, and every hardcoded CSV-row assertion).
 `pnpm turbo run lint typecheck test build` green.
+
+## Ticket 4.5 — Entity reports screen + dirty-report diffing
+
+screens.md screen 10: generate ALL/S2P2 per space, see the REP4/REP6 export
+gate's result, and — rule E5, the "dirty flag" — exactly which included
+records changed since generation and why (closes traceability.md gap 5,
+the E3 story).
+
+| Where | What |
+|---|---|
+| `packages/tax-receipts-core/src/reports/diff.ts` | `diffReportRows`: generic, pure row-set diff (`changed`/`added`/`removed`), keyed by a caller-supplied identity. `changed` is E5's dirty condition; `added`/`removed` are informational (a new receipt in scope isn't a correction to something already sent). |
+| `apps/tax-receipts/api/src/reports/load-receipts.ts` | `EntityReportIncludedSet<Row>`: `includedSet` now stores the generated rows themselves, not just receipt ids — a true point-in-time snapshot, which is what the schema's own doc comment already called for. |
+| `apps/tax-receipts/api/src/reports/entity-reports.ts` | `listEntityReports` / `checkEntityReportDrift` / `getEntityReportDetail` / `markEntityReportSentToCfo`. Drift is a **live recompute on read**, not a flag written by hooks scattered across every mutation path that could touch a reported row — same idiom `space/issuance.ts`'s gate already uses. `EntityReport.dirty` (the schema's own boolean column) is left unwritten; nothing persists a dirty flag back. |
+| `apps/tax-receipts/api/src/routes/entity-reports.ts` | `GET /periods/:id/entity-reports` (list, riding-scoped), `POST /periods/:id/entity-reports` (generate, per-entity only), `GET /entity-reports/:id` (detail + diff), `GET /entity-reports/:id/csv` (download), `POST /entity-reports/:id/sent-to-cfo` (screen 10's send-to-CFO tracking — the `share` CASL action already existed for the organizer role, unused until now). |
+| `apps/tax-receipts/web/src/routes/entity-reports.tsx` | The screen: generate form, report list with a dirty/clean/blocked badge, an expandable field-level diff table, CSV download, "mark sent" action. Reachable from a new "Reports" button on each space-dashboard row, same pattern as "Issue" (ticket 3.12). |
+
+Tests: `diff.test.ts` (core), `entity-reports.test.ts` (api, both the module
+and the route layer — including a REP4-gate-blocked generation returning
+409 with named findings), `entity-reports.test.tsx` (web). `pnpm turbo run
+lint typecheck test build` green (199 api tests, 28 web tests, 191 core
+tests).
+
+### Deviations / judgment calls
+
+1. **Only per-entity generation is exposed via HTTP/UI.** The combined
+   all-entities file (also built in 4.1/4.2) stays callable only from
+   server-side code. A combined report spans many political entities with
+   no single label to collect in one form — that's O39's entity-name-
+   registry gap, not something to solve by inventing UI for it here.
+   Combined reports also aren't drift-checked for the same reason (`dirty:
+   null`, surfaced distinctly from `true`/`false` rather than guessed).
+2. **Drift-checking rebuilds the full row set for the report's scope and
+   diffs it whole**, rather than trying to patch/diff a subset. For S2P2
+   this is the only correct option (rows are per-group aggregates, not
+   per-receipt); for ALL it's simpler and gives added/removed detection for
+   free. The label used to rebuild is read back from the stored rows
+   themselves (`Political_Entity`), not re-collected from the caller — one
+   space has one label, so nothing new is needed to check for drift, only
+   to generate a fresh report.
+3. **No persistence of the dirty flag.** `checkEntityReportDrift` runs on
+   every list-screen load; for the realistic scale here (at most a few
+   hundred entities per period) that's cheap enough. A future ticket
+   wanting a cheap, indexable "which reports are dirty" query without a
+   live recompute per row would write `EntityReport.dirty` back from this
+   same check.
+4. **CASL**: added `create` on `EntityReport` for `party_cfo`, `bookkeeper`,
+   and `filer` (screens.md's named personas for screen 10); `share`
+   (send-to-CFO) already existed for `organizer` and is now also granted to
+   `party_cfo`/`filer`, since either plausibly sends a report themselves.
+5. **REP4-gate test setup was more involved than expected**: constructing a
+   receipt that fails the gate meant hand-building a Receipt +
+   ReceiptAllocation directly (bypassing `issueReceipt`, which has no
+   opinion about report-export validity) rather than reusing the usual
+   fixture helper. Documented inline in the test rather than extending
+   `test/db.ts` for a one-off case.

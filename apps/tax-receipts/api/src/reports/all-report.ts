@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import {
   buildAllReportRow,
   formatAllReportCsv,
+  type AllReportRow,
   type AllReportSourceRow,
   type ReceivableFlag,
 } from '@gpo/tax-receipts-core';
 import { storeArtifact } from '../artifacts/store.js';
 import { withChangeLog } from '../changelog/write.js';
-import type { EntityKind, PrismaClient } from '../generated/prisma/index.js';
-import { loadReportReceipts, type ReportScope } from './load-receipts.js';
+import type { EntityKind, Prisma, PrismaClient } from '../generated/prisma/index.js';
+import { loadReportReceipts, type EntityReportIncludedSet, type ReportScope } from './load-receipts.js';
 
 /**
  * ALL report generator (ticket 4.1): screens.md screen 10's per-entity file,
@@ -110,7 +111,10 @@ export async function generateAllReport(
           periodId: input.periodId,
           kind: 'ALL',
           artifactId: artifact.id,
-          includedSet: { receiptIds: loaded.map((r) => r.receiptId) },
+          includedSet: {
+            receiptIds: loaded.map((r) => r.receiptId),
+            rows,
+          } satisfies EntityReportIncludedSet<AllReportRow> as unknown as Prisma.InputJsonValue,
         },
       });
       await ctx.log({
