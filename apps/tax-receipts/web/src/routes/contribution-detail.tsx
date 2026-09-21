@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Badge,
@@ -17,11 +16,11 @@ import {
   Text,
   TextInput,
   ThemeIcon,
-  Title,
   Tooltip,
 } from '@mantine/core';
 import { api, ApiError, type ContributionDetail, type MetadataEditInput } from '../api.js';
 import { describeRuleRef } from '../rule-labels.js';
+import { PageHeader } from '../components/PageHeader.js';
 
 /** Metadata field help text — kept next to the form so it stays in sync with
  * what the fields actually do (packages/tax-receipts-core/src/metadata.ts). */
@@ -281,10 +280,7 @@ export function ContributionDetailPage({ id }: { id: string }) {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={2}>Contribution</Title>
-        <Anchor to="/contributions">&larr; Back to list</Anchor>
-      </Group>
+      <PageHeader title="Contribution" backTo="/contributions" backLabel="Back to list" />
 
       <Card withBorder>
         <Stack gap="xs">
@@ -605,15 +601,5 @@ export function ContributionDetailPage({ id }: { id: string }) {
         )}
       </Card>
     </Stack>
-  );
-}
-
-function Anchor({ to, children }: { to: '/contributions'; children: React.ReactNode }) {
-  return (
-    <Link to={to}>
-      <Text span c="blue" size="sm">
-        {children}
-      </Text>
-    </Link>
   );
 }
