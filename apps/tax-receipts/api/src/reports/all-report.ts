@@ -3,6 +3,7 @@ import {
   buildAllReportRow,
   formatAllReportCsv,
   type AllReportSourceRow,
+  type ReceivableFlag,
 } from '@gpo/tax-receipts-core';
 import { storeArtifact } from '../artifacts/store.js';
 import { withChangeLog } from '../changelog/write.js';
@@ -20,9 +21,8 @@ import { loadReportReceipts, type ReportScope } from './load-receipts.js';
  * fetch (also used by S2P2, ticket 4.2 — REP2 needs both reports to agree on
  * what's included).
  *
- * S2P2 (ticket 4.2) and the REP2-8 export gate (ticket 4.3) are separate
- * tickets — this generator does not block on validation findings; it reports
- * what is issued, at any status.
+ * The REP4/REP6 export gate (ticket 4.3) runs inside `loadReportReceipts`
+ * itself, so every caller gets it — see load-receipts.ts's header comment.
  */
 
 export type { ReportScope as AllReportScope };
@@ -30,6 +30,7 @@ export {
   ReportScopeError as AllReportScopeError,
   MultiAllocationReceiptError,
   MissingContributionMetadataError,
+  ReportExportBlockedError,
 } from './load-receipts.js';
 
 export interface GenerateAllReportDeps {
@@ -55,6 +56,9 @@ export interface GeneratedAllReport {
   artifactId: string;
   rowCount: number;
   csv: string;
+  /** REP6's non-blocking receivable flags — see load-receipts.ts's
+   *  `LoadedReport.receivable` doc comment. */
+  receivable: ReceivableFlag[];
 }
 
 export async function generateAllReport(
@@ -62,7 +66,7 @@ export async function generateAllReport(
   input: GenerateAllReportInput,
 ): Promise<GeneratedAllReport> {
   const { prisma } = deps;
-  const loaded = await loadReportReceipts(prisma, input);
+  const { rows: loaded, receivable } = await loadReportReceipts(prisma, input);
 
   const rows = loaded.map((row) => {
     const source: AllReportSourceRow = {
@@ -123,5 +127,5 @@ export async function generateAllReport(
     },
   );
 
-  return { entityReportId: entityReport.id, artifactId: artifact.id, rowCount: rows.length, csv };
+  return { entityReportId: entityReport.id, artifactId: artifact.id, rowCount: rows.length, csv, receivable };
 }

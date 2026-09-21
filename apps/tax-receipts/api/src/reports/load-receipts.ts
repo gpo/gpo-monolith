@@ -1,3 +1,10 @@
+import {
+  runRepGate,
+  type PeriodRow,
+  type ReceivableFlag,
+  type RepGateFinding,
+  type RidingRow,
+} from '@gpo/tax-receipts-core';
 import type {
   EntityKind,
   PrismaClient,
@@ -10,8 +17,11 @@ import type {
  * ticket 4.2). Both reports are built from the exact same receipt set for a
  * scope — REP2 ("per-entity contribution sum equals... the filed return
  * total") only holds if they agree on what's included — so this is the one
- * place that decides which receipts are in scope and enforces the guards
- * (single allocation, metadata present) both reports need identically.
+ * place that decides which receipts are in scope, enforces the guards
+ * (single allocation, metadata present) both reports need identically, and
+ * — ticket 4.3 — runs the REP4/REP6 export gate before returning anything,
+ * throwing `ReportExportBlockedError` if it finds a blocking problem. Both
+ * generators get this for free; neither can accidentally skip it.
  */
 
 export interface ReportScope {
@@ -69,6 +79,18 @@ export class MissingContributionMetadataError extends Error {
   }
 }
 
+/** The report-export gate (ticket 4.3, REP4/REP6) found a blocking problem —
+ *  eo-reporting.md §2: "failures block export with named rows". */
+export class ReportExportBlockedError extends Error {
+  constructor(readonly findings: RepGateFinding[]) {
+    super(
+      `${findings.length} report-export finding(s) block this report: ` +
+        findings.map((f) => `${f.ruleRef} on ${f.receiptNumber}`).join('; '),
+    );
+    this.name = 'ReportExportBlockedError';
+  }
+}
+
 export interface LoadedReceiptRow {
   receiptId: string;
   receiptNumber: string;
@@ -91,6 +113,10 @@ export interface LoadedReceiptRow {
    *  spec calls this mandatory for GPO (eo-reporting.md §1); tracked as
    *  open-questions.md O38, not fabricated here. */
   eoContributorId: string | null;
+  /** ContributionMetadata.processedDate — feeds the REP6 receivable flag
+   *  (ticket 4.3). Null when the accounting date never differs from
+   *  acceptance. */
+  processedDate: Date | null;
   contactId: string;
   /** from Contact.lastName/firstName (ticket 4.1's schema addition) —
    *  Qomon's own name split, not a heuristic parse of the joined display
@@ -105,10 +131,16 @@ export interface LoadedReceiptRow {
   postalCode: string;
 }
 
-export async function loadReportReceipts(
-  prisma: PrismaClient,
-  scope: ReportScope,
-): Promise<LoadedReceiptRow[]> {
+export interface LoadedReport {
+  rows: LoadedReceiptRow[];
+  /** REP6's non-blocking receivable flags (see rep-gate.ts's header
+   *  comment) — carried through so a caller with somewhere to put them
+   *  (e.g. ticket 4.6's AR-1 "current-year notes for prior-year
+   *  corrections") doesn't have to re-run the gate. */
+  receivable: ReceivableFlag[];
+}
+
+export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScope): Promise<LoadedReport> {
   const hasEntityKind = scope.entityKind !== undefined;
   const hasRidingNumber = scope.ridingNumber !== undefined;
   if (hasEntityKind !== hasRidingNumber) {
@@ -129,7 +161,7 @@ export async function loadReportReceipts(
     orderBy: { receiptNumber: 'asc' },
   });
 
-  return receipts.map((receipt): LoadedReceiptRow => {
+  const rows = receipts.map((receipt): LoadedReceiptRow => {
     if (receipt.allocations.length !== 1) {
       throw new MultiAllocationReceiptError(receipt.id, receipt.receiptNumber, receipt.allocations.length);
     }
@@ -153,6 +185,7 @@ export async function loadReportReceipts(
       goodsServices: metadata.goodsServices,
       receivedBy: metadata.receivedBy,
       eoContributorId: metadata.eoContributorId,
+      processedDate: metadata.processedDate,
       contactId: receipt.contact.id,
       contributorLastName: receipt.contact.lastName ?? receipt.contact.name,
       contributorFirstName: receipt.contact.firstName ?? '',
@@ -164,4 +197,53 @@ export async function loadReportReceipts(
       postalCode: receipt.addressSnapshot.postalCode,
     };
   });
+
+  const { findings, receivable } = await runReportExportGate(prisma, rows);
+  if (findings.length > 0) {
+    throw new ReportExportBlockedError(findings);
+  }
+
+  return { rows, receivable };
+}
+
+/** Fetches the Period/Riding rows the loaded receipts reference and runs the
+ *  pure REP4/REP6 gate (`@gpo/tax-receipts-core`'s `rep-gate.ts`) over them. */
+async function runReportExportGate(
+  prisma: PrismaClient,
+  rows: readonly LoadedReceiptRow[],
+): Promise<{ findings: RepGateFinding[]; receivable: ReceivableFlag[] }> {
+  if (rows.length === 0) return { findings: [], receivable: [] };
+
+  const periodIds = [...new Set(rows.map((r) => r.periodId))];
+  const ridingNumbers = [...new Set(rows.map((r) => r.ridingNumber).filter((n): n is number => n !== null))];
+
+  const [periodRecords, ridingRecords] = await Promise.all([
+    prisma.period.findMany({ where: { id: { in: periodIds } } }),
+    ridingNumbers.length > 0
+      ? prisma.riding.findMany({ where: { ridingNumber: { in: ridingNumbers } } })
+      : Promise.resolve([]),
+  ]);
+
+  const periods = new Map<number, PeriodRow>(
+    periodRecords.map((p) => [
+      p.id,
+      { id: p.id, name: p.name, kind: p.kind, ridingNumbers: p.ridingNumbers, startsAt: p.startsAt, endsAt: p.endsAt },
+    ]),
+  );
+  const ridings = new Map<number, RidingRow>(
+    ridingRecords.map((r) => [r.ridingNumber, { ridingNumber: r.ridingNumber, active: r.active }]),
+  );
+
+  return runRepGate(
+    rows.map((r) => ({
+      receiptId: r.receiptId,
+      receiptNumber: r.receiptNumber,
+      entityKind: r.entityKind,
+      ridingNumber: r.ridingNumber,
+      periodId: r.periodId,
+      acceptedAt: r.acceptedAt,
+      processedDate: r.processedDate,
+    })),
+    { periods, ridings },
+  );
 }

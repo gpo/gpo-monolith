@@ -43,13 +43,14 @@ describe('ALL report generator (ticket 4.1)', () => {
       receivedBy?: 'GPO' | 'ENTITY';
       goodsServices?: boolean;
       eoContributorId?: string | null;
+      periodId?: number;
     } = {},
   ) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
         data: {
           contributionId,
-          periodId: baseline.periodId,
+          periodId: overrides.periodId ?? baseline.periodId,
           entityKind: overrides.entityKind ?? 'PARTY',
           ridingNumber: overrides.ridingNumber ?? null,
           receivedBy: overrides.receivedBy ?? 'GPO',
@@ -74,8 +75,10 @@ describe('ALL report generator (ticket 4.1)', () => {
     contactFirstName?: string;
     contactLastName?: string;
     contactName?: string;
+    periodId?: number;
   } = {}) {
     const amountCents = opts.amountCents ?? 5_000;
+    const periodId = opts.periodId ?? baseline.periodId;
     // A caller supplying contactName (an org-only-style contact) means "no
     // name split" — don't fall back to the Dana Donor default in that case.
     const { contactId, contributionId } = await makeContribution(prisma, {
@@ -92,11 +95,12 @@ describe('ALL report generator (ticket 4.1)', () => {
       receivedBy: opts.receivedBy,
       goodsServices: opts.goodsServices,
       eoContributorId: opts.eoContributorId,
+      periodId,
     });
     const receiptId = await fixtureIssueReceipt(prisma, {
       contactId,
       contributionId,
-      periodId: baseline.periodId,
+      periodId,
       amountCents,
       actorUserId: baseline.cfoUserId,
       entityKind: opts.entityKind,
@@ -142,19 +146,40 @@ describe('ALL report generator (ticket 4.1)', () => {
   });
 
   it('generates the combined file across every entity in the period, with a null entityKind report row', async () => {
-    await seedReportableReceipt({ entityKind: 'PARTY', amountCents: 10_000 });
-    await seedReportableReceipt({ entityKind: 'CA', ridingNumber: 84, amountCents: 20_000, receivedBy: 'GPO' });
+    // A CAMPAIGN entity is only ever eligible during an election period
+    // (REP4, space/eligibility.ts) -- baseline.periodId is ANNUAL, so this
+    // test needs its own GENERAL_ELECTION period for the export gate to pass.
+    const electionPeriodId = 9001;
+    await prisma.period.create({
+      data: {
+        id: electionPeriodId,
+        name: '2026 General Election',
+        kind: 'GENERAL_ELECTION',
+        startsAt: new Date('2026-01-01T05:00:00Z'),
+        endsAt: new Date('2027-01-01T05:00:00Z'),
+      },
+    });
+
+    await seedReportableReceipt({ entityKind: 'PARTY', amountCents: 10_000, periodId: electionPeriodId });
+    await seedReportableReceipt({
+      entityKind: 'CA',
+      ridingNumber: 84,
+      amountCents: 20_000,
+      receivedBy: 'GPO',
+      periodId: electionPeriodId,
+    });
     await seedReportableReceipt({
       entityKind: 'CAMPAIGN',
       ridingNumber: 84,
       amountCents: 30_000,
       receivedBy: 'ENTITY',
+      periodId: electionPeriodId,
     });
 
     const result = await generateAllReport(
       { prisma, storageDir },
       {
-        periodId: baseline.periodId,
+        periodId: electionPeriodId,
         actorUserId: baseline.cfoUserId,
         reason: 'generate combined ALL report',
         politicalEntityLabel: label,

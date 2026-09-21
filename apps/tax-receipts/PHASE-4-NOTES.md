@@ -126,3 +126,59 @@ per-entity scoping. `pnpm turbo run lint typecheck test build` green.
    the no-file-for-Kitchener-Centre case). All are covered by synthetic
    unit tests instead; a real byte-diff is still owed once someone has
    access.
+
+## Ticket 4.3 — REP-rule gates (REP2-REP8)
+
+eo-reporting.md §2: "report export runs REP2 to REP8; failures block export
+with named rows." Reading each of the seven rules against what the tool can
+actually check today split them three ways — see `rep-gate.ts`'s header
+comment for the full reasoning per rule:
+
+- **Genuinely new, checkable, and now enforced**: REP4 (every reported
+  contribution maps to a valid EO entity — reuses `isEntityEligible`,
+  already built for intake rule A2/A3) and REP6's period-window half
+  (re-verifies the acceptance date against the period at export time, not
+  just at intake, catching drift from a period edited after issuance).
+- **Structurally guaranteed already, nothing to gate**: REP1, REP3
+  (invariant-tested elsewhere), REP7, REP8 (built into how the ALL/S2P2
+  generators share `load-receipts.ts`), and REP5's "agency flag consistent"
+  half (`Agency_Contribution` is derived, not settable, so it cannot be
+  inconsistent).
+- **Not implementable yet — no data exists to check against**: REP2 ("equals
+  the filed return total") and REP5's "5% agency fee reconciles against
+  transfers" half need external data the tool doesn't model yet (an AR-1
+  return total; `ReconciliationMark` transfer records, tickets 4.7/4.8).
+  Logged as open-questions.md O40 rather than faked.
+
+REP6 also has a non-blocking half: acceptance in year N with the deposit
+processed in year N+1 is "flagged receivable", not rejected. Modeled as a
+separate `receivable` list threaded through both generators' results (not
+yet consumed anywhere — ticket 4.6's AR-1 "current-year notes for prior-year
+corrections" is the eventual consumer) rather than dropped.
+
+| Where | What |
+|---|---|
+| `packages/tax-receipts-core/src/reports/rep-gate.ts` | `runRepGate`: the pure REP4 + REP6 check, given already-fetched Period/Riding context. |
+| `packages/tax-receipts-core/src/period/calendar.ts` | Exported the previously-private `contains` as `periodContainsInstant`, so REP6 can re-verify a specific period rather than duplicating containment logic. |
+| `apps/tax-receipts/api/src/reports/load-receipts.ts` | `loadReportReceipts` now fetches the Period/Riding rows the loaded receipts reference, runs `runRepGate`, and throws `ReportExportBlockedError` (mirrors `SpaceIssuanceBlockedError`'s shape from ticket 3.12) before returning anything — so both ALL and S2P2 get the gate for free and neither can accidentally skip it. |
+
+Tests: `rep-gate.test.ts` in both packages — the core package covers the pure
+rule logic (entity validity across all three entity kinds and period kinds,
+period-window drift, the receivable flag's non-blocking behaviour), the api
+package proves the gate actually blocks `generateAllReport`/
+`generateS2p2Report` end to end and that a blocked export writes nothing
+(no `Artifact`, no `EntityReport`). `pnpm turbo run lint typecheck test
+build` green.
+
+### Deviations / judgment calls
+
+1. **Existing 4.1 test fixture was wrong, not the gate.** 4.1's combined-file
+   test issued a CAMPAIGN receipt against the baseline ANNUAL period — REP4
+   correctly blocks that (a campaign is never eligible outside an election
+   period). Fixed by giving that test its own `GENERAL_ELECTION` period
+   rather than loosening the gate.
+2. **The gate is unconditional, not opt-in.** Every call to
+   `generateAllReport`/`generateS2p2Report` runs it; there is no bypass.
+   Matches eo-reporting.md's "failures block export" language and the
+   existing `SpaceIssuanceBlockedError` precedent (ticket 3.12) rather than
+   adding a force-generate escape hatch nothing has asked for yet.

@@ -53,9 +53,16 @@ export class InvalidPeriodBoundsError extends Error {
   }
 }
 
-function contains(period: PeriodRow, instant: Date): boolean {
+/** Half-open containment `[startsAt, endsAt)` — exported for report-export-time
+ *  re-checks (rule REP6, ticket 4.3) that re-verify a specific, already-known
+ *  period rather than resolving one from scratch. */
+export function periodContainsInstant(period: PeriodRow, instant: Date): boolean {
   const t = instant.getTime();
   return t >= period.startsAt.getTime() && t < period.endsAt.getTime();
+}
+
+function contains(period: PeriodRow, instant: Date): boolean {
+  return periodContainsInstant(period, instant);
 }
 
 /** Election periods (writ periods carved out of the annual period) win over
