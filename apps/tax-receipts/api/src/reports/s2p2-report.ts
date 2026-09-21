@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   buildS2p2Rows,
   formatS2p2Csv,
+  type ReceivableFlag,
   type S2p2SourceRow,
 } from '@gpo/tax-receipts-core';
 import { storeArtifact } from '../artifacts/store.js';
@@ -18,7 +19,9 @@ import { loadReportReceipts, type ReportScope } from './load-receipts.js';
  * is the political-entity label wiring and the artifact + EntityReport
  * write, EXCEPT when nothing in scope clears the $200 threshold — then no
  * artifact or EntityReport is written at all (eo-reporting.md §2: "a period
- * whose top aggregate does not exceed $200 emits no S2P2 file at all").
+ * whose top aggregate does not exceed $200 emits no S2P2 file at all"). The
+ * REP4/REP6 export gate (ticket 4.3) runs inside `loadReportReceipts`
+ * itself, same as the ALL generator.
  */
 
 export interface GenerateS2p2ReportDeps {
@@ -41,6 +44,9 @@ export interface GeneratedS2p2Report {
   artifactId: string | null;
   rowCount: number;
   csv: string | null;
+  /** REP6's non-blocking receivable flags — see load-receipts.ts's
+   *  `LoadedReport.receivable` doc comment. */
+  receivable: ReceivableFlag[];
 }
 
 export async function generateS2p2Report(
@@ -48,7 +54,7 @@ export async function generateS2p2Report(
   input: GenerateS2p2ReportInput,
 ): Promise<GeneratedS2p2Report> {
   const { prisma } = deps;
-  const loaded = await loadReportReceipts(prisma, input);
+  const { rows: loaded, receivable } = await loadReportReceipts(prisma, input);
 
   const sources: S2p2SourceRow[] = loaded.map((row) => ({
     status: row.status,
@@ -70,7 +76,7 @@ export async function generateS2p2Report(
   const { rows, includedReceiptIds } = buildS2p2Rows(sources, input.politicalEntityLabel);
 
   if (rows.length === 0) {
-    return { entityReportId: null, artifactId: null, rowCount: 0, csv: null };
+    return { entityReportId: null, artifactId: null, rowCount: 0, csv: null, receivable };
   }
 
   const csv = formatS2p2Csv(rows);
@@ -109,5 +115,5 @@ export async function generateS2p2Report(
     },
   );
 
-  return { entityReportId: entityReport.id, artifactId: artifact.id, rowCount: rows.length, csv };
+  return { entityReportId: entityReport.id, artifactId: artifact.id, rowCount: rows.length, csv, receivable };
 }
