@@ -173,6 +173,11 @@ model Contact {
   id               String   @id @default(cuid())
   qomonContactId   BigInt   @unique
   name             String
+  /// Qomon's separate firstname/surname (ticket 4.1: the ALL/S2P2 EO reports
+  /// need first and last name as distinct columns, which `name` cannot supply
+  /// once joined; null when Qomon has no name split, e.g. an org-only contact)
+  firstName        String?
+  lastName         String?
   email            String?
   /// full mailing address as last synced from Qomon (JSON blob)
   addresses        Json     @default("[]")
@@ -418,8 +423,12 @@ model RtdFiling {
 
 model EntityReport {
   id           String           @id @default(cuid())
+  /// null on both ridingNumber and entityKind together = the combined,
+  /// all-entities file EO also expects alongside the per-entity ones
+  /// (eo-reporting.md §2, ticket 4.1); a non-null entityKind (ridingNumber
+  /// null only for PARTY) is one entity's own file, e.g. for its CFO.
   ridingNumber Int?
-  entityKind   EntityKind
+  entityKind   EntityKind?
   periodId     Int
   kind         EntityReportKind
   generatedAt  DateTime         @default(now())

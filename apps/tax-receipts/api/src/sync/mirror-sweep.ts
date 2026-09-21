@@ -403,6 +403,11 @@ async function backfillMetadataIfPossible(
 function contactFieldsFromQomon(fetched: QomonContact, fallbackId: number) {
   return {
     name: contactDisplayName(fetched, fallbackId),
+    // Kept alongside `name` (ticket 4.1): the ALL/S2P2 EO reports need
+    // Contributor_First_Name / Contributor_Last_Name as separate columns,
+    // which the joined display name can't supply back apart.
+    firstName: fetched.firstname?.trim() || null,
+    lastName: fetched.surname?.trim() || null,
     email: fetched.mail ?? null,
     addresses: (fetched.address ? [fetched.address] : []) as Prisma.InputJsonValue,
   };

@@ -28,3 +28,16 @@ export function eligibleAmountCents(
 ): number {
   return amountCents - nonDeductibleCents;
 }
+
+/** Plain `1234.56` decimal string, no `$` and no thousands separator — the
+ *  numeric-field format EO CSV exports use (unlike `centsToDisplay`, which is
+ *  for on-screen/receipt display). Negative amounts are not expected on an EO
+ *  filing; this still renders a leading `-` rather than silently clamping,
+ *  so a caller bug shows up in the output instead of disappearing. */
+export function centsToPlainDecimal(cents: number): string {
+  const sign = cents < 0 ? '-' : '';
+  const abs = Math.abs(cents);
+  const dollars = Math.floor(abs / 100);
+  const rem = abs % 100;
+  return `${sign}${dollars}.${rem.toString().padStart(2, '0')}`;
+}
