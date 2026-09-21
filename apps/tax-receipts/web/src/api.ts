@@ -49,7 +49,12 @@ export interface Me {
   role: string;
   allRidings: boolean;
   ridingGrants: number[];
-  can: { issueReceipts: boolean; administerKillSwitch: boolean };
+  can: {
+    issueReceipts: boolean;
+    administerKillSwitch: boolean;
+    generateEntityReports: boolean;
+    shareEntityReports: boolean;
+  };
 }
 
 export interface ContributionListRow {
@@ -365,6 +370,71 @@ export interface RidingImportResult {
   data: RidingRow[];
 }
 
+export interface EntityReportSummaryRow {
+  id: string;
+  kind: 'ALL' | 'S2P2';
+  periodId: number;
+  ridingNumber: number | null;
+  entityKind: 'PARTY' | 'CA' | 'CAMPAIGN' | null;
+  generatedAt: string;
+  sentToCfoAt: string | null;
+  artifactId: string | null;
+  rowCount: number;
+  /** null = combined report, not drift-checked (ticket 4.5). */
+  dirty: boolean | null;
+}
+
+export interface RowFieldDiff {
+  field: string;
+  before: string | number;
+  after: string | number;
+}
+
+export interface ReportRow {
+  [key: string]: string | number;
+}
+
+export interface RowDiff {
+  key: string;
+  before: ReportRow;
+  after: ReportRow;
+  fields: RowFieldDiff[];
+}
+
+export interface EntityReportDrift {
+  status: 'clean' | 'dirty' | 'blocked' | 'not-checked';
+  diff: { changed: RowDiff[]; added: ReportRow[]; removed: ReportRow[] } | null;
+}
+
+export interface EntityReportDetail {
+  report: {
+    id: string;
+    kind: 'ALL' | 'S2P2';
+    periodId: number;
+    ridingNumber: number | null;
+    entityKind: 'PARTY' | 'CA' | 'CAMPAIGN' | null;
+    generatedAt: string;
+    sentToCfoAt: string | null;
+    artifactId: string | null;
+  };
+  drift: EntityReportDrift;
+}
+
+export interface GenerateEntityReportInput {
+  kind: 'ALL' | 'S2P2';
+  entityKind: 'PARTY' | 'CA' | 'CAMPAIGN';
+  ridingNumber: number | null;
+  politicalEntityLabel: string;
+  reason: string;
+}
+
+export interface GeneratedEntityReportResult {
+  entityReportId: string | null;
+  artifactId: string | null;
+  rowCount: number;
+  csv: string | null;
+}
+
 export interface AdminUserRow {
   id: string;
   name: string;
@@ -489,4 +559,15 @@ export const api = {
     request<void>(`/admin/ridings/${ridingNumber}`, { method: 'DELETE' }),
   importRidings: (rows: RidingImportRow[]) =>
     request<RidingImportResult>('/admin/ridings/import', { method: 'POST', body: JSON.stringify(rows) }),
+  listEntityReports: (periodId: number) =>
+    request<{ data: EntityReportSummaryRow[] }>(`/periods/${periodId}/entity-reports`),
+  generateEntityReport: (periodId: number, input: GenerateEntityReportInput) =>
+    request<GeneratedEntityReportResult>(`/periods/${periodId}/entity-reports`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  getEntityReport: (id: string) => request<EntityReportDetail>(`/entity-reports/${id}`),
+  entityReportCsvUrl: (id: string) => `${BASE}/entity-reports/${id}/csv`,
+  markEntityReportSentToCfo: (id: string, reason: string) =>
+    request<unknown>(`/entity-reports/${id}/sent-to-cfo`, { method: 'POST', body: JSON.stringify({ reason }) }),
 };

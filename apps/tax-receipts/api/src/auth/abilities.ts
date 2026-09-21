@@ -83,6 +83,7 @@ export function defineAbilitiesFor(user: AbilityUser): AppAbility {
       can('correct', 'Contribution');
       can('update', 'ContributionMetadata');
       can('file', ['RtdFiling', 'EOForm']);
+      can(['create', 'share'], 'EntityReport');
       can('administer', 'IssuanceKillSwitch');
       break;
 
@@ -101,12 +102,14 @@ export function defineAbilitiesFor(user: AbilityUser): AppAbility {
     case 'bookkeeper':
       can('read', 'all');
       can(['create', 'update', 'reconcile'], 'ReconciliationMark');
+      can('create', 'EntityReport');
       can('update', 'WorkItem');
       break;
 
     case 'filer':
       can('read', 'all');
       can(['create', 'file'], ['RtdFiling', 'EOForm']);
+      can(['create', 'share'], 'EntityReport');
       can('update', 'WorkItem');
       break;
 

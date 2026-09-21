@@ -17,3 +17,4 @@ export * from './reports/csv.js';
 export * from './reports/all-report.js';
 export * from './reports/s2p2-report.js';
 export * from './reports/rep-gate.js';
+export * from './reports/diff.js';

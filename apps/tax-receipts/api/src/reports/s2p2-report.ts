@@ -3,12 +3,13 @@ import {
   buildS2p2Rows,
   formatS2p2Csv,
   type ReceivableFlag,
+  type S2p2Row,
   type S2p2SourceRow,
 } from '@gpo/tax-receipts-core';
 import { storeArtifact } from '../artifacts/store.js';
 import { withChangeLog } from '../changelog/write.js';
-import type { EntityKind, PrismaClient } from '../generated/prisma/index.js';
-import { loadReportReceipts, type ReportScope } from './load-receipts.js';
+import type { EntityKind, Prisma, PrismaClient } from '../generated/prisma/index.js';
+import { loadReportReceipts, type EntityReportIncludedSet, type ReportScope } from './load-receipts.js';
 
 /**
  * S2P2 report generator (ticket 4.2): Schedule 2 Part 2, the per-entity
@@ -98,7 +99,10 @@ export async function generateS2p2Report(
           periodId: input.periodId,
           kind: 'S2P2',
           artifactId: artifact.id,
-          includedSet: { receiptIds: includedReceiptIds },
+          includedSet: {
+            receiptIds: includedReceiptIds,
+            rows,
+          } satisfies EntityReportIncludedSet<S2p2Row> as unknown as Prisma.InputJsonValue,
         },
       });
       await ctx.log({

@@ -33,6 +33,7 @@ import { ADMIN_SECTIONS, AdminLayout, visibleAdminSections } from './routes/admi
 import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
+import { EntityReportsPage } from './routes/entity-reports.js';
 import { LoginPage } from './routes/login.js';
 import { SpaceIssuancePage } from './routes/space-issuance.js';
 import { WorkQueuePage } from './routes/work-queue.js';
@@ -215,6 +216,22 @@ const spaceIssuanceRoute = createRoute({
   },
 });
 
+const entityReportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/spaces/$periodId/$entityKind/entity-reports',
+  component: () => {
+    const { periodId, entityKind } = useParams({ from: '/spaces/$periodId/$entityKind/entity-reports' });
+    const search = useSearch({ strict: false }) as { ridingNumber?: number };
+    return (
+      <EntityReportsPage
+        periodId={Number(periodId)}
+        entityKind={entityKind}
+        ridingNumber={search.ridingNumber ?? null}
+      />
+    );
+  },
+});
+
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin',
@@ -248,6 +265,7 @@ const routeTree = rootRoute.addChildren([
   contributionDetailRoute,
   workQueueRoute,
   spaceIssuanceRoute,
+  entityReportsRoute,
   adminRouteWithChildren,
 ]);
 

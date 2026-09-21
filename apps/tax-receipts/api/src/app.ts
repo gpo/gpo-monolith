@@ -16,11 +16,18 @@ import {
   QomonWriteUnconfirmedError,
 } from './contributions/metadata-write-through.js';
 import { ContributionNotMirroredError } from './contributions/refresh.js';
+import { EntityReportNotFoundError } from './reports/entity-reports.js';
 import {
   AllocationOverageError,
   MissingAddressError,
   ReceiptIssuanceValidationError,
 } from './receipts/issue.js';
+import {
+  MissingContributionMetadataError,
+  MultiAllocationReceiptError,
+  ReportExportBlockedError,
+  ReportScopeError,
+} from './reports/load-receipts.js';
 import { SpaceIssuanceBlockedError } from './space/issuance.js';
 import { WorkItemAlreadyClosedError, WorkItemNotFoundError } from './work-items/resolve.js';
 import authPlugin from './plugins/auth.js';
@@ -28,6 +35,7 @@ import prismaPlugin from './plugins/prisma.js';
 import { adminRoutes } from './routes/admin.js';
 import { changeLogRoutes } from './routes/change-log.js';
 import { contributionRoutes } from './routes/contributions.js';
+import { entityReportRoutes } from './routes/entity-reports.js';
 import { healthRoutes } from './routes/health.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
 import { receiptRoutes } from './routes/receipts.js';
@@ -77,7 +85,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     if (
       error instanceof ContributionNotFoundError ||
       error instanceof ContributionNotMirroredError ||
-      error instanceof WorkItemNotFoundError
+      error instanceof WorkItemNotFoundError ||
+      error instanceof EntityReportNotFoundError
     ) {
       return reply.code(404).send({ error: error.message });
     }
@@ -98,6 +107,15 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
     if (error instanceof SpaceIssuanceBlockedError) {
       return reply.code(409).send({ error: error.message, blockers: error.blockers });
+    }
+    if (error instanceof ReportExportBlockedError) {
+      return reply.code(409).send({ error: error.message, findings: error.findings });
+    }
+    if (error instanceof ReportScopeError) {
+      return reply.code(400).send({ error: error.message });
+    }
+    if (error instanceof MultiAllocationReceiptError || error instanceof MissingContributionMetadataError) {
+      return reply.code(422).send({ error: error.message });
     }
     if (error instanceof BulkEditTooLargeError) {
       return reply.code(413).send({ error: error.message });
@@ -161,6 +179,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(validationRoutes);
   await app.register(workItemRoutes);
   await app.register(spaceRoutes, {
+    storageDir: opts.artifactStorageDir ?? './storage/artifacts',
+  });
+  await app.register(entityReportRoutes, {
     storageDir: opts.artifactStorageDir ?? './storage/artifacts',
   });
   await app.register(changeLogRoutes);

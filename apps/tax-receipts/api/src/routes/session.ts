@@ -44,6 +44,8 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
           'administer',
           'IssuanceKillSwitch',
         ),
+        generateEntityReports: request.ability.can('create', 'EntityReport'),
+        shareEntityReports: request.ability.can('share', 'EntityReport'),
       },
     });
   });
