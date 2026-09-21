@@ -14,6 +14,17 @@ import { formatReportCsv } from './csv.js';
  * CSV formatting (quoting convention, line ending) is shared with S2P2 in
  * `csv.ts` — see its header comment for the two formatting assumptions still
  * unverified against real filed bytes.
+ *
+ * Column layout (ticket 4.4, decisions.md D10): EO's written technical spec
+ * (`../eo/reporting-technical-specifications.md`, received directly from EO
+ * Compliance 2026-09-02) specifies 21 columns, including an optional
+ * `General_Meetings` column GPO's 2025/2024 accepted filings never carried.
+ * D10 decided to emit the spec's 21-column layout going forward — it's the
+ * document Evaluation Tool rows 68/69 score the tool against, and the extra
+ * column costs nothing (always `N`: GPO doesn't bundle contributions with
+ * general-meeting tickets, and EO's spec itself calls the field "not
+ * currently applicable"). Confirmed by EO's own example row in that spec
+ * (21 comma-separated values, `N` in the `General_Meetings` position).
  */
 
 export const ALL_REPORT_PARTY_ID = 8;
@@ -24,6 +35,7 @@ export const ALL_REPORT_HEADER = [
   'Receipt_Number',
   'Receipt_Status',
   'Agency_Contribution',
+  'General_Meetings',
   'Political_Entity_Type',
   'Political_Entity',
   'Contribution_Amount',
@@ -122,6 +134,10 @@ export function buildAllReportRow(
     Receipt_Number: source.receiptNumber,
     Receipt_Status: receiptStatusLetter(source.status),
     Agency_Contribution: isAgencyContribution(source.receivedBy, source.entityKind) ? 'Y' : 'N',
+    // Constant 'N' (D10, decisions.md): GPO has no concept of bundling a
+    // contribution with a general-meeting ticket; EO's own spec calls the
+    // field "not currently applicable".
+    General_Meetings: 'N',
     Political_Entity_Type: politicalEntityTypeLetter(source.entityKind),
     Political_Entity: politicalEntityLabel,
     Contribution_Amount: centsToPlainDecimal(source.amountCents),

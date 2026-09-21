@@ -75,6 +75,7 @@ describe('buildAllReportRow', () => {
       Receipt_Number: 'GPO-00402510',
       Receipt_Status: 'I',
       Agency_Contribution: 'N',
+      General_Meetings: 'N',
       Political_Entity_Type: 'P',
       Political_Entity: 'Green Party of Ontario',
       Contribution_Amount: '3425.00',
@@ -117,13 +118,18 @@ describe('buildAllReportRow', () => {
     expect(row.Contributor_Type).toBe('I');
     expect(row.Organization_Name).toBe('');
   });
+
+  it('always emits General_Meetings as N (D10: GPO has no general-meeting-bundled contributions)', () => {
+    const row = buildAllReportRow(baseSource(), 'Green Party of Ontario');
+    expect(row.General_Meetings).toBe('N');
+  });
 });
 
 describe('formatAllReportCsv', () => {
-  it('emits the exact 20-column header in the verified order', () => {
+  it('emits the exact 21-column header in the spec order (D10: EO spec layout, General_Meetings included)', () => {
     const csv = formatAllReportCsv([]);
     expect(csv).toBe(ALL_REPORT_HEADER.join(',') + '\n');
-    expect(ALL_REPORT_HEADER).toHaveLength(20);
+    expect(ALL_REPORT_HEADER).toHaveLength(21);
   });
 
   it('round-trips a row as a comma-joined line', () => {
@@ -132,7 +138,7 @@ describe('formatAllReportCsv', () => {
     const lines = csv.trimEnd().split('\n');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toBe(
-      '8,198176,GPO-00402510,I,N,P,Green Party of Ontario,3425.00,MO,05152026,06012026,67,I,Donor,Dana,,1 Main St,Toronto,ON,M1M 1M1',
+      '8,198176,GPO-00402510,I,N,N,P,Green Party of Ontario,3425.00,MO,05152026,06012026,67,I,Donor,Dana,,1 Main St,Toronto,ON,M1M 1M1',
     );
   });
 

@@ -132,7 +132,7 @@ describe('ALL report generator (ticket 4.1)', () => {
     const lines = result.csv.trimEnd().split('\n');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('8,198176,GPO-');
-    expect(lines[1]).toContain(',I,N,P,Green Party of Ontario,3425.00,MO,');
+    expect(lines[1]).toContain(',I,N,N,P,Green Party of Ontario,3425.00,MO,');
     expect(lines[1]).toContain(',67,I,Donor,Dana,,1 Main St,Toronto,ON,M1M1M1');
 
     const stored = await prisma.entityReport.findUnique({ where: { id: result.entityReportId } });
@@ -213,8 +213,8 @@ describe('ALL report generator (ticket 4.1)', () => {
     );
 
     const row = result.csv.trimEnd().split('\n')[1]!;
-    // ...,Receipt_Status,Agency_Contribution,... => "...,I,Y,A,..."
-    expect(row).toContain(',I,Y,A,');
+    // ...,Receipt_Status,Agency_Contribution,General_Meetings,Political_Entity_Type,... => "...,I,Y,N,A,..."
+    expect(row).toContain(',I,Y,N,A,');
   });
 
   it('retains a cancelled receipt as a full-value row with status C (REP7)', async () => {
@@ -233,7 +233,7 @@ describe('ALL report generator (ticket 4.1)', () => {
     );
 
     const row = result.csv.trimEnd().split('\n')[1]!;
-    expect(row).toContain(',C,N,P,'); // Receipt_Status=C
+    expect(row).toContain(',C,N,N,P,'); // Receipt_Status=C
     expect(row).toContain(',75.00,'); // full value retained, not zeroed
   });
 
