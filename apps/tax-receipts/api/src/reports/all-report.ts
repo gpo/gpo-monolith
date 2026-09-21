@@ -7,6 +7,7 @@ import {
 import { storeArtifact } from '../artifacts/store.js';
 import { withChangeLog } from '../changelog/write.js';
 import type { EntityKind, PrismaClient } from '../generated/prisma/index.js';
+import { loadReportReceipts, type ReportScope } from './load-receipts.js';
 
 /**
  * ALL report generator (ticket 4.1): screens.md screen 10's per-entity file,
@@ -14,29 +15,29 @@ import type { EntityKind, PrismaClient } from '../generated/prisma/index.js';
  * One generator serves both: omit `entityKind`/`ridingNumber` for the
  * combined file, supply them for one entity's own file. Column mapping and
  * derivations live in `@gpo/tax-receipts-core`'s `all-report.ts`
- * (pure/testable); this module is just the DB fetch, the political-entity
- * label wiring, and the artifact + EntityReport write.
+ * (pure/testable); this module is just the political-entity label wiring and
+ * the artifact + EntityReport write on top of `load-receipts.ts`'s shared
+ * fetch (also used by S2P2, ticket 4.2 — REP2 needs both reports to agree on
+ * what's included).
  *
  * S2P2 (ticket 4.2) and the REP2-8 export gate (ticket 4.3) are separate
  * tickets — this generator does not block on validation findings; it reports
  * what is issued, at any status.
  */
 
+export type { ReportScope as AllReportScope };
+export {
+  ReportScopeError as AllReportScopeError,
+  MultiAllocationReceiptError,
+  MissingContributionMetadataError,
+} from './load-receipts.js';
+
 export interface GenerateAllReportDeps {
   prisma: PrismaClient;
   storageDir: string;
 }
 
-export interface AllReportScope {
-  periodId: number;
-  /** both omitted (or both `undefined`) = the combined, all-entities file.
-   *  Supply both for one entity's file: `ridingNumber: null` for PARTY,
-   *  a riding number for CA/CAMPAIGN. */
-  ridingNumber?: number | null;
-  entityKind?: EntityKind;
-}
-
-export interface GenerateAllReportInput extends AllReportScope {
+export interface GenerateAllReportInput extends ReportScope {
   actorUserId: string;
   reason: string;
   /** Resolves a space's EO-facing display name (e.g. "084 Parry Sound
@@ -47,51 +48,6 @@ export interface GenerateAllReportInput extends AllReportScope {
    *  regulator. Called once per distinct (ridingNumber, entityKind) pair the
    *  scope's receipts actually carry. */
   politicalEntityLabel: (space: { ridingNumber: number | null; entityKind: EntityKind }) => string;
-}
-
-/**
- * A receipt with more than one allocation (several contributions consolidated
- * onto one receipt) can't be reported yet: which contribution's accepted date
- * prints, and whose non-deductible amount governs, is an open question ticket
- * 3.1 already declined to guess at for issuance itself — it belongs with the
- * correction/consolidation workflow (tickets 3.10/3.11), not this generator.
- * No such receipt can exist today (3.1 and 3.12 only ever issue one
- * contribution -> one receipt), so this is a forward guard, not a live gap.
- */
-export class MultiAllocationReceiptError extends Error {
-  constructor(
-    readonly receiptId: string,
-    readonly receiptNumber: string,
-    readonly allocationCount: number,
-  ) {
-    super(
-      `receipt ${receiptNumber} has ${allocationCount} allocations; the ALL report generator only ` +
-        'supports one contribution per receipt so far (see this file\'s MultiAllocationReceiptError doc comment)',
-    );
-    this.name = 'MultiAllocationReceiptError';
-  }
-}
-
-/** `ridingNumber` and `entityKind` must both be supplied (one entity's file)
- *  or both omitted (the combined file) — a half-scoped call (e.g. a riding
- *  with no entity kind) isn't a file EO or any CFO asks for, so it's rejected
- *  rather than silently generating a `ridingNumber`-filtered but
- *  entity-kind-unfiltered mix. */
-export class AllReportScopeError extends Error {
-  constructor() {
-    super('ridingNumber and entityKind must both be supplied (per-entity) or both omitted (combined)');
-    this.name = 'AllReportScopeError';
-  }
-}
-
-export class MissingContributionMetadataError extends Error {
-  constructor(readonly receiptNumber: string, readonly contributionId: string) {
-    super(
-      `receipt ${receiptNumber}'s contribution ${contributionId} has no metadata; intake derivation ` +
-        'has not resolved this row yet',
-    );
-    this.name = 'MissingContributionMetadataError';
-  }
 }
 
 export interface GeneratedAllReport {
@@ -106,66 +62,28 @@ export async function generateAllReport(
   input: GenerateAllReportInput,
 ): Promise<GeneratedAllReport> {
   const { prisma } = deps;
-  const hasEntityKind = input.entityKind !== undefined;
-  const hasRidingNumber = input.ridingNumber !== undefined;
-  if (hasEntityKind !== hasRidingNumber) {
-    throw new AllReportScopeError();
-  }
+  const loaded = await loadReportReceipts(prisma, input);
 
-  const receipts = await prisma.receipt.findMany({
-    where: {
-      periodId: input.periodId,
-      ...(input.entityKind !== undefined ? { entityKind: input.entityKind } : {}),
-      ...(input.ridingNumber !== undefined ? { ridingNumber: input.ridingNumber } : {}),
-    },
-    include: {
-      addressSnapshot: true,
-      contact: true,
-      allocations: { include: { contribution: { include: { metadata: true } } } },
-    },
-    orderBy: { receiptNumber: 'asc' },
-  });
-
-  const rows = receipts.map((receipt) => {
-    if (receipt.allocations.length !== 1) {
-      throw new MultiAllocationReceiptError(receipt.id, receipt.receiptNumber, receipt.allocations.length);
-    }
-    const allocation = receipt.allocations[0]!;
-    const contribution = allocation.contribution;
-    const metadata = contribution.metadata;
-    if (!metadata) {
-      throw new MissingContributionMetadataError(receipt.receiptNumber, contribution.id);
-    }
-
+  const rows = loaded.map((row) => {
     const source: AllReportSourceRow = {
-      receiptNumber: receipt.receiptNumber,
-      status: receipt.status,
-      entityKind: receipt.entityKind,
-      periodId: receipt.periodId,
-      issueDate: receipt.issueDate,
-      amountCents: allocation.amountCents,
-      acceptedAt: contribution.acceptedAt,
-      goodsServices: metadata.goodsServices,
-      receivedBy: metadata.receivedBy,
-      eoContributorId: metadata.eoContributorId,
-      // Qomon's own name split (ticket 4.1's Contact.firstName/lastName),
-      // not a heuristic parse of the joined display name. Falls back to the
-      // joined name in the last-name slot on the rare contact Qomon never
-      // split (e.g. org-only), so the row still carries an identifiable
-      // name rather than an empty one.
-      contributorLastName: receipt.contact.lastName ?? receipt.contact.name,
-      contributorFirstName: receipt.contact.firstName ?? '',
-      addressLine1: [receipt.addressSnapshot.line1, receipt.addressSnapshot.line2]
-        .filter((part): part is string => Boolean(part))
-        .join(' '),
-      city: receipt.addressSnapshot.city,
-      province: receipt.addressSnapshot.province,
-      postalCode: receipt.addressSnapshot.postalCode,
+      receiptNumber: row.receiptNumber,
+      status: row.status,
+      entityKind: row.entityKind,
+      periodId: row.periodId,
+      issueDate: row.issueDate,
+      amountCents: row.amountCents,
+      acceptedAt: row.acceptedAt,
+      goodsServices: row.goodsServices,
+      receivedBy: row.receivedBy,
+      eoContributorId: row.eoContributorId,
+      contributorLastName: row.contributorLastName,
+      contributorFirstName: row.contributorFirstName,
+      addressLine1: row.addressLine1,
+      city: row.city,
+      province: row.province,
+      postalCode: row.postalCode,
     };
-    const label = input.politicalEntityLabel({
-      ridingNumber: receipt.ridingNumber,
-      entityKind: receipt.entityKind,
-    });
+    const label = input.politicalEntityLabel({ ridingNumber: row.ridingNumber, entityKind: row.entityKind });
     return buildAllReportRow(source, label);
   });
 
@@ -188,7 +106,7 @@ export async function generateAllReport(
           periodId: input.periodId,
           kind: 'ALL',
           artifactId: artifact.id,
-          includedSet: { receiptIds: receipts.map((r) => r.id) },
+          includedSet: { receiptIds: loaded.map((r) => r.receiptId) },
         },
       });
       await ctx.log({
@@ -196,9 +114,9 @@ export async function generateAllReport(
         subjectId: created.id,
         after: { artifactId: artifact.id, rowCount: rows.length, kind: 'ALL' },
       });
-      if (receipts.length > 0) {
+      if (loaded.length > 0) {
         await ctx.tx.entityReportReceipt.createMany({
-          data: receipts.map((r) => ({ entityReportId: created.id, receiptId: r.id })),
+          data: loaded.map((r) => ({ entityReportId: created.id, receiptId: r.receiptId })),
         });
       }
       return created;

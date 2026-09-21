@@ -82,3 +82,47 @@ path. `pnpm turbo run lint typecheck test build` green across
 5. **No route yet.** Ticket 4.5 owns the entity reports screen; this ticket
    is scoped to "generator plus fixture" per the backlog line, same as how
    1.7's validation engine landed before 1.8's queue screen/route.
+
+## Ticket 4.2 — S2P2 report generator
+
+Schedule 2 Part 2: the per-entity aggregate of over-$200 contributors, per
+entity and combined, same split as ALL. Builds directly on 4.1: this ticket
+factored 4.1's receipt-fetch + guards out into a shared
+`load-receipts.ts` (both reports must agree on what's included — REP2 is a
+per-entity total reconciling across the whole return) and factored the CSV
+quoting/formatting out into `csv.ts`.
+
+| Where | What |
+|---|---|
+| `packages/tax-receipts-core/src/reports/s2p2-report.ts` | `buildS2p2Rows`: groups by (contributor, entity type, specific entity) within a period, sums only `ISSUED` rows (REP7), keeps strictly > $200 (the $200.00 boundary is excluded — pinned against the filed data's minimum aggregate, $200.20), and reproduces the two S2P2-only quirks: `Contributor_Type` carries the entity letter here (not the donor's type like ALL), and returns `[]` when nothing clears the threshold. |
+| `packages/tax-receipts-core/src/reports/csv.ts` | `formatReportCsv`, factored out of 4.1's `all-report.ts` so both reports share one quoting/line-ending implementation. |
+| `apps/tax-receipts/api/src/reports/load-receipts.ts` | `loadReportReceipts` + the scope/multi-allocation/missing-metadata guards, factored out of 4.1's `all-report.ts` so ALL and S2P2 query the identical receipt set for a scope. |
+| `apps/tax-receipts/api/src/reports/s2p2-report.ts` | `generateS2p2Report`: loads receipts, aggregates, and — only when at least one row clears $200 — writes the CSV artifact and an `EntityReport(kind: S2P2)` row. When nothing clears the threshold, **nothing is written**: no `Artifact`, no `EntityReport` (eo-reporting.md §2: "a period whose top aggregate does not exceed $200 emits no S2P2 file at all," e.g. the 2023 Kitchener Centre by-election). |
+
+Tests: `s2p2-report.test.ts` in both packages, covering the aggregation rule
+(sum ISSUED, exclude cancelled/void, strict >$200, per-entity not
+cross-entity, per-specific-entity not just per-kind), the
+never-collapse-on-missing-Contributor_ID grouping guard, the no-file case
+(asserts zero `EntityReport`/`Artifact` rows get created), and combined vs.
+per-entity scoping. `pnpm turbo run lint typecheck test build` green.
+
+### Deviations / judgment calls
+
+1. **`EntityReportReceipt` links (and `includedSet`) record only the
+   receipts that fed a *surviving* (>$200) group.** A receipt whose group
+   never cleared the threshold, or that was CANCELLED/VOID, isn't
+   "included" by this report in the sense ticket 4.5's dirty-report
+   tracking (E5) cares about — the artifact never reflects it. `core`'s
+   `buildS2p2Rows` returns `includedReceiptIds` alongside the formatted
+   rows so the caller doesn't have to re-derive group membership.
+2. **Row order is a judgment call**, same category as `csv.ts`'s
+   quoting/line-ending assumptions: sorted by (Political_Entity,
+   Contributor_Last_Name, Contributor_First_Name) for deterministic,
+   readable output. Unverified against the real filed byte order — the F1
+   gap (below) covers this too.
+3. **F1's byte-diff still not run**, same reason as 4.1 (no Drive access in
+   this build environment) — now also covering S2P2's own verification
+   facts (the G&S/aggregation rule, the exactly-$200 boundary population,
+   the no-file-for-Kitchener-Centre case). All are covered by synthetic
+   unit tests instead; a real byte-diff is still owed once someone has
+   access.

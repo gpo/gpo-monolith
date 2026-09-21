@@ -1,6 +1,7 @@
 import { centsToPlainDecimal } from '../money.js';
 import { formatEoDate } from '../period/calendar.js';
 import type { EntityKind, ReceivedBy, ReceiptStatus } from '../enums.js';
+import { formatReportCsv } from './csv.js';
 
 /**
  * The ALL report (ticket 4.1): Elections Ontario's per-entity annual
@@ -10,15 +11,9 @@ import type { EntityKind, ReceivedBy, ReceiptStatus } from '../enums.js';
  * "Verification facts" — the primary evidence, since an earlier spec-only
  * reading of the date format turned out wrong).
  *
- * Two assumptions this module makes that nobody has been able to verify
- * against the real filed bytes yet (the stored artifacts are private,
- * PII-bearing Drive files fetched on demand, not available in this build
- * environment): CSV quoting (minimal RFC4180 quoting is applied here, which
- * is a byte-for-byte no-op on every comma-free field the verified facts
- * describe — the risk is confined to the one field with no comma-free
- * guarantee, `Political_Entity`) and the line-ending (`\n` here). Confirm
- * both against a real fixture byte-diff before trusting F1's byte-for-byte
- * claim (test-plan.md).
+ * CSV formatting (quoting convention, line ending) is shared with S2P2 in
+ * `csv.ts` — see its header comment for the two formatting assumptions still
+ * unverified against real filed bytes.
  */
 
 export const ALL_REPORT_PARTY_ID = 8;
@@ -152,20 +147,6 @@ export function buildAllReportRow(
   };
 }
 
-/** Minimal RFC4180 quoting: a no-op for every field the verified facts
- *  describe as comma/quote-free (see this file's header comment). */
-function csvField(value: string | number): string {
-  const s = String(value);
-  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
-
 export function formatAllReportCsv(rows: readonly AllReportRow[]): string {
-  const lines = [ALL_REPORT_HEADER.join(',')];
-  for (const row of rows) {
-    lines.push(ALL_REPORT_HEADER.map((col) => csvField(row[col])).join(','));
-  }
-  return lines.join('\n') + '\n';
+  return formatReportCsv(ALL_REPORT_HEADER, rows);
 }
