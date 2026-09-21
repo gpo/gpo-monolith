@@ -13,4 +13,6 @@ export * from './space/state-machine.js';
 export * from './space/eligibility.js';
 export * from './validation/types.js';
 export * from './validation/rules.js';
+export * from './reports/csv.js';
 export * from './reports/all-report.js';
+export * from './reports/s2p2-report.js';
