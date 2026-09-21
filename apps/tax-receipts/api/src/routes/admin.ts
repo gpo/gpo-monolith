@@ -252,6 +252,62 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     },
   });
 
+  // bulk-load the riding directory (e.g. Elections Ontario's provincial
+  // riding list) from a file like ontario-ridings.json: upsert by
+  // ridingNumber so re-importing an updated file never creates duplicates.
+  // Unlike the single-riding PUT above, this does NOT require a Qomon key
+  // on an active row — a directory import is seeding/refreshing which
+  // ridings exist, not declaring one ready for live Qomon sync, and a
+  // real export of this data has no key to give (see qomonApiKeySet: it
+  // never round-trips). A blank qomonApiKey on an existing riding leaves
+  // its key in place, same rule as PATCH. Fields the schema doesn't have
+  // (e.g. effectiveFrom) are accepted in the input and silently dropped —
+  // not invented — rather than rejecting the whole file over them.
+  const RidingImportRow = z.object({
+    ridingNumber: z.number().int().min(1).max(124),
+    name: z.string().min(1),
+    qomonApiKey: z.string().trim().default(''),
+    qomonApiBase: z.string().url().nullish(),
+    active: z.boolean().default(true),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/admin/ridings/import',
+    schema: { body: z.array(RidingImportRow).min(1) },
+    handler: async (request, reply) => {
+      const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+
+      let created = 0;
+      let updated = 0;
+      const data = [];
+      for (const row of request.body) {
+        const existing = await app.prisma.riding.findUnique({ where: { ridingNumber: row.ridingNumber } });
+        const riding = await app.prisma.riding.upsert({
+          where: { ridingNumber: row.ridingNumber },
+          create: {
+            ridingNumber: row.ridingNumber,
+            name: row.name,
+            qomonApiKey: row.qomonApiKey,
+            qomonApiBase: row.qomonApiBase ?? null,
+            active: row.active,
+          },
+          update: {
+            name: row.name,
+            ...(row.qomonApiKey.length > 0 ? { qomonApiKey: row.qomonApiKey } : {}),
+            qomonApiBase: row.qomonApiBase ?? null,
+            active: row.active,
+          },
+        });
+        if (existing) updated++;
+        else created++;
+        data.push(redactRiding(riding));
+      }
+      return reply.send({ imported: data.length, created, updated, data });
+    },
+  });
+
   // ---- Users & roles ---------------------------------------------------
 
   r.get('/admin/users', async (request, reply) => {

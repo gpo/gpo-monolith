@@ -2,7 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
   Badge,
+  Button,
   Card,
+  Group,
   Loader,
   Stack,
   Table,
@@ -28,8 +30,24 @@ function stageColor(stage: string): string {
   return 'gray';
 }
 
+/** Same wording as RECIPIENT_KIND_OPTIONS in contribution-detail.tsx — enum
+ * values stay PARTY/CA/CAMPAIGN on the wire, only the on-screen label changes. */
+function entityKindLabel(entityKind: string): string {
+  if (entityKind === 'CA') return 'Constituency association';
+  if (entityKind === 'CAMPAIGN') return 'Campaign';
+  if (entityKind === 'PARTY') return 'Party (province-wide)';
+  return entityKind;
+}
+
 export function DashboardPage() {
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: api.listSpaces });
+  const periods = useQuery({ queryKey: ['admin-periods'], queryFn: api.listPeriods });
+  const ridings = useQuery({ queryKey: ['admin-ridings'], queryFn: api.listRidings });
+
+  const periodName = (periodId: number): string =>
+    periods.data?.data.find((p) => p.id === periodId)?.name ?? `Period ${periodId}`;
+  const ridingName = (ridingNumber: number): string =>
+    ridings.data?.data.find((r) => r.ridingNumber === ridingNumber)?.name ?? `Riding ${ridingNumber}`;
 
   return (
     <Stack gap="lg">
@@ -50,6 +68,7 @@ export function DashboardPage() {
               <Table.Th>Stage owner</Table.Th>
               <Table.Th>Contributions</Table.Th>
               <Table.Th>Open flags</Table.Th>
+              <Table.Th></Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -57,22 +76,9 @@ export function DashboardPage() {
               <Table.Tr
                 key={`${s.periodId}:${s.ridingNumber ?? 'party'}:${s.entityKind}`}
               >
-                <Table.Td>
-                  <Link
-                    to="/contributions"
-                    search={{
-                      periodId: s.periodId,
-                      ...(s.ridingNumber ? { ridingNumber: s.ridingNumber } : { partyLevelOnly: true }),
-                      entityKind: s.entityKind,
-                    }}
-                  >
-                    <Text span c="blue">
-                      {s.periodId}
-                    </Text>
-                  </Link>
-                </Table.Td>
-                <Table.Td>{s.ridingNumber ?? 'Party'}</Table.Td>
-                <Table.Td>{s.entityKind}</Table.Td>
+                <Table.Td>{periodName(s.periodId)}</Table.Td>
+                <Table.Td>{s.ridingNumber ? ridingName(s.ridingNumber) : 'Party'}</Table.Td>
+                <Table.Td>{entityKindLabel(s.entityKind)}</Table.Td>
                 <Table.Td>
                   <Badge color={stageColor(s.stage)}>{s.stage}</Badge>
                 </Table.Td>
@@ -84,6 +90,31 @@ export function DashboardPage() {
                   ) : (
                     <Badge color="green">clear</Badge>
                   )}
+                </Table.Td>
+                <Table.Td>
+                  <Group gap="xs" wrap="nowrap">
+                    <Link
+                      to="/contributions"
+                      search={{
+                        periodId: s.periodId,
+                        ...(s.ridingNumber ? { ridingNumber: s.ridingNumber } : { partyLevelOnly: true }),
+                        entityKind: s.entityKind,
+                      }}
+                    >
+                      <Button size="xs" variant="default">
+                        Contributions
+                      </Button>
+                    </Link>
+                    <Link
+                      to="/spaces/$periodId/$entityKind/issue"
+                      params={{ periodId: String(s.periodId), entityKind: s.entityKind }}
+                      search={s.ridingNumber ? { ridingNumber: s.ridingNumber } : {}}
+                    >
+                      <Button size="xs" variant="light">
+                        Issue
+                      </Button>
+                    </Link>
+                  </Group>
                 </Table.Td>
               </Table.Tr>
             ))}

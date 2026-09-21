@@ -15,7 +15,8 @@
     "migrate:deploy": "prisma migrate deploy",
     "migrate:reset": "prisma migrate reset --force",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
-    "db:seed:fixtures": "tsx --env-file=.env prisma/seed-phase-2-fixtures.ts"
+    "db:seed:fixtures": "tsx --env-file=.env prisma/seed-phase-2-fixtures.ts",
+    "db:seed:phase-3-fixtures": "tsx --env-file=.env prisma/seed-phase-3-fixtures.ts"
   },
   "dependencies": {
     "@casl/ability": "^6.7.3",

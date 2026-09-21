@@ -124,7 +124,7 @@ function a2RidingEntityWarning(
  * Sync state and a "refresh from Qomon" action.
  */
 
-function money(cents: number): string {
+export function money(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
@@ -142,8 +142,9 @@ function remainingEligibleCents(detail: ContributionDetail): number {
 
 /** A starting point only — the issuer can (and for CA/campaign, must) change
  * it. The exact EO-facing wording is a compliance question, not something to
- * bake in silently (see PHASE-3-NOTES.md). */
-function defaultPoliticalEntityLabel(entityKind: string): string {
+ * bake in silently (see PHASE-3-NOTES.md). Exported: the per-space issuance
+ * page (ticket 3.12) needs the same default for the same reason. */
+export function defaultPoliticalEntityLabel(entityKind: string): string {
   return entityKind === 'PARTY' ? 'Green Party of Ontario' : '';
 }
 

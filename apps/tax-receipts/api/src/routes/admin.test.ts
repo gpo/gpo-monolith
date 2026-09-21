@@ -254,4 +254,70 @@ describe('admin routes (ticket 1.12)', () => {
     });
     expect(reactivateNoKey.statusCode).toBe(400);
   });
+
+  it('rejects an administrator (non-sysadmin) from importing ridings', async () => {
+    const cookie = await login('admin@gpo.test', 'admin-pass-phrase');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/ridings/import',
+      cookies: { [cookie.name]: cookie.value },
+      payload: [{ ridingNumber: 1, name: 'Ajax', qomonApiKey: '', qomonApiBase: null, active: true }],
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('a sysadmin can bulk-import a riding directory with blank keys, without duplicating on re-import', async () => {
+    const cookie = await login('sysadmin@gpo.test', 'sysadmin-pass-phrase');
+
+    const rows = [
+      { ridingNumber: 1, name: 'Ajax', qomonApiKey: '', qomonApiBase: null, active: true, effectiveFrom: '2018-06-07T00:00:00.000Z' },
+      { ridingNumber: 2, name: 'Algoma—Manitoulin', qomonApiKey: '', qomonApiBase: null, active: true },
+    ];
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/admin/ridings/import',
+      cookies: { [cookie.name]: cookie.value },
+      payload: rows,
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ imported: 2, created: 2, updated: 0 });
+    expect(first.json().data).toContainEqual(
+      expect.objectContaining({ ridingNumber: 1, name: 'Ajax', active: true, qomonApiKeySet: false }),
+    );
+    // effectiveFrom isn't a schema field — accepted, then dropped, not invented
+    expect(first.json().data[0]).not.toHaveProperty('effectiveFrom');
+
+    const renamed = [{ ...rows[0], name: 'Ajax Renamed' }, rows[1]];
+    const second = await app.inject({
+      method: 'POST',
+      url: '/admin/ridings/import',
+      cookies: { [cookie.name]: cookie.value },
+      payload: renamed,
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ imported: 2, created: 0, updated: 2 });
+    expect(await prisma.riding.count()).toBe(2);
+    expect(await prisma.riding.findUnique({ where: { ridingNumber: 1 } })).toMatchObject({ name: 'Ajax Renamed' });
+  });
+
+  it('import leaves an existing Qomon key in place when the file has a blank key for that riding', async () => {
+    const cookie = await login('sysadmin@gpo.test', 'sysadmin-pass-phrase');
+    await app.inject({
+      method: 'PUT',
+      url: '/admin/ridings/7',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: 'Test Riding', qomonApiKey: 'secret-key' },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/ridings/import',
+      cookies: { [cookie.name]: cookie.value },
+      payload: [{ ridingNumber: 7, name: 'Test Riding Renamed', qomonApiKey: '', qomonApiBase: null, active: true }],
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data[0]).toMatchObject({ name: 'Test Riding Renamed', qomonApiKeySet: true });
+    expect(await prisma.riding.findUnique({ where: { ridingNumber: 7 } })).toMatchObject({ qomonApiKey: 'secret-key' });
+  });
 });
