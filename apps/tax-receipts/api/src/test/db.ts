@@ -103,12 +103,17 @@ export async function makeContribution(
     qomonTransactionId: bigint;
     amountCents: number;
     acceptedAt?: Date;
+    contactName?: string;
+    contactFirstName?: string;
+    contactLastName?: string;
   },
 ): Promise<ContributionFixture> {
   const contact = await prisma.contact.create({
     data: {
       qomonContactId: opts.qomonContactId,
-      name: 'Dana Donor',
+      name: opts.contactName ?? 'Dana Donor',
+      firstName: opts.contactFirstName,
+      lastName: opts.contactLastName,
       email: 'dana@example.org',
     },
   });
@@ -140,16 +145,22 @@ export async function issueReceipt(
     /** override the reserved number (to test invariant 3 rejections). */
     forceNumber?: string;
     numberSource?: 'SEQUENCE' | 'FOREIGN';
+    entityKind?: 'CA' | 'CAMPAIGN' | 'PARTY';
+    ridingNumber?: number | null;
+    status?: 'ISSUED' | 'CANCELLED' | 'VOID';
+    contactNameSnapshot?: string;
+    address?: { line1: string; city: string; province: string; postalCode: string };
   },
 ): Promise<string> {
+  const address = opts.address ?? { line1: '1 Main St', city: 'Toronto', province: 'ON', postalCode: 'M1M1M1' };
   const snapshot = await prisma.addressSnapshot.create({
     data: {
       contactId: opts.contactId,
       periodId: opts.periodId,
-      line1: '1 Main St',
-      city: 'Toronto',
-      province: 'ON',
-      postalCode: 'M1M1M1',
+      line1: address.line1,
+      city: address.city,
+      province: address.province,
+      postalCode: address.postalCode,
       source: 'test',
     },
   });
@@ -171,11 +182,13 @@ export async function issueReceipt(
         data: {
           receiptNumber: number!,
           numberSource: opts.numberSource ?? 'SEQUENCE',
-          entityKind: 'PARTY',
+          status: opts.status ?? 'ISSUED',
+          entityKind: opts.entityKind ?? 'PARTY',
+          ridingNumber: opts.ridingNumber ?? null,
           periodId: opts.periodId,
           issueDate: new Date(),
           contactId: opts.contactId,
-          contactNameSnapshot: 'Dana Donor',
+          contactNameSnapshot: opts.contactNameSnapshot ?? 'Dana Donor',
           addressSnapshotId: snapshot.id,
         },
       });
