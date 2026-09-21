@@ -15,10 +15,10 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { api, ApiError, type SpaceIssuanceResult } from '../api.js';
 import { describeRuleRef } from '../rule-labels.js';
+import { PageHeader } from '../components/PageHeader.js';
 import { defaultPoliticalEntityLabel, money } from './contribution-detail.js';
 
 /**
@@ -82,14 +82,7 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={2}>Issue receipts</Title>
-        <Link to="/">
-          <Text span c="blue" size="sm">
-            &larr; Back to spaces
-          </Text>
-        </Link>
-      </Group>
+      <PageHeader title="Issue receipts" backTo="/" backLabel="Back to spaces" />
       <Text c="dimmed">{spaceLabel(params)}</Text>
 
       <Stepper active={active} onStepClick={setActive} allowNextStepsSelect={false}>

@@ -1,6 +1,5 @@
 import { Fragment, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Badge,
@@ -14,9 +13,9 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { api, ApiError, type EntityReportDrift, type EntityReportSummaryRow } from '../api.js';
+import { PageHeader } from '../components/PageHeader.js';
 import { defaultPoliticalEntityLabel } from './contribution-detail.js';
 
 /**
@@ -159,14 +158,7 @@ export function EntityReportsPage(params: EntityReportsParams) {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={2}>Entity reports</Title>
-        <Link to="/">
-          <Text span c="blue" size="sm">
-            &larr; Back to spaces
-          </Text>
-        </Link>
-      </Group>
+      <PageHeader title="Entity reports" backTo="/" backLabel="Back to spaces" />
       <Text c="dimmed">{spaceLabel(params)}</Text>
 
       <Card withBorder>
