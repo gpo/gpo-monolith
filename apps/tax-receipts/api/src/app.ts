@@ -24,6 +24,12 @@ import {
   TerminalReceiptError,
 } from './receipts/allocate.js';
 import {
+  DeliveryMissingPdfError,
+  DeliveryReceiptNotFoundError,
+  DeliveryReceiptNotIssuedError,
+  DeliveryReceiptScopeError,
+} from './receipts/delivery.js';
+import {
   AllocationOverageError,
   MissingAddressError,
   ReceiptIssuanceValidationError,
@@ -131,6 +137,18 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
     if (error instanceof SpaceIssuanceBlockedError) {
       return reply.code(409).send({ error: error.message, blockers: error.blockers });
+    }
+    if (error instanceof DeliveryReceiptNotFoundError) {
+      return reply.code(404).send({ error: error.message });
+    }
+    if (error instanceof DeliveryReceiptScopeError) {
+      return reply.code(400).send({ error: error.message });
+    }
+    if (
+      error instanceof DeliveryReceiptNotIssuedError ||
+      error instanceof DeliveryMissingPdfError
+    ) {
+      return reply.code(409).send({ error: error.message });
     }
     if (error instanceof ReportExportBlockedError) {
       return reply.code(409).send({ error: error.message, findings: error.findings });

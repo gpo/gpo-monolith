@@ -3,13 +3,15 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { canSeeRiding } from '../auth/abilities.js';
+import { deliverSpaceReceipts } from '../receipts/delivery.js';
 import { getSpaceDashboard } from '../space/dashboard.js';
 import { issueReceiptsForSpace, previewSpaceIssuance } from '../space/issuance.js';
 import type { SessionUser } from '../plugins/auth.js';
 
 /** Space dashboard (ticket 1.10, screens.md 1) plus per-space issuance
  *  (ticket 3.12, screens.md screen 6): gate check + pre-issuance preview,
- *  and generate. */
+ *  and generate, plus delivery (ticket 3.5): email cover letters and the
+ *  consolidated print PDF. */
 export async function spaceRoutes(
   app: FastifyInstance,
   opts: { storageDir: string },
@@ -83,6 +85,43 @@ export async function spaceRoutes(
           reason: request.body.reason,
           politicalEntityLabel: request.body.politicalEntityLabel,
           delivery: request.body.delivery,
+        },
+      );
+      return reply.code(201).send(result);
+    },
+  });
+
+  const DeliverSpaceReceiptsBody = z.object({
+    receiptIds: z.array(z.string()).min(1),
+    reason: z.string().min(3),
+    coverLetterBody: z.string().min(1),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/spaces/:periodId/:entityKind/deliver',
+    schema: { params: SpaceParams, querystring: SpaceQuery, body: DeliverSpaceReceiptsBody },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('issue', 'Receipt')) {
+        return reply.code(403).send({ error: 'not permitted to deliver receipts' });
+      }
+      const ridingNumber = request.query.ridingNumber ?? null;
+      if (!canSeeRiding(user, ridingNumber)) {
+        return reply.code(403).send({ error: 'not permitted to see this riding' });
+      }
+
+      const result = await deliverSpaceReceipts(
+        { prisma: app.prisma, storageDir: opts.storageDir },
+        {
+          periodId: request.params.periodId,
+          ridingNumber,
+          entityKind: request.params.entityKind,
+          receiptIds: request.body.receiptIds,
+          actorUserId: user.id,
+          reason: request.body.reason,
+          coverLetterBody: request.body.coverLetterBody,
         },
       );
       return reply.code(201).send(result);

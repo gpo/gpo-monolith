@@ -290,3 +290,60 @@ template — confirmed yes, on the first real run, no code changes needed.
 2. **No golden comparison against real 2025 PDFs.** Flagged above rather
    than worked around; whoever gets Drive access can extend this file with
    real fixtures the same way 4.1/4.2's byte-diff residual is waiting on it.
+
+## Ticket 3.5 — Delivery: email (read-only formats), consolidated print, Qomon activity logging
+
+Story I2 (PRD.md): "delivery is by email or into one consolidated print PDF
+per run, honouring donor preference; every send is recorded as a Qomon
+activity on the donor." screens.md screen 6 places this as its own wizard
+step after generate: "generate → deliver (email batch + consolidated print
+PDF; Qomon activities logged) → done." Two of those three clauses are
+buildable; the third — logging to Qomon — turned out not to be, researched
+properly rather than faked (see open-questions.md **O45**, new).
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/receipts/delivery.ts` | `deliverSpaceReceipts(deps, input)`: takes the exact receipt ids a `issueReceiptsForSpace` (3.12) call just returned (not "every undelivered receipt in the space" — see deviation 1), splits them by `Receipt.delivery`. EMAIL receipts each get a rendered cover-letter PDF (`renderCoverLetterPdf`, a plain new one-page letter — no legacy template exists for this, unlike the receipt itself). MAIL receipts get merged into one consolidated print PDF (`mergeReceiptPdfs`, `pdf-lib` page concatenation in receipt-number order) for the mailhouse to print and stuff as one run. Every processed receipt gets a `ChangeLogEntry` recording which channel and which artifact(s) — the tool's own interim answer to "every send is recorded," since no Qomon-side equivalent exists (O45). |
+| `apps/tax-receipts/api/src/routes/spaces.ts` | `POST /spaces/:periodId/:entityKind/deliver`, gated on CASL `issue Receipt` (same authority as generate — screens.md: "issuance itself executes under the CFO authority model"), taking `{ receiptIds, reason, coverLetterBody }`. |
+
+Tests: `src/receipts/delivery.test.ts` (email/mail split with real
+text-extraction on both the cover letter and the merged PDF via ticket
+3.4's new `pdf-parse` dependency, multi-page merge order, and all four error
+paths: unknown receipt, wrong space, non-`ISSUED` receipt, missing PDF).
+`pnpm turbo run lint typecheck test build` green (268 tests).
+
+### Deviations / judgment calls
+
+1. **Explicit `receiptIds` input, not "every undelivered receipt in the
+   space."** This ticket deliberately never sets `Receipt.deliveredAt` (see
+   below), so there's no DB flag that would make a "what still needs
+   delivering" query safe to call twice. Taking the exact ids the caller
+   just generated makes double-delivery a caller error, not a silent
+   re-send — the same shape `issueReceiptsForSpace` already uses for its own
+   idempotency story (repeatable for stragglers, not repeatable for the same
+   batch).
+2. **`Receipt.deliveredAt` is untouched.** Ticket 3.6's backlog line pairs
+   it with "provider message id and status stored alongside `delivered_at`"
+   — read together, that column means *confirmed sent by a real provider*,
+   which nothing in this ticket can confirm (no live email send, no real
+   mailhouse handoff yet). Setting it here would be a well-intentioned
+   fabrication of the one thing 3.6 actually verifies. Invariant 7 (ticket
+   3.3) already left `delivery`/`deliveredAt` unconstrained anticipating
+   exactly this kind of open lifecycle question.
+3. **No Qomon activity is created (O45).** Researched, not assumed:
+   `research/qomon-api-reference.md`'s own gap analysis (#6, #12, #14)
+   concludes there is no activity/timeline/document facility in any of the
+   five Qomon specs, and the closest primitive (`Contact.notes`) is unsafe
+   to append to programmatically given `Contact` `PATCH`'s documented
+   full-replace, data-loss-risk semantics. The tool's own `ChangeLogEntry`
+   carries the delivery record instead.
+4. **`coverLetterBody` is a caller-supplied input, not derived or
+   templated.** workflows.md: "the cover letter is a template editable by
+   the rules authority" — no admin screen or storage for that template
+   exists yet (ticket 1.12 didn't include it), and no placeholder syntax is
+   specified anywhere, so this takes the fully-composed text as one value
+   per call, same pattern as 3.12's `politicalEntityLabel`. A real template
+   system with per-donor interpolation is future work, not guessed at here.
+5. **No web UI.** Same gap every Phase 3 ticket so far has left: this is a
+   service function plus one route. The wizard's "deliver" step (screens.md
+   screen 6) still needs its own UI work once this and 3.6 both exist.
