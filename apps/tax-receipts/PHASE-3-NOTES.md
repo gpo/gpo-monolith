@@ -205,3 +205,48 @@ Donor" rows to manually exercise draft/stamp/archive/DC-1A/the filings
 screen (tickets 2.2-2.8), none of which had a manual-test section yet
 despite shipping. See `seed-fixtures.ts`'s header comment for the full
 reserved-id table.
+
+## Ticket 3.3 — Receipt immutability (invariant 7)
+
+Data-model.md §2 states invariant 7 narrowly ("an AddressSnapshot referenced
+by an ISSUED receipt is immutable"); the backlog line for this ticket
+("Receipt immutability") and corrections.md's own principle 1 ("a receipt
+record, once generated, never changes; corrections produce new records")
+both read broader, so this ticket enforces both: the literal AddressSnapshot
+clause, and the rest of `Receipt`'s own core fields, which invariant 3
+(ticket 0.3) only ever covered for `receiptNumber`.
+
+| Where | What |
+|---|---|
+| `prisma/migrations/20260922150000_invariant_7_receipt_immutability` | Two new trigger sets. `address_snapshot`: any `UPDATE` or `DELETE` on a snapshot referenced by any `receipt` row is refused (closes a real gap too — ticket 0.3's invariant-4 hard-delete list never covered `address_snapshot` at all). `receipt`: `numberSource`, `ridingNumber`, `entityKind`, `periodId`, `issueDate`, `contactId`, `contactNameSnapshot`, `addressSnapshotId`, `reissuedFromId` are frozen after the INSERT; `status` may only move `ISSUED -> CANCELLED`/`VOID` (terminal after); `lost` is one-way `false -> true`; `replacedById` and `pdfArtifactId` are each one-time `NULL -> value`; `delivery`/`deliveredAt` are left unconstrained (delivery logistics, not a receipt fact — tickets 3.5/3.6 haven't specified their lifecycle yet). |
+| `apps/tax-receipts/api/src/invariants/receipt-immutability.test.ts` | One test per clause above, using raw `$executeRaw` for the illegal-mutation cases (same style `db-invariants.test.ts` uses for invariant 4) and `withChangeLog` for the legitimate one-time transitions. |
+
+Nothing in the existing service layer needed to change: `issueReceipt` (3.1)
+already only ever does the one legitimate `pdfArtifactId` NULL->value write,
+`allocateToReceipt` (3.2) never touches the `receipt` row at all, and the
+one existing test that cancels a receipt (`db-invariants.test.ts`) already
+only performs the one allowed `ISSUED -> CANCELLED` transition — confirmed
+by the full suite passing unchanged against the new triggers before adding
+this ticket's own tests.
+
+### Deviations / judgment calls
+
+1. **`lost` is one-way.** Nothing in corrections.md describes an "un-lose"
+   action, so `true -> false` is rejected rather than left open. If ticket
+   3.11 (Lost status, "Copy" reprint) turns out to need this, it's a
+   one-line trigger change, not a design problem.
+2. **`delivery`/`deliveredAt` are deliberately unconstrained.** They're
+   logistics (which channel, whether it went out), not one of the "receipt
+   facts" invariant 7 and corrections.md principle 1 are protecting.
+   Tickets 3.5/3.6 haven't shipped, so guessing at their exact mutation
+   pattern felt like the wrong kind of shortcut — same call 3.1/3.2 already
+   made for other still-open questions.
+3. **`pdfArtifactId` frozen forever, including for future reprints.**
+   Ticket 3.11's "Copy" reprint will need to render a *new* PDF for an
+   already-issued receipt; this migration means it cannot store that back
+   onto the same receipt's `pdfArtifactId`. That's intentional given
+   corrections.md's "a receipt record, once generated, never changes," but
+   it does mean 3.11 needs its own place to put a reprint's artifact (a new
+   `EOForm` row, or a new field/table) — flagged here rather than solved,
+   since 3.11 isn't built yet and guessing at its shape now would be the
+   same mistake ticket 3.1 avoided with `politicalEntityLabel`.
