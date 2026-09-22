@@ -7,6 +7,7 @@ export * from './rtd/business-days.js';
 export * from './rtd/draft.js';
 export * from './rtd/stamp.js';
 export * from './rtd/filing.js';
+export * from './rtd/dc1a.js';
 export * from './invariants/allocation.js';
 export * from './invariants/sequence.js';
 export * from './sync-hash.js';
