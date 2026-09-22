@@ -91,6 +91,23 @@ describe('DC-1A amendment generation, DB-backed (ticket 2.4)', () => {
     expect(form?.artifactId).toBe(result.artifactId);
   });
 
+  it('never collides with an INITIAL filing stamped in the same minute (RtdFiling.name is unique)', async () => {
+    // Same disclosure year and the same asOf minute buildRtdFilingName
+    // would otherwise render identically for both filings.
+    const donor = await seedReportedContribution(25_000, new Date('2026-03-01T12:00:00Z'));
+    const result = await generateDc1aAmendment(
+      { prisma, storageDir },
+      {
+        contributionId: donor.contributionId,
+        reason: 'amount corrected',
+        actorUserId: baseline.cfoUserId,
+        asOf: new Date('2026-03-06T15:00:00Z'), // same instant as seedReportedContribution's stamp
+      },
+    );
+    expect(result.filingName).not.toBe(donor.stamped.filingName);
+    expect(result.filingName).toBe(`${donor.stamped.filingName}_DC1A`);
+  });
+
   it('renders the original record and reason into the form artifact', async () => {
     const donor = await seedReportedContribution(25_000, new Date('2026-03-01T12:00:00Z'));
     const result = await generateDc1aAmendment(

@@ -28,6 +28,13 @@ import {
   ReportExportBlockedError,
   ReportScopeError,
 } from './reports/load-receipts.js';
+import { AmendmentWorkItemError, ContributionNotRtdReportedError } from './rtd/dc1a.js';
+import {
+  RtdFilingAlreadyArchivedError,
+  RtdFilingNotFoundError,
+  UnsupportedFilingKindError,
+} from './rtd/archive.js';
+import { RtdAlreadyReportedError, RtdExportBlockedError, RtdStampSelectionError } from './rtd/stamp.js';
 import { SpaceIssuanceBlockedError } from './space/issuance.js';
 import { WorkItemAlreadyClosedError, WorkItemNotFoundError } from './work-items/resolve.js';
 import authPlugin from './plugins/auth.js';
@@ -39,6 +46,7 @@ import { entityReportRoutes } from './routes/entity-reports.js';
 import { healthRoutes } from './routes/health.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
 import { receiptRoutes } from './routes/receipts.js';
+import { rtdRoutes } from './routes/rtd.js';
 import { sessionRoutes } from './routes/session.js';
 import { spaceRoutes } from './routes/spaces.js';
 import { syncRoutes } from './routes/sync.js';
@@ -111,6 +119,20 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     if (error instanceof ReportExportBlockedError) {
       return reply.code(409).send({ error: error.message, findings: error.findings });
     }
+    if (error instanceof RtdExportBlockedError) {
+      return reply.code(409).send({ error: error.message, blocked: error.blocked });
+    }
+    if (
+      error instanceof RtdStampSelectionError ||
+      error instanceof RtdAlreadyReportedError ||
+      error instanceof RtdFilingNotFoundError ||
+      error instanceof RtdFilingAlreadyArchivedError ||
+      error instanceof UnsupportedFilingKindError ||
+      error instanceof ContributionNotRtdReportedError ||
+      error instanceof AmendmentWorkItemError
+    ) {
+      return reply.code(error.statusCode).send({ error: error.message });
+    }
     if (error instanceof ReportScopeError) {
       return reply.code(400).send({ error: error.message });
     }
@@ -182,6 +204,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     storageDir: opts.artifactStorageDir ?? './storage/artifacts',
   });
   await app.register(entityReportRoutes, {
+    storageDir: opts.artifactStorageDir ?? './storage/artifacts',
+  });
+  await app.register(rtdRoutes, {
     storageDir: opts.artifactStorageDir ?? './storage/artifacts',
   });
   await app.register(changeLogRoutes);
