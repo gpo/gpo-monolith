@@ -110,3 +110,59 @@ any real use, since every PARTY-level fixture and every real Qomon-mirrored
 contribution shares that one space — the fixture's "ready to issue" case
 needed its own reserved, date-isolated period (9002) to actually stay
 clean.
+
+## Ticket 3.2 — Allocation model
+
+Guarantee G1's invariant-1 machinery (Σ issued allocations ≤ eligible amount)
+already existed before this ticket: the DB triggers shipped with 0.3
+(`prisma/migrations/20260910120100_invariants_1_5`) and the pure
+`checkAllocationSum`/`remainingEligibleCents`/`receiptTotalCents` functions
+plus their property-based test (`tax-receipts-core/src/invariants/
+allocation.test.ts`) shipped alongside it, reused as-is by 3.1's
+`issueReceipt`. What 3.1 and 3.12 never did is exercise `ReceiptAllocation`
+as actually many-to-many: every receipt issued so far still has exactly one
+allocation.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/receipts/allocate.ts` | `allocateToReceipt(deps, input)`: attaches one more contribution's allocation to an existing, still-`ISSUED` receipt. Re-checks invariant 1 for that contribution via `remainingEligibleCents` (the exact same check `issueReceipt` runs), requires the contribution's contact to match the receipt's contact, and rejects a duplicate contribution on the same receipt (the schema's `@@unique([receiptId, contributionId])` is the backstop; the service checks first for a clean error). |
+| `apps/tax-receipts/api/src/routes/receipts.ts` | `POST /receipts/:id/allocations`, gated on CASL `correct Receipt` (not `issue`) — attaching a contribution to an already-issued receipt reads as a correction to existing money, not the act of originating a new receipt, so it follows the broader `correct` grant (party CFO, CFO designates, and administrators) rather than `issue`'s CFO-only one. |
+| `apps/tax-receipts/api/src/app.ts` | Maps the three new error classes: `ReceiptNotFoundError` (404), `TerminalReceiptError` and `DuplicateAllocationError` (409), `AllocationContactMismatchError` (400). Reuses 3.1's `AllocationOverageError` (409) and `ReceiptIssuanceValidationError` (400) as-is. |
+
+Tests: `src/receipts/allocate.test.ts` (happy path with total recomputation,
+invariant-1 overage and exact-fit, terminal receipt, contact mismatch,
+duplicate allocation, unknown receipt/contribution, missing metadata), route
+tests appended to `src/routes/receipts.test.ts` (auth, 403 for a role with no
+`correct` grant, an administrator succeeding where 3.1's issue route would
+403 them, 409 on a duplicate). `pnpm turbo run lint typecheck test build`
+green.
+
+### Deviations / judgment calls
+
+1. **Deliberately does not decide which contribution's `acceptedAt` or
+   `goodsServices` prints, and does not re-render the PDF.** This is the same
+   question 3.1's header comment already declined to guess at, now real
+   instead of hypothetical: `reports/load-receipts.ts`'s
+   `MultiAllocationReceiptError` — built in 4.1 as a *forward* guard on the
+   assumption no multi-allocation receipt could exist yet — is now a live
+   gap. Its doc comment is updated to say so. Nothing calls
+   `allocateToReceipt` today (no earlier ticket has a reason to), so no
+   report run hits it yet, but the first correction ticket that does (3.10 or
+   3.11) needs to resolve both questions before consolidated receipts can be
+   reported, or `load-receipts.ts` needs its own follow-up to handle them.
+   Flagged rather than guessed at, per 3.1's own precedent.
+2. **`correct`, not `issue`, gates the route.** `abilities.ts` already
+   defines `correct` as "run a correction action" and grants it to
+   administrators (who cannot `issue`); adding an allocation to existing
+   money fits that action better than fresh issuance. This does mean an
+   administrator — not just the CFO or a designate — can grow an issued
+   receipt's total, which is a real authority question worth confirming
+   before 3.10 builds real correction actions on top of this primitive.
+3. **No new PDF, no change to the existing one.** The already-rendered PDF
+   for the receipt's original allocation is untouched; a receipt whose total
+   grew via this route will show a stale total on its stored PDF until
+   whatever regenerates it (again, 3.10/3.11's job — those tickets already
+   have `Receipt.reissuedFromId`/`replacedById` for exactly this).
+4. **No web UI**, same as 3.1: this is a service function plus one route,
+   with no screen calling it. `screens.md`'s correction-actions screen
+   (screen 8, ticket 3.14) is the natural future caller.
