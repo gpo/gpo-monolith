@@ -35,6 +35,7 @@ import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
 import { EntityReportsPage } from './routes/entity-reports.js';
 import { LoginPage } from './routes/login.js';
+import { RtdFilingsPage } from './routes/rtd-filings.js';
 import { SpaceIssuancePage } from './routes/space-issuance.js';
 import { WorkQueuePage } from './routes/work-queue.js';
 
@@ -155,6 +156,7 @@ function RootLayout() {
           <Group gap="xs">
             <HeaderLink to="/contributions">Contributions</HeaderLink>
             <HeaderLink to="/work-queue">Work queue</HeaderLink>
+            <HeaderLink to="/rtd-filings">RTD filings</HeaderLink>
             <HeaderLink to="/admin">Admin</HeaderLink>
             <AccountMenu name={me.data.name} onSignOut={signOut} />
           </Group>
@@ -232,6 +234,12 @@ const entityReportsRoute = createRoute({
   },
 });
 
+const rtdFilingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/rtd-filings',
+  component: RtdFilingsPage,
+});
+
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin',
@@ -266,6 +274,7 @@ const routeTree = rootRoute.addChildren([
   workQueueRoute,
   spaceIssuanceRoute,
   entityReportsRoute,
+  rtdFilingsRoute,
   adminRouteWithChildren,
 ]);
 

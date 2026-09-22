@@ -38,6 +38,7 @@ import { buildRtdDraft, type RtdGateFinding } from './draft.js';
  */
 
 export class RtdStampSelectionError extends Error {
+  readonly statusCode = 400;
   constructor(readonly missingContributionIds: string[]) {
     super(
       missingContributionIds.length === 0
@@ -52,6 +53,7 @@ export class RtdStampSelectionError extends Error {
 /** The RTD-export gate (eo-reporting.md §1: "RTD export runs rules A1, C4,
  *  B1, B2, E2 on candidate rows") found an open finding on a selected row. */
 export class RtdExportBlockedError extends Error {
+  readonly statusCode = 409;
   constructor(readonly blocked: Array<{ contributionId: string; gateFindings: RtdGateFinding[] }>) {
     super(
       `${blocked.length} row(s) have open RTD-gate findings blocking this filing: ` +
@@ -66,6 +68,7 @@ export class RtdExportBlockedError extends Error {
 /** A race: another stamp reported one of these contributions between the
  *  draft re-derivation above and this transaction's write. */
 export class RtdAlreadyReportedError extends Error {
+  readonly statusCode = 409;
   constructor(readonly contributionIds: string[]) {
     super(`already has an RtdInclusion row: ${contributionIds.join(', ')}`);
     this.name = 'RtdAlreadyReportedError';
@@ -84,6 +87,10 @@ export interface StampRtdFilingInput {
   /** defaults to now; also the instant the filing name's timestamp and the
    *  draft's business-day clock are evaluated as of. */
   asOf?: Date;
+  /** `.csv` or pipe-delimited `.txt` (eo-reporting.md §1); defaults to CSV.
+   *  Only affects how ticket 2.6's `archiveRtdFiling` later renders the
+   *  bytes — this ticket never generates them. */
+  format?: 'CSV' | 'PIPE';
 }
 
 export interface StampedRtdFiling {
@@ -130,7 +137,7 @@ export async function stampRtdFiling(
       }
 
       const filing = await ctx.tx.rtdFiling.create({
-        data: { name: filingName, kind: 'INITIAL', format: 'CSV' },
+        data: { name: filingName, kind: 'INITIAL', format: input.format ?? 'CSV' },
       });
       await ctx.tx.rtdInclusion.createMany({
         data: selected.map((r) => ({

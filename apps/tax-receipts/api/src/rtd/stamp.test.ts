@@ -85,6 +85,19 @@ describe('RTD filing stamp, DB-backed (ticket 2.3)', () => {
     expect(entry?.reason).toBe('first RTD filing');
   });
 
+  it('stamps a PIPE-format filing when requested, defaulting to CSV otherwise', async () => {
+    const a = await seedDraftCandidate();
+    const result = await stampRtdFiling(prisma, {
+      year: 2026,
+      contributionIds: [a.contributionId],
+      actorUserId: baseline.cfoUserId,
+      reason: 'pipe format filing',
+      format: 'PIPE',
+    });
+    const filing = await prisma.rtdFiling.findUnique({ where: { id: result.rtdFilingId } });
+    expect(filing?.format).toBe('PIPE');
+  });
+
   it('a now-reported contribution drops out of the next draft, so double-stamping it fails as an invalid selection', async () => {
     const a = await seedDraftCandidate();
     await stampRtdFiling(prisma, {

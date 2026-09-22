@@ -36,6 +36,7 @@ import type { PrismaClient } from '../generated/prisma/index.js';
  */
 
 export class ContributionNotRtdReportedError extends Error {
+  readonly statusCode = 422;
   constructor(readonly contributionId: string) {
     super(
       `contribution ${contributionId} has no RtdInclusion -- it was never RTD-reported, so a DC-1A doesn't apply ` +
@@ -46,6 +47,7 @@ export class ContributionNotRtdReportedError extends Error {
 }
 
 export class AmendmentWorkItemError extends Error {
+  readonly statusCode = 409;
   constructor(message: string) {
     super(message);
     this.name = 'AmendmentWorkItemError';
@@ -135,7 +137,15 @@ export async function generateDc1aAmendment(
     extension: 'txt',
   });
 
-  const filingName = buildRtdFilingName(originalRecord.contributionYear, RTD_FILING_PARTY_ID, asOf);
+  // eo-reporting.md only documents the INITIAL filename convention; DC-1A
+  // amendments have no equivalent spec (open-questions.md O43). Reusing
+  // buildRtdFilingName's base and appending a suffix keeps the same
+  // recognizable <Year>_RTD_<PartyID>_MMDDYYYYHHMM shape while guaranteeing
+  // it can never collide with an INITIAL filing's name on `RtdFiling.name`'s
+  // unique constraint -- a real risk otherwise: a filer stamping a fresh
+  // filing and generating an amendment for a different contribution within
+  // the same minute would otherwise produce the identical name.
+  const filingName = `${buildRtdFilingName(originalRecord.contributionYear, RTD_FILING_PARTY_ID, asOf)}_DC1A`;
 
   const result = await withChangeLog(
     prisma,

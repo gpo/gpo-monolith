@@ -23,6 +23,7 @@ import type { PrismaClient } from '../generated/prisma/index.js';
  */
 
 export class RtdFilingNotFoundError extends Error {
+  readonly statusCode = 404;
   constructor(readonly rtdFilingId: string) {
     super(`no RtdFiling ${rtdFilingId}`);
     this.name = 'RtdFilingNotFoundError';
@@ -33,6 +34,7 @@ export class RtdFilingNotFoundError extends Error {
  *  never-overwrite-a-filed-artifact rule, compliance.md) — re-running this
  *  is a caller bug, not a resync. */
 export class RtdFilingAlreadyArchivedError extends Error {
+  readonly statusCode = 409;
   constructor(readonly rtdFilingId: string, readonly artifactId: string) {
     super(`RtdFiling ${rtdFilingId} is already archived as artifact ${artifactId}`);
     this.name = 'RtdFilingAlreadyArchivedError';
@@ -40,6 +42,7 @@ export class RtdFilingAlreadyArchivedError extends Error {
 }
 
 export class UnsupportedFilingKindError extends Error {
+  readonly statusCode = 400;
   constructor(readonly rtdFilingId: string, readonly kind: string) {
     super(`RtdFiling ${rtdFilingId} has kind ${kind}; archiveRtdFiling only renders INITIAL filings (ticket 2.4 covers DC1A_AMENDMENT)`);
     this.name = 'UnsupportedFilingKindError';
