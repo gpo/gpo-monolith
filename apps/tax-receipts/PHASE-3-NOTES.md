@@ -250,3 +250,43 @@ this ticket's own tests.
    `EOForm` row, or a new field/table) — flagged here rather than solved,
    since 3.11 isn't built yet and guessing at its shape now would be the
    same mistake ticket 3.1 avoided with `politicalEntityLabel`.
+
+## Ticket 3.4 — PDF rendering + text-extraction tests (F4)
+
+test-plan.md's F4 asks for two things: render a sample of receipts and
+extract text fields (number, dates, amount, name, address, entity, the
+official-receipt statement) back out, **and** compare those against real,
+EO-issued 2025 receipt PDFs. Only the first half is buildable here — the
+real 2025 receipt PDFs are private, PII-bearing Drive downloads with no
+fetch access from this build environment (`research/fixtures/README.md`),
+the same class of gap as 4.1/4.2's F1 byte-diff residual and O43's DC-1A
+template. `renderReceiptPdf` (ticket 3.1) had no dedicated test file before
+this — `issue.test.ts` only ever checked page count, never what the PDF
+actually says.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/receipts/pdf.test.ts` | Renders a receipt with known data, extracts the text back out with `pdf-parse` (new devDependency — pure-JS/TypeScript, no system binary, so it runs the same in CI as locally), and asserts every F4 field is present, on all three of the template's stamped copies, not just one. Also covers the goods-and-services contribution-type wording, the EO contributor id's presence/absence, and address-line-2/postal-code formatting. |
+
+One thing worth recording since it wasn't obvious going in: the template's
+"This is your Official Receipt for income tax purposes." statement (and the
+GPO letterhead) turned out to already be real, extractable text embedded in
+`assets/receipt-template.pdf` itself (confirmed with `pdftotext` directly
+against the template before writing any test) — `pdf.ts` never draws that
+line itself, it just copies the template page and draws the dynamic fields
+on top. The open question going in was whether `pdf-lib`'s `copyPages` plus
+the dynamically-drawn `Helvetica` text would still leave that embedded
+statement extractable in the *final* rendered receipt, not just the raw
+template — confirmed yes, on the first real run, no code changes needed.
+
+### Deviations / judgment calls
+
+1. **`pdf-parse` added as a devDependency, not a runtime one.** F4 is a
+   test-plan requirement, not a feature the app itself needs — nothing in
+   `src/` outside this test file extracts text from a PDF. Picked over
+   shelling out to a system `pdftotext` binary (used only to manually probe
+   the template while writing this ticket, never from checked-in code)
+   specifically so CI doesn't need a system dependency to run these tests.
+2. **No golden comparison against real 2025 PDFs.** Flagged above rather
+   than worked around; whoever gets Drive access can extend this file with
+   real fixtures the same way 4.1/4.2's byte-diff residual is waiting on it.
