@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { standardOntarioEsaHolidays } from '@gpo/tax-receipts-core';
 import { PrismaClient } from '../src/generated/prisma/index.js';
 import { hashPassword } from '../src/auth/password.js';
@@ -8,8 +11,61 @@ import { hashPassword } from '../src/auth/password.js';
  * admin screens (ticket 1.12). The figures here match the specs (period 63/64
  * for 2025, 67 for 2026 annual; O15 limit buckets) so the tool is
  * demonstrable out of the box.
+ *
+ * The riding directory (below) is the one exception to "not production
+ * data": `ontario-ridings.json` is the real 124-riding Elections Ontario
+ * provincial roster (2018 redistribution), in exactly the shape
+ * `POST /admin/ridings/import` (`routes/admin.ts`) expects — this is what
+ * that route's own comment means by "a file like ontario-ridings.json".
+ * Loading it here means every dev/test database has the real riding
+ * directory from the start, which matters for `prisma/seed-fixtures.ts`:
+ * before this, its fixtures invented riding numbers (84, 90, 12) that
+ * happen to be *real* ridings (Parry Sound—Muskoka, St. Catharines, Brampton
+ * West) under fake fixture names — harmless only because nothing had ever
+ * loaded the real directory into the same database. `qomonApiKey` ships
+ * blank for all 124: real per-riding keys are entered by an administrator
+ * (ticket 1.12's admin screen), never committed here.
  */
 const prisma = new PrismaClient();
+
+const RIDINGS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ontario-ridings.json');
+
+interface RidingImportRow {
+  ridingNumber: number;
+  name: string;
+  qomonApiKey: string;
+  qomonApiBase: string | null;
+  active: boolean;
+  /** the schema has no such field; read and intentionally discarded, same
+   *  rule `routes/admin.ts`'s import endpoint documents for this file. */
+  effectiveFrom?: string;
+}
+
+async function seedRidings(): Promise<void> {
+  const raw = await readFile(RIDINGS_FILE, 'utf-8');
+  const rows = JSON.parse(raw) as RidingImportRow[];
+  for (const row of rows) {
+    await prisma.riding.upsert({
+      where: { ridingNumber: row.ridingNumber },
+      create: {
+        ridingNumber: row.ridingNumber,
+        name: row.name,
+        qomonApiKey: row.qomonApiKey,
+        qomonApiBase: row.qomonApiBase,
+        active: row.active,
+      },
+      // same rule as the admin import route: a blank key on an existing
+      // riding leaves its real key in place rather than clobbering it.
+      update: {
+        name: row.name,
+        ...(row.qomonApiKey.length > 0 ? { qomonApiKey: row.qomonApiKey } : {}),
+        qomonApiBase: row.qomonApiBase,
+        active: row.active,
+      },
+    });
+  }
+  console.log(`  ridings: upserted ${rows.length} from ontario-ridings.json`);
+}
 
 async function main(): Promise<void> {
   // --- Periods (data-model §2; boundaries are ET wall-clock, stored UTC) ---
@@ -65,6 +121,9 @@ async function main(): Promise<void> {
       update: { amountCents, notes },
     });
   }
+
+  // --- Riding directory (real Elections Ontario roster; see header comment) ---
+  await seedRidings();
 
   // --- RTD business-day calendars (ticket 0.10; editable annual config) ---
   for (const year of [2025, 2026, 2027]) {

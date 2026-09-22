@@ -98,18 +98,18 @@ test build` green (api and web).
 
 ### Fixture data for manual testing
 
-`apps/tax-receipts/api/prisma/seed-phase-3-fixtures.ts`
-(`pnpm db:seed:phase-3-fixtures`) seeds five spaces — clean, blocked,
-partial-failure-on-generate, and a donor spanning three spaces across
-different periods/ridings/entities — to exercise the wizard above without
-hand-entering data per session. See
+`apps/tax-receipts/api/prisma/seed-fixtures.ts` (`pnpm db:seed:fixtures`;
+consolidated 2026-09-22 — see that ticket's own notes below) seeds five
+spaces — clean, blocked, partial-failure-on-generate, and a donor spanning
+three spaces across different periods/ridings/entities — to exercise the
+wizard above without hand-entering data per session. See
 [`PHASE-3-MANUAL-TEST-PLAN.md`](PHASE-3-MANUAL-TEST-PLAN.md) §1 for what
 each seeded donor demonstrates. One thing this surfaced worth flagging: a
 "clean" PARTY-level space can't be guaranteed on a dev database that's seen
 any real use, since every PARTY-level fixture and every real Qomon-mirrored
 contribution shares that one space — the fixture's "ready to issue" case
-needed its own reserved, date-isolated period (9002) to actually stay
-clean.
+needed its own reserved, date-isolated period (9502 as of the 2026-09-22
+renumbering) to actually stay clean.
 
 ## Ticket 3.2 — Allocation model
 
@@ -166,3 +166,42 @@ green.
 4. **No web UI**, same as 3.1: this is a service function plus one route,
    with no screen calling it. `screens.md`'s correction-actions screen
    (screen 8, ticket 3.14) is the natural future caller.
+
+## Fixture consolidation (2026-09-22, not a ticket)
+
+Prompted by a real Elections Ontario riding-directory import
+(`ontario-ridings.json`, 124 rows, now loaded by `prisma/seed.ts`) exposing
+that the Phase 2 and 3 fixture scripts had each invented their own "fixture"
+riding numbers (12, 84, 90) without knowing a real directory would ever
+exist — 84 and 90 turned out to be real ridings (Parry Sound—Muskoka, St.
+Catharines) wearing fake fixture names ("York-Simcoe," "Simcoe North"). Left
+alone, whichever seed step ran first on a given database would win, silently
+mislabeling a real riding or making the "defunct riding" fixture into a
+real, active one depending on order.
+
+Fixed by merging `seed-phase-2-fixtures.ts` and `seed-phase-3-fixtures.ts`
+into one script, `prisma/seed-fixtures.ts` (single command,
+`pnpm db:seed:fixtures`). First attempt moved every fixture riding onto
+numbers 9001-9003, outside the real 1-124 range the admin import route's own
+Zod schema documents (`RidingImportRow`, `routes/admin.ts`) — reverted after
+actually running it: rule A2 (`checkA2RidingEntityConsistency`) validates
+`ridingNumber` against 1-124 as its own shape check, independent of whether
+a `Riding` row exists, so an out-of-range number doesn't dodge the collision
+problem, it just produces a different wrong finding (three Group 1 donors
+that should have read clean or `A3` read `A2` instead — caught by diffing
+against `PHASE-2-MANUAL-TEST-PLAN.md`'s expected-findings table). Landed
+instead on borrowing real riding numbers that match what the original
+fixture names were already trying to say — 121 (York—Simcoe) and 100
+(Simcoe North) used as ordinary active ridings, and 12 (Brampton West)
+forced inactive by the script itself for the one fixture that genuinely
+needs a defunct riding (restored by the next `pnpm db:seed` run). No fixture
+can still be mistaken for unrelated real riding config, which was the actual
+goal; there was just no out-of-range shortcut to it. Also added: a new
+fixture group (910001-910002, "Consolidating Chris")
+exercising ticket 3.2's `allocateToReceipt` for the first time outside its
+own unit tests, and an RTD-flow walkthrough section in
+`PHASE-2-MANUAL-TEST-PLAN.md` §2 reusing the existing "Threshold Crossing
+Donor" rows to manually exercise draft/stamp/archive/DC-1A/the filings
+screen (tickets 2.2-2.8), none of which had a manual-test section yet
+despite shipping. See `seed-fixtures.ts`'s header comment for the full
+reserved-id table.

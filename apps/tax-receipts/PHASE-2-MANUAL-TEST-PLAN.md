@@ -3,8 +3,9 @@
 Companion to [`PHASE-1-MANUAL-TEST-PLAN.md`](PHASE-1-MANUAL-TEST-PLAN.md) —
 reuse its Setup section (server, web app, dev logins). This doc only covers
 what Phase 2 adds. **It is built incrementally, ticket by ticket, as Phase 2
-lands** — right now that's ticket 2.1 only. Sections for 2.2 onward will be
-added as they're built; until then, see "What's not here yet" at the bottom.
+lands** — as of 2026-09-22 that's rule coverage (2.1, §1) and the RTD flow
+(2.2/2.3/2.4/2.6/2.8, §2). 2.5 (shadow-run harness) is still `todo`
+(STATUS.md) — nothing to test yet.
 
 ## 0. Getting Phase 2 fixture data into your database
 
@@ -18,17 +19,25 @@ changes, use the fixture seed script instead:
 cd apps/tax-receipts/api
 set -a; source .env; set +a     # or your own env, pointed at the DEV db (:5434), not test (:5433)
 pnpm exec prisma migrate deploy
-pnpm db:seed                    # periods, limits, holidays, kill switch, users (unchanged from Phase 1)
-pnpm db:seed:fixtures           # NEW: 15 contacts / 17 contributions shaped to exercise every 2.1 rule
+pnpm db:seed                    # periods, limits, holidays, kill switch, users, the real riding directory
+pnpm db:seed:fixtures           # 15 contacts / 17 contributions shaped to exercise every 2.1 rule
 ```
 
+`db:seed:fixtures` (`apps/tax-receipts/api/prisma/seed-fixtures.ts`) is a
+single consolidated script — as of 2026-09-22 it also carries what used to
+be `seed-phase-3-fixtures.ts`'s space-issuance fixtures and a new group for
+ticket 3.2. This section only concerns "Group 1" (`800001`–`800017`); see
+[`PHASE-3-MANUAL-TEST-PLAN.md`](PHASE-3-MANUAL-TEST-PLAN.md) for Groups 2–3.
 It's safe to run more than once — every contact/contribution is keyed by a
-reserved id range (`800001`–`800017`) and skipped if already present; every
-`Riding` it creates is create-if-absent so it never overwrites real riding
-config. **Local/dev database only** — don't point it at a shared environment
-with real riding config or real donor data. See the script's header comment
-(`apps/tax-receipts/api/prisma/seed-phase-2-fixtures.ts`) for the full
-rationale.
+reserved id range and skipped if already present. **Local/dev database
+only** — don't point it at a shared environment with real riding config or
+real donor data. See the script's header comment for the full id-range table
+and rationale, including why this fixture set can't reserve a "fixture-only"
+riding number the way it can a period id (rule A2 validates every riding
+number against the real 1-124 range) and instead borrows real riding **121**
+(York—Simcoe) for the "active riding" cases below, and forces real riding
+**12** (Brampton West) inactive for the one fixture that needs a defunct
+riding (restored the next time you run `pnpm db:seed`).
 
 The script prints what it created, then runs the validation registry over
 everything and prints `checked/opened/reopened/resolved` counts. That last
@@ -72,9 +81,10 @@ Checks:
       exercised on a new rule).
 - [ ] Except (not resolve) "No Address Donor"'s `C1` item with a reason —
       confirm it moves to EXCEPTION and drops out of the OPEN view.
-- [ ] Flip riding 84 (`York-Simcoe (fixture)`) inactive via
-      Admin → Ridings (sysadmin), re-run validation — confirm (verified
-      2026-09-18 against these exact fixtures):
+- [ ] Flip riding **121** (`York—Simcoe`) inactive via Admin → Ridings
+      (sysadmin), re-run validation — confirm (verified 2026-09-18 against
+      these exact fixtures on the riding then numbered 84; behaviour
+      unchanged by the 2026-09-22 renumbering, only the number is different):
       - "Active CA Donor" now also gets `A3` (the CA case: defunct riding).
       - "No-Campaign Donor" still shows `A2` (was already failing, for the
         period-not-election reason, not the riding).
@@ -89,9 +99,17 @@ Checks:
         validation-rules.md gets reviewed, not just accepting the code as
         the spec.
 
-      Flip riding 84 back to active afterward — confirm all three return to
-      the table above — so the fixture set stays accurate for the next
-      person.
+      Flip riding 121 back to active afterward — confirm all three return
+      to the table above — so the fixture set stays accurate for the next
+      person. **This really is a real riding** — see this doc's Setup note
+      and `seed-fixtures.ts`'s header comment: rule A2 validates every riding
+      number against the real 1-124 Elections Ontario range, so there's no
+      such thing as a "fixture-only" riding number to toggle instead. This
+      step (and the pre-seeded "Defunct CA Donor" fixture, which borrows
+      riding **12** and is forced inactive by the seed script itself, not by
+      you) is safe only because you're on a local/dev database, not a shared
+      one — same warning this doc already gives about riding config in
+      general.
 - [ ] **Database check** — same idea as Phase 1's, scoped to the fixture
       range:
       ```sql
@@ -103,16 +121,42 @@ Checks:
         order by co."qomonTransactionId";
       ```
 
-## What's not here yet
+## 2. RTD flow (tickets 2.2, 2.3, 2.4, 2.6, 2.8) — walk it through on Threshold Crossing Donor
 
-Tickets 2.2–2.8 (RTD draft builder, `RtdInclusion` stamping, DC-1A
-generation, filing archive, the December-straddle case, the RTD filings
-screen, the shadow-run harness) aren't built. The three "Threshold Crossing
-Donor" fixtures above exist so there's already-correct data for 2.2's
-row-inclusion logic once it lands (one contact, three deposits — $150, then
-$100 crossing the $200 aggregate, then $75 — spread across 2026); there's
-nothing to click yet. This doc gets a new numbered section per ticket as
-each one ships, same as `PHASE-1-MANUAL-TEST-PLAN.md` did.
+Tickets 2.2-2.8 landed 2026-09-21/22 (STATUS.md). Rather than seed a
+separate, already-filed dataset, this walkthrough reuses the "Threshold
+Crossing Donor" fixtures already seeded above (`800015`-`800017`: $150,
+then $100 crossing the $200 RTD aggregate, then $75, all PARTY / GPO /
+2026) — the point of an RTD screen walkthrough is going through draft ->
+stamp -> archive -> DC-1A yourself, not looking at data someone else already
+pushed through it. These three rows are clean (no open A1/C4/B1/B2 findings)
+so nothing here should be gated.
+
+- [ ] **Draft (2.2)**: RTD filings screen (screen 9) -> build a draft for
+      year 2026. Confirm all three of Threshold Crossing Donor's deposits
+      appear, and that only the second ($100) and third ($75) are rows (the
+      first, at $150, stays under the $200 aggregate) — same rule test-plan
+      §2 item 6 describes.
+- [ ] **Stamp (2.3)**: select the draft's rows, stamp a filing. Confirm a
+      `RtdFiling` is created and both rows now show an `RtdInclusion`.
+- [ ] **Archive (2.6)**: export the stamped filing as CSV (or pipe). Confirm
+      the download has the EO header row and both rows.
+- [ ] **Filings screen (2.8)**: confirm the new filing appears in the
+      filings list/table with the right name
+      (`2026_RTD_<PartyID>_MMDDYYYYHHMM`) and a working download link.
+- [ ] **DC-1A (2.4)**: from the now-RTD-reported second deposit ($100),
+      generate a DC-1A amendment (`POST /rtd/contributions/:id/dc1a` — no
+      screen trigger yet, screens.md frames the trigger as the owed-to-EO
+      queue, which ticket 3.10 hasn't built). Confirm it references the
+      original filing via `amendsFilingId` and renders a form artifact.
+- [ ] **December-straddle (2.7)**: not exercised manually here on purpose —
+      it needs a live 2027 period this fixture set deliberately doesn't
+      invent (a fake future EO period id is exactly the kind of thing that
+      could later be mistaken for a real one). It's covered end to end by
+      the automated regression test instead:
+      `apps/tax-receipts/api/src/rtd/december-straddle.test.ts`.
+- [ ] **Shadow-run harness (2.5)**: still `todo` in STATUS.md (blocked on
+      the CiviCRM historical extract, ticket 1.17) — nothing to test yet.
 
 ## Known non-issues
 
