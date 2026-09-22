@@ -51,9 +51,13 @@ export class ReportScopeError extends Error {
  * prints, and whose non-deductible amount governs, is an open question ticket
  * 3.1 already declined to guess at for issuance itself — it belongs with the
  * correction/consolidation workflow (tickets 3.10/3.11), not these
- * generators. No such receipt can exist today (3.1 and 3.12 only ever issue
- * one contribution -> one receipt), so this is a forward guard, not a live
- * gap.
+ * generators. Such a receipt can exist now: ticket 3.2's
+ * `allocateToReceipt` (`receipts/allocate.ts`) can attach a second
+ * contribution to an already-issued receipt, deliberately without deciding
+ * either question, so this guard is a live gap as of 3.2, not just a forward
+ * one — nothing calls `allocateToReceipt` yet (no ticket before 3.10 has a
+ * reason to), but a report run against a period where it has been used will
+ * hit this error until 3.10/3.11 resolve the two questions above.
  */
 export class MultiAllocationReceiptError extends Error {
   constructor(

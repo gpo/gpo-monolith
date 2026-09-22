@@ -18,6 +18,12 @@ import {
 import { ContributionNotMirroredError } from './contributions/refresh.js';
 import { EntityReportNotFoundError } from './reports/entity-reports.js';
 import {
+  AllocationContactMismatchError,
+  DuplicateAllocationError,
+  ReceiptNotFoundError,
+  TerminalReceiptError,
+} from './receipts/allocate.js';
+import {
   AllocationOverageError,
   MissingAddressError,
   ReceiptIssuanceValidationError,
@@ -94,9 +100,19 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
       error instanceof ContributionNotFoundError ||
       error instanceof ContributionNotMirroredError ||
       error instanceof WorkItemNotFoundError ||
-      error instanceof EntityReportNotFoundError
+      error instanceof EntityReportNotFoundError ||
+      error instanceof ReceiptNotFoundError
     ) {
       return reply.code(404).send({ error: error.message });
+    }
+    if (
+      error instanceof TerminalReceiptError ||
+      error instanceof DuplicateAllocationError
+    ) {
+      return reply.code(409).send({ error: error.message });
+    }
+    if (error instanceof AllocationContactMismatchError) {
+      return reply.code(400).send({ error: error.message });
     }
     if (error instanceof WorkItemAlreadyClosedError) {
       return reply.code(409).send({ error: error.message });
