@@ -9,6 +9,7 @@ export const ME: Me = {
   ridingGrants: [],
   can: {
     issueReceipts: true,
+    sendDonorPrechecks: true,
     administerKillSwitch: true,
     generateEntityReports: true,
     shareEntityReports: true,

@@ -41,6 +41,20 @@ const GENERATE_RESULT = {
   failed: 0,
 };
 
+const PRECHECK_RESULT = {
+  sent: [
+    {
+      contactId: 'ct2',
+      contactName: 'Sam Supporter',
+      email: 'sam@example.org',
+      precheckSentAt: '2028-01-01T00:00:00Z',
+      confirmationToken: 'tok-1',
+      confirmationTokenExpiresAt: '2028-01-31T00:00:00Z',
+    },
+  ],
+  skipped: [{ contactId: 'ct1', contactName: 'Dana Donor', reason: 'no-email-on-file' }],
+};
+
 let calls: Array<{ url: string; body?: string }> = [];
 let previewResponse: unknown = CLEAR_PREVIEW;
 
@@ -53,6 +67,9 @@ beforeEach(() => {
       calls.push({ url: String(url), body: init?.body as string | undefined });
       if (String(url).includes('/auth/me')) return jsonResponse(ME);
       if (String(url).includes('/issuance-preview')) return jsonResponse(previewResponse);
+      if (String(url).includes('/precheck') && init?.method === 'POST') {
+        return jsonResponse(PRECHECK_RESULT);
+      }
       if (String(url).includes('/receipts') && init?.method === 'POST') {
         return jsonResponse(GENERATE_RESULT);
       }
@@ -118,4 +135,25 @@ test('generates receipts and shows per-row results', async () => {
   expect(await screen.findByText('2 issued, 0 failed.')).toBeInTheDocument();
   expect(screen.getByText('GPO-00402510')).toBeInTheDocument();
   expect(screen.getByText('GPO-00402511')).toBeInTheDocument();
+});
+
+test('sends the donor pre-check for the space and shows the sent/skipped summary', async () => {
+  renderPage();
+  await screen.findByText('Sam Supporter');
+
+  const sendButton = screen.getByRole('button', { name: 'Send pre-checks' });
+  expect(sendButton).toBeDisabled(); // no reason yet
+
+  fireEvent.change(screen.getByPlaceholderText('e.g. annual pre-check window opens'), {
+    target: { value: 'annual pre-check window opens' },
+  });
+  expect(sendButton).not.toBeDisabled();
+
+  fireEvent.click(sendButton);
+
+  await waitFor(() => expect(calls.some((c) => c.url.includes('/precheck') && c.body)).toBe(true));
+  const call = calls.find((c) => c.url.includes('/spaces/67/PARTY/precheck'))!;
+  expect(JSON.parse(call.body!)).toMatchObject({ reason: 'annual pre-check window opens' });
+
+  expect(await screen.findByText('1 sent, 1 skipped (no email on file).')).toBeInTheDocument();
 });

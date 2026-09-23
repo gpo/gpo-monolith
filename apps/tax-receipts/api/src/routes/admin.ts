@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { AppAbility } from '../auth/abilities.js';
 import { hashPassword } from '../auth/password.js';
+import { listOutstandingDonorPrechecks } from '../donors/precheck.js';
 import type { SessionUser } from '../plugins/auth.js';
 import { runValidationForAllContributions } from '../validation/run.js';
 
@@ -379,5 +380,18 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         ridingGrants: user.ridingGrants,
       });
     },
+  });
+
+  // ---- Donor pre-check outbox (ticket 3.9 dev tool) -------------------
+  // Sysadmin-only, not "any authenticated read" like the lists above: a
+  // confirmation token is a bearer credential over a donor's own
+  // DonorCyclePreference. Backs dev-tools.tsx's "pre-check outbox" — with no
+  // real email provider (O24), it's the only way to find a just-sent link.
+
+  r.get('/admin/donor-prechecks', async (request, reply) => {
+    const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
+    if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+    const data = await listOutstandingDonorPrechecks(app.prisma);
+    return reply.send({ data });
   });
 }

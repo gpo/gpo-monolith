@@ -126,7 +126,7 @@ describe('admin routes (ticket 1.12)', () => {
   });
 
   it('requires authentication for every admin GET route', async () => {
-    for (const url of ['/admin/periods', '/admin/contribution-limits', '/admin/business-day-calendars', '/admin/users', '/admin/ridings']) {
+    for (const url of ['/admin/periods', '/admin/contribution-limits', '/admin/business-day-calendars', '/admin/users', '/admin/ridings', '/admin/donor-prechecks']) {
       const res = await app.inject({ method: 'GET', url });
       expect(res.statusCode).toBe(401);
     }
@@ -253,6 +253,43 @@ describe('admin routes (ticket 1.12)', () => {
       payload: { active: true },
     });
     expect(reactivateNoKey.statusCode).toBe(400);
+  });
+
+  it('lists the donor pre-check outbox for a sysadmin only (ticket 3.9)', async () => {
+    const contact = await prisma.contact.create({
+      data: { qomonContactId: 999n, name: 'Pending Pat', email: 'pat@example.org' },
+    });
+    await prisma.donorCyclePreference.create({
+      data: {
+        contactId: contact.id,
+        year: 2028,
+        precheckSentAt: new Date(),
+        confirmationToken: 'outbox-test-token',
+        confirmationTokenExpiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+
+    const unauth = await app.inject({ method: 'GET', url: '/admin/donor-prechecks' });
+    expect(unauth.statusCode).toBe(401);
+
+    const adminCookie = await login('admin@gpo.test', 'admin-pass-phrase');
+    const forbidden = await app.inject({
+      method: 'GET',
+      url: '/admin/donor-prechecks',
+      cookies: { [adminCookie.name]: adminCookie.value },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const sysadminCookie = await login('sysadmin@gpo.test', 'sysadmin-pass-phrase');
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/donor-prechecks',
+      cookies: { [sysadminCookie.name]: sysadminCookie.value },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data).toMatchObject([
+      { contactId: contact.id, contactName: 'Pending Pat', confirmationToken: 'outbox-test-token' },
+    ]);
   });
 
   it('rejects an administrator (non-sysadmin) from importing ridings', async () => {
