@@ -33,6 +33,7 @@ import { ADMIN_SECTIONS, AdminLayout, visibleAdminSections } from './routes/admi
 import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
+import { DonorPrecheckConfirmPage } from './routes/donor-precheck.js';
 import { EntityReportsPage } from './routes/entity-reports.js';
 import { LoginPage } from './routes/login.js';
 import { RtdFilingsPage } from './routes/rtd-filings.js';
@@ -113,17 +114,25 @@ const rootRoute = createRootRoute({
 });
 
 function RootLayout() {
-  const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false });
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // The one public route in the app (ticket 3.9): a donor reaches this from
+  // an emailed link, with no session and no User account, so it must never
+  // fall into the "not logged in -> show the login form" branch below.
+  const isDonorPrecheckRoute = pathname.startsWith('/donor-precheck/');
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false, enabled: !isDonorPrecheckRoute });
   const navigate = useNavigate();
   const qc = useQueryClient();
 
   // Signed-in users shouldn't land back on the login form.
   useEffect(() => {
-    if (me.data && pathname === '/login') {
+    if (!isDonorPrecheckRoute && me.data && pathname === '/login') {
       void navigate({ to: '/' });
     }
-  }, [me.data, pathname, navigate]);
+  }, [isDonorPrecheckRoute, me.data, pathname, navigate]);
+
+  if (isDonorPrecheckRoute) {
+    return <Outlet />;
+  }
 
   if (me.isLoading) {
     return (
@@ -179,6 +188,15 @@ const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
   component: LoginPage,
+});
+
+const donorPrecheckRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/donor-precheck/$token',
+  component: () => {
+    const { token } = useParams({ from: '/donor-precheck/$token' });
+    return <DonorPrecheckConfirmPage token={token} />;
+  },
 });
 
 const contributionsRoute = createRoute({
@@ -269,6 +287,7 @@ const adminRouteWithChildren = adminRoute.addChildren([adminIndexRoute, ...admin
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
+  donorPrecheckRoute,
   contributionsRoute,
   contributionDetailRoute,
   workQueueRoute,

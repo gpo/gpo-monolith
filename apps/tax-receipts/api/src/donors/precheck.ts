@@ -37,6 +37,11 @@ import type { SpaceKey } from '../space/space-state.js';
  * An unconfirmed donor's `delivery` stays at the schema default (MAIL) —
  * jobs-to-be-done.md D1's "unconfirmed donors default to mail" is therefore
  * already true with no extra code; nothing here needs to enforce it.
+ *
+ * A third function, `listOutstandingDonorPrechecks`, backs a dev-tools-only
+ * "outbox" page: with no real email provider, it's the only way to find a
+ * just-sent token to click through as the donor and exercise the confirm
+ * page end to end.
  */
 
 export class DonorPrecheckTokenNotFoundError extends Error {
@@ -290,4 +295,39 @@ export async function confirmDonorPrecheck(
     addressConfirmedAt,
     addressSnapshotId: result.snapshotId,
   };
+}
+
+export interface OutstandingDonorPrecheck {
+  contactId: string;
+  contactName: string;
+  email: string | null;
+  year: number;
+  precheckSentAt: Date;
+  confirmationToken: string;
+  confirmationTokenExpiresAt: Date;
+}
+
+/**
+ * Every unconfirmed, unexpired pre-check outstanding right now — the tool's
+ * stand-in inbox until ticket 3.6 gives it a real one. Exists for
+ * `GET /admin/donor-prechecks` (sysadmin-only, dev-tools.tsx's "pre-check
+ * outbox"): a token is a bearer credential over a donor's own
+ * `DonorCyclePreference`, so this is deliberately not exposed at the same
+ * "any authenticated read" level as most of `routes/admin.ts`.
+ */
+export async function listOutstandingDonorPrechecks(prisma: PrismaClient): Promise<OutstandingDonorPrecheck[]> {
+  const rows = await prisma.donorCyclePreference.findMany({
+    where: { confirmationToken: { not: null }, confirmationTokenExpiresAt: { gt: new Date() } },
+    include: { contact: true },
+    orderBy: { precheckSentAt: 'desc' },
+  });
+  return rows.map((r) => ({
+    contactId: r.contactId,
+    contactName: r.contact.name,
+    email: r.contact.email,
+    year: r.year,
+    precheckSentAt: r.precheckSentAt!,
+    confirmationToken: r.confirmationToken!,
+    confirmationTokenExpiresAt: r.confirmationTokenExpiresAt!,
+  }));
 }

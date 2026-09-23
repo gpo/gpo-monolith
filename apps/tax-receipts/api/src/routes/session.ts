@@ -40,6 +40,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
       ridingGrants: user.ridingGrants,
       can: {
         issueReceipts: request.ability.can('issue', 'Receipt'),
+        sendDonorPrechecks: request.ability.can('update', 'ContributionMetadata'),
         administerKillSwitch: request.ability.can(
           'administer',
           'IssuanceKillSwitch',

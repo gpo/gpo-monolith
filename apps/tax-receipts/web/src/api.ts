@@ -51,6 +51,7 @@ export interface Me {
   ridingGrants: number[];
   can: {
     issueReceipts: boolean;
+    sendDonorPrechecks: boolean;
     administerKillSwitch: boolean;
     generateEntityReports: boolean;
     shareEntityReports: boolean;
@@ -284,6 +285,53 @@ export interface IssueSpaceReceiptsInput {
   reason: string;
   politicalEntityLabel: string;
   delivery?: 'EMAIL' | 'MAIL';
+}
+
+export interface SentDonorPrecheck {
+  contactId: string;
+  contactName: string;
+  email: string;
+  precheckSentAt: string;
+  confirmationToken: string;
+  confirmationTokenExpiresAt: string;
+}
+
+export interface SkippedDonorPrecheck {
+  contactId: string;
+  contactName: string;
+  reason: 'no-email-on-file';
+}
+
+export interface SendDonorPrechecksResult {
+  sent: SentDonorPrecheck[];
+  skipped: SkippedDonorPrecheck[];
+}
+
+export interface DonorPrecheckAddress {
+  line1: string;
+  line2?: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  country?: string;
+}
+
+export interface ConfirmedDonorPrecheck {
+  contactId: string;
+  year: number;
+  delivery: 'EMAIL' | 'MAIL';
+  addressConfirmedAt: string;
+  addressSnapshotId: string;
+}
+
+export interface OutstandingDonorPrecheck {
+  contactId: string;
+  contactName: string;
+  email: string | null;
+  year: number;
+  precheckSentAt: string;
+  confirmationToken: string;
+  confirmationTokenExpiresAt: string;
 }
 
 export interface ChangeLogRow {
@@ -577,6 +625,23 @@ export const api = {
       `/spaces/${periodId}/${entityKind}/receipts${ridingNumber !== null ? `?ridingNumber=${ridingNumber}` : ''}`,
       { method: 'POST', body: JSON.stringify(input) },
     ),
+  sendSpacePrecheck: (
+    periodId: number,
+    entityKind: string,
+    ridingNumber: number | null,
+    input: { reason: string; expiresInDays?: number },
+  ) =>
+    request<SendDonorPrechecksResult>(
+      `/spaces/${periodId}/${entityKind}/precheck${ridingNumber !== null ? `?ridingNumber=${ridingNumber}` : ''}`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  confirmDonorPrecheck: (token: string, input: { delivery: 'EMAIL' | 'MAIL'; address: DonorPrecheckAddress }) =>
+    request<ConfirmedDonorPrecheck>(`/donor-precheck/${token}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  listOutstandingDonorPrechecks: () =>
+    request<{ data: OutstandingDonorPrecheck[] }>('/admin/donor-prechecks'),
   listPeriods: () => request<{ data: PeriodRow[] }>('/admin/periods'),
   savePeriod: (id: number, input: Omit<PeriodRow, 'id'>) =>
     request<{ period: PeriodRow; revalidation: unknown }>(`/admin/periods/${id}`, {

@@ -471,3 +471,48 @@ old token invalidated by a re-send), route tests in `routes/spaces.test.ts`
    issuance wizard's screens.md screen 6 (not built here — 3.12 shipped
    Review/Generate/Done only); the donor-facing confirm form is a public,
    unauthenticated page with no precedent yet in `apps/tax-receipts/web/`.
+
+### Follow-up (2026-09-23, not a new ticket): the web UI deviation 6 left open
+
+Closed both halves of deviation 6 above, plus built the dev-only convenience
+that makes the whole thing testable with no real email provider.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/web/src/routes/donor-precheck.tsx` | The public confirm page: address form + EMAIL/MAIL choice, and friendly states for an already-used or expired link. |
+| `apps/tax-receipts/web/src/router.tsx` | `RootLayout` now special-cases any `/donor-precheck/*` path: skips the `/auth/me` fetch entirely and renders the route with no `AppShell` chrome, so a donor with no session never falls into the "not logged in -> show the login form" branch every other path hits. |
+| `apps/tax-receipts/web/src/routes/space-issuance.tsx` | The Review step gained a "Donor pre-check" card — reason field, "Send pre-checks" button, sent/skipped summary — rather than its own `Stepper.Step`; see deviation 7 below. |
+| `apps/tax-receipts/api/src/donors/precheck.ts`, `routes/admin.ts` | New `listOutstandingDonorPrechecks` / `GET /admin/donor-prechecks`: every unconfirmed, unexpired token, sysadmin-only (a token is a bearer credential over a donor's own preference row, so this doesn't get the same "any authenticated read" treatment the rest of `routes/admin.ts` uses). |
+| `apps/tax-receipts/web/src/routes/dev-tools.tsx` | "Donor pre-check outbox" card: lists what the endpoint above returns, each with an "Open confirm page ↗" link — click one exactly as a donor would click the link in an email, since no real one exists yet (ticket 3.6, O24). |
+| `apps/tax-receipts/api/src/routes/session.ts` | `/auth/me`'s `can` now includes `sendDonorPrechecks` (`update ContributionMetadata`), so the wizard button gates itself the same way every other action-gated button in the app does. |
+
+Tests: `precheck.test.ts`'s existing suite covers the service; new coverage
+added at every other layer touched — `routes/admin.test.ts` (outbox: 401,
+403 for a non-sysadmin, 200 for a sysadmin), `routes/space-issuance.test.tsx`
+(send button, reason validation, sent/skipped summary), and a new
+`routes/donor-precheck.test.tsx` (renders with no session and never calls
+`/auth/me`, happy path, 404, 410). `pnpm turbo run lint typecheck test build`
+green (300 api tests, 40 web tests). Manually verified end to end against
+the running dev server too: logged in as the seeded administrator, sent a
+pre-check against a real fixture space, confirmed the one donor with an
+email got a token while the other three were correctly skipped, confirmed
+through the public endpoint, and confirmed a replayed token 404s.
+
+### Deviations / judgment calls (follow-up)
+
+7. **The pre-check send action is a card inside the existing Review step,
+   not its own `Stepper.Step`.** screens.md's screen 6 prose reads as a
+   five-step flow (gate → preview → generate → deliver → done) with the
+   pre-check folded into "ahead of the window" — but delivery itself still
+   has no wizard step either (ticket 3.5's API exists, 3.6's real send
+   doesn't), so adding a dedicated pre-check step while deliver still has
+   none would overstate how much of the flow is actually wired up.
+8. **The outbox endpoint is a permanent, always-available part of
+   `routes/admin.ts`**, not something torn out once ticket 3.6 ships a real
+   provider, and it is not gated by `NODE_ENV` — same stance `dev-tools.tsx`
+   itself already takes for the Qomon sweep trigger (the *page* is hidden
+   outside dev builds via `import.meta.env.DEV`; the endpoint underneath is
+   always live, sysadmin-only). Worth a second look once 3.6 exists: a
+   sysadmin being able to read any donor's active confirmation token is a
+   reasonable support tool, but it's a different risk profile in production
+   than it is as a pure dev convenience.

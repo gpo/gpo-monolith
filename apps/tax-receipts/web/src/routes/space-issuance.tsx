@@ -16,17 +16,22 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
-import { api, ApiError, type SpaceIssuanceResult } from '../api.js';
+import { api, ApiError, type SendDonorPrechecksResult, type SpaceIssuanceResult } from '../api.js';
 import { describeRuleRef } from '../rule-labels.js';
 import { PageHeader } from '../components/PageHeader.js';
 import { defaultPoliticalEntityLabel, money } from './contribution-detail.js';
 
 /**
  * Per-space issuance wizard (ticket 3.12, screens.md screen 6, first slice):
- * gate check -> pre-issuance preview -> generate. Delivery (email/print,
- * Qomon activity logging, donor pre-check) is not built yet (tickets
- * 3.5/3.6/3.9), so there is no "deliver" or "done-with-delivery" step here —
- * "done" just shows what was issued, the same gap ticket 3.1 already left.
+ * gate check -> pre-issuance preview -> generate. The Review step also
+ * carries the donor pre-check send action (ticket 3.9) — a small inline
+ * card rather than its own `Stepper.Step`, so as not to overstate how much
+ * of "ahead of the window" is real: no real email goes out (ticket 3.6), so
+ * a staff member still finds the sent links manually (Admin > Dev tools).
+ * Delivery itself (email/print, Qomon activity logging) has no UI step
+ * either (ticket 3.5's API exists, 3.6's real send doesn't), so there is
+ * still no "deliver" or "done-with-delivery" step — "done" just shows what
+ * was issued, the same gap ticket 3.1 already left.
  *
  * Reachable from the space dashboard's "Issue" action per row.
  */
@@ -56,8 +61,22 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
   const [deliveryOverride, setDeliveryOverride] = useState<'' | 'EMAIL' | 'MAIL'>('');
   const [genError, setGenError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<SpaceIssuanceResult | null>(null);
+  const [precheckReason, setPrecheckReason] = useState('');
+  const [precheckError, setPrecheckError] = useState<string | null>(null);
+  const [precheckResult, setPrecheckResult] = useState<SendDonorPrechecksResult | null>(null);
 
   const effectiveLabel = (politicalEntityLabel ?? defaultPoliticalEntityLabel(entityKind)).trim();
+
+  const sendPrecheck = useMutation({
+    mutationFn: () => api.sendSpacePrecheck(periodId, entityKind, ridingNumber, { reason: precheckReason }),
+    onSuccess: (result) => {
+      setPrecheckError(null);
+      setPrecheckResult(result);
+    },
+    onError: (err) => {
+      setPrecheckError(err instanceof ApiError ? err.message : 'Failed to send the donor pre-check.');
+    },
+  });
 
   const generate = useMutation({
     mutationFn: () =>
@@ -78,6 +97,7 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
   });
 
   const canIssue = me.data?.can.issueReceipts ?? false;
+  const canSendPrecheck = me.data?.can.sendDonorPrechecks ?? false;
   const canReview = preview.data !== undefined && !preview.data.blocked && preview.data.lines.length > 0;
 
   return (
@@ -212,6 +232,49 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
                   </Table>
                 </>
               )}
+              <Card withBorder>
+                <Stack gap="sm">
+                  <Text fw={600}>Donor pre-check</Text>
+                  <Text size="sm" c="dimmed">
+                    Sends every donor above a link confirming their address and email-versus-mail
+                    preference, ahead of generating anything (ticket 3.9). No real email goes out yet
+                    (ticket 3.6) — find the sent links under Admin &gt; Dev tools.
+                  </Text>
+                  {!canSendPrecheck && (
+                    <Alert color="yellow">
+                      You don't have permission to send the donor pre-check for this space.
+                    </Alert>
+                  )}
+                  <Group grow maw={500}>
+                    <TextInput
+                      label="Reason"
+                      placeholder="e.g. annual pre-check window opens"
+                      value={precheckReason}
+                      onChange={(e) => setPrecheckReason(e.currentTarget.value)}
+                      disabled={!canSendPrecheck}
+                    />
+                  </Group>
+                  <Group>
+                    <Button
+                      variant="light"
+                      onClick={() => sendPrecheck.mutate()}
+                      loading={sendPrecheck.isPending}
+                      disabled={!canSendPrecheck || precheckReason.trim().length < 3}
+                    >
+                      Send pre-checks
+                    </Button>
+                  </Group>
+                  {precheckError && <Alert color="red">{precheckError}</Alert>}
+                  {precheckResult && (
+                    <Text size="sm">
+                      {precheckResult.sent.length} sent
+                      {precheckResult.skipped.length > 0 &&
+                        `, ${precheckResult.skipped.length} skipped (no email on file)`}
+                      .
+                    </Text>
+                  )}
+                </Stack>
+              </Card>
               <Group>
                 <Button variant="light" onClick={() => preview.refetch()} loading={preview.isFetching}>
                   Refresh preview
