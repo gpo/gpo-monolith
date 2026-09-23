@@ -128,6 +128,48 @@ describe('receipt routes (ticket 3.1)', () => {
     });
     expect(res.statusCode).toBe(423);
   });
+
+  it('lets the party CFO record a foreign receipt number, with no PDF to fetch', async () => {
+    const cookie = await login('cfo@gpo.test', 'cfo-pass-phrase');
+    const res = await app.inject({
+      method: 'POST',
+      url: `/contributions/${contributionId}/receipts/foreign`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: { reason: 'EO-stock book #4, slip 12', receiptNumber: 'EOSTOCK-000412' },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.receiptNumber).toBe('EOSTOCK-000412');
+
+    const pdf = await app.inject({
+      method: 'GET',
+      url: `/receipts/${body.id}/pdf`,
+      cookies: { [cookie.name]: cookie.value },
+    });
+    expect(pdf.statusCode).toBe(404);
+  });
+
+  it('403s an administrator recording a foreign receipt: only the party CFO (or a designate) may issue', async () => {
+    const cookie = await login('admin@gpo.test', 'admin-pass-phrase');
+    const res = await app.inject({
+      method: 'POST',
+      url: `/contributions/${contributionId}/receipts/foreign`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: { reason: 'not allowed', receiptNumber: 'EOSTOCK-1' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('400s a foreign receipt number that looks like the tool\'s own sequence format', async () => {
+    const cookie = await login('cfo@gpo.test', 'cfo-pass-phrase');
+    const res = await app.inject({
+      method: 'POST',
+      url: `/contributions/${contributionId}/receipts/foreign`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: { reason: 'mistaken format', receiptNumber: 'GPO-00000001' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });
 
 describe('receipt allocation route (ticket 3.2)', () => {

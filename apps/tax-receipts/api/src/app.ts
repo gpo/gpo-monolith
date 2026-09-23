@@ -30,6 +30,10 @@ import {
   DeliveryReceiptScopeError,
 } from './receipts/delivery.js';
 import {
+  DuplicateForeignReceiptNumberError,
+  ForeignReceiptNumberFormatError,
+} from './receipts/foreign.js';
+import {
   AllocationOverageError,
   MissingAddressError,
   ReceiptIssuanceValidationError,
@@ -135,6 +139,12 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
     if (error instanceof MissingAddressError) {
       return reply.code(422).send({ error: error.message });
+    }
+    if (error instanceof DuplicateForeignReceiptNumberError) {
+      return reply.code(409).send({ error: error.message });
+    }
+    if (error instanceof ForeignReceiptNumberFormatError) {
+      return reply.code(400).send({ error: error.message });
     }
     if (error instanceof SpaceIssuanceBlockedError) {
       return reply.code(409).send({ error: error.message, blockers: error.blockers });

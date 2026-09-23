@@ -347,3 +347,53 @@ paths: unknown receipt, wrong space, non-`ISSUED` receipt, missing PDF).
 5. **No web UI.** Same gap every Phase 3 ticket so far has left: this is a
    service function plus one route. The wizard's "deliver" step (screens.md
    screen 6) still needs its own UI work once this and 3.6 both exist.
+
+## Ticket 3.8 — Foreign / EO-stock / manual receipt numbers
+
+Ticket 3.6 (delivery infrastructure: a real email provider on a warmed
+subdomain) is genuinely blocked — no provider or domain exists yet, and
+there's no code-only slice of "warm a subdomain." Skipped ahead to 3.8
+rather than force it. 3.7 (booking the print/mailhouse path with Ariel) is
+a human coordination task, not a build ticket, so it's not tracked here
+either.
+
+data-model.md §2: "receipt_number tolerates foreign numbers (EO-stock or
+manual receipts issued outside the tool) with a source flag." compliance.md/
+rollout.md are explicit this is meant to be rare going forward ("No paper or
+EO-stock receipting" is the stated 2026 policy) — this ticket is for the
+exception (an event with no connectivity, a handwritten slip) and for
+ticket 5.1's legacy import, not a parallel everyday issuance path.
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/receipts/foreign.ts` | `recordForeignReceipt(deps, input)`: same invariant-1/kill-switch/address-snapshot/change-log shape as `issueReceipt` (3.1), but takes the operator-supplied `receiptNumber` directly instead of reserving one from `ReceiptSequence` — invariant 3's DB trigger already exempts `numberSource: FOREIGN` rows from the sequence check entirely (built with 0.3, never previously exercised by a real code path). Rejects a number that matches the tool's own `GPO-\d+` format (almost certainly an operator mistake, not a real foreign number) and a number that's already recorded. |
+| `apps/tax-receipts/api/src/routes/receipts.ts` | `POST /contributions/:id/receipts/foreign`, same CASL `issue Receipt` gate as individual issuance (still money-relevant, still CFO-authority). |
+
+Tests: `src/receipts/foreign.test.ts` (happy path incl. no PDF and an
+untouched sequence counter, the two number-format guards, invariant-1
+overage, kill switch, missing address, unknown contribution, missing
+metadata, an explicit past `issueDate`), route tests appended to
+`routes/receipts.test.ts` (happy path with a 404 PDF fetch, CASL 403,
+sequence-format 400). `pnpm turbo run lint typecheck test build` green.
+
+### Deviations / judgment calls
+
+1. **No PDF is ever rendered for a foreign receipt.** The physical
+   instrument (the pre-printed EO-stock slip, the handwritten receipt)
+   already exists and *is* the legal document; the tool has no template for
+   an arbitrary foreign number format, and fabricating one would misrepresent
+   what was actually handed to the donor. `Receipt.pdfArtifactId` stays
+   permanently `null` — invariant 7 (ticket 3.3) already treats "never set"
+   as a valid terminal state, not just "not yet set," so this needed no
+   trigger change.
+2. **The kill switch still applies.** A foreign receipt is being *recorded*,
+   not newly issued in the moment, so there's a case for treating it as
+   exempt — but recording one still increases the year's receipted-contribution
+   count under GPO's name, which is exactly what the statutory kill switch
+   exists to stop. Applied the same guard as `issueReceipt` rather than
+   carving out an exception nothing in compliance.md asks for.
+3. **The `GPO-\d+` format guard is a new, tool-invented safety check**, not
+   something data-model.md specifies. Added because a real foreign/EO-stock/
+   manual number looks nothing like the tool's own sequence output, so a
+   match is far more likely an operator error (meant to look up a real
+   issued receipt, typed the wrong endpoint) than a genuine foreign receipt.
