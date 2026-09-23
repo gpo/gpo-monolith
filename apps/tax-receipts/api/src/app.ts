@@ -42,11 +42,12 @@ import {
 } from './reports/load-receipts.js';
 import { AmendmentWorkItemError, ContributionNotRtdReportedError } from './rtd/dc1a.js';
 import {
-  RtdFilingAlreadyArchivedError,
+  RtdFilingAlreadySentError,
   RtdFilingNotFoundError,
+  RtdSendBlockedError,
   UnsupportedFilingKindError,
-} from './rtd/archive.js';
-import { RtdAlreadyReportedError, RtdExportBlockedError, RtdStampSelectionError } from './rtd/stamp.js';
+} from './rtd/mark-sent.js';
+import { RtdAlreadyIncludedError, RtdExportBlockedError, RtdPrepareSelectionError } from './rtd/prepare.js';
 import { SpaceIssuanceBlockedError } from './space/issuance.js';
 import { WorkItemAlreadyClosedError, WorkItemNotFoundError } from './work-items/resolve.js';
 import authPlugin from './plugins/auth.js';
@@ -153,14 +154,14 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     if (error instanceof ReportExportBlockedError) {
       return reply.code(409).send({ error: error.message, findings: error.findings });
     }
-    if (error instanceof RtdExportBlockedError) {
+    if (error instanceof RtdExportBlockedError || error instanceof RtdSendBlockedError) {
       return reply.code(409).send({ error: error.message, blocked: error.blocked });
     }
     if (
-      error instanceof RtdStampSelectionError ||
-      error instanceof RtdAlreadyReportedError ||
+      error instanceof RtdPrepareSelectionError ||
+      error instanceof RtdAlreadyIncludedError ||
       error instanceof RtdFilingNotFoundError ||
-      error instanceof RtdFilingAlreadyArchivedError ||
+      error instanceof RtdFilingAlreadySentError ||
       error instanceof UnsupportedFilingKindError ||
       error instanceof ContributionNotRtdReportedError ||
       error instanceof AmendmentWorkItemError

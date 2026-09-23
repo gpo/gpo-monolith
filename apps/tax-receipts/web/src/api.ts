@@ -54,8 +54,8 @@ export interface Me {
     administerKillSwitch: boolean;
     generateEntityReports: boolean;
     shareEntityReports: boolean;
-    stampRtdFilings: boolean;
-    fileRtdFilings: boolean;
+    prepareRtdFilings: boolean;
+    sendRtdFilings: boolean;
     fileEOForms: boolean;
   };
 }
@@ -490,23 +490,26 @@ export interface RtdDraft {
   rows: RtdDraftRow[];
 }
 
-export interface StampRtdFilingInput {
+export interface PrepareRtdFilingInput {
   year: number;
   contributionIds: string[];
   reason: string;
+  cfoName: string;
   format?: 'CSV' | 'PIPE';
 }
 
-export interface StampedRtdFiling {
+export interface PreparedRtdFiling {
   rtdFilingId: string;
   filingName: string;
-  stampedCount: number;
-}
-
-export interface ArchivedRtdFiling {
+  preparedCount: number;
   artifactId: string;
   sha256: string;
   byteSize: number;
+}
+
+export interface SentRtdFiling {
+  rtdFilingId: string;
+  submittedAt: string;
 }
 
 export const api = {
@@ -635,9 +638,9 @@ export const api = {
     request<unknown>(`/entity-reports/${id}/sent-to-cfo`, { method: 'POST', body: JSON.stringify({ reason }) }),
   listRtdFilings: () => request<{ data: RtdFilingSummary[] }>('/rtd/filings'),
   getRtdDraft: (year: number) => request<RtdDraft>(`/rtd/draft?year=${year}`),
-  stampRtdFiling: (input: StampRtdFilingInput) =>
-    request<StampedRtdFiling>('/rtd/filings', { method: 'POST', body: JSON.stringify(input) }),
-  archiveRtdFiling: (id: string, input: { cfoName: string; reason: string }) =>
-    request<ArchivedRtdFiling>(`/rtd/filings/${id}/archive`, { method: 'POST', body: JSON.stringify(input) }),
+  prepareRtdFiling: (input: PrepareRtdFilingInput) =>
+    request<PreparedRtdFiling>('/rtd/filings', { method: 'POST', body: JSON.stringify(input) }),
+  sendRtdFiling: (id: string, input: { reason: string }) =>
+    request<SentRtdFiling>(`/rtd/filings/${id}/send`, { method: 'POST', body: JSON.stringify(input) }),
   rtdFilingDownloadUrl: (id: string) => `${BASE}/rtd/filings/${id}/download`,
 };

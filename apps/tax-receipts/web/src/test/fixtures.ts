@@ -12,8 +12,8 @@ export const ME: Me = {
     administerKillSwitch: true,
     generateEntityReports: true,
     shareEntityReports: true,
-    stampRtdFilings: true,
-    fileRtdFilings: true,
+    prepareRtdFilings: true,
+    sendRtdFilings: true,
     fileEOForms: true,
   },
 };

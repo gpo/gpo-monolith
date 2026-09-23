@@ -39,7 +39,8 @@ export class ContributionNotRtdReportedError extends Error {
   readonly statusCode = 422;
   constructor(readonly contributionId: string) {
     super(
-      `contribution ${contributionId} has no RtdInclusion -- it was never RTD-reported, so a DC-1A doesn't apply ` +
+      `contribution ${contributionId} has no RtdInclusion in a SENT filing -- it was never RTD-reported to EO ` +
+        '(either it has no RtdInclusion at all, or it is only prepared/pending send), so a DC-1A doesn\'t apply ' +
         '(eo-reporting.md §1: "late-discovered unreported records go through a normal filing, not DC-1A")',
     );
     this.name = 'ContributionNotRtdReportedError';
@@ -92,7 +93,11 @@ export async function generateDc1aAmendment(
       rtdInclusions: { include: { rtdFiling: true } },
     },
   });
-  const original = contribution?.rtdInclusions[0];
+  // A DC-1A amends something EO has actually seen: an inclusion whose
+  // filing is only prepared (submittedAt still null) doesn't count yet --
+  // see prepare.ts / mark-sent.ts's header comments for why the
+  // reported-marker is now the SEND confirmation, not the prepare step.
+  const original = contribution?.rtdInclusions.find((i) => i.rtdFiling.submittedAt != null);
   if (!contribution || !original) {
     throw new ContributionNotRtdReportedError(input.contributionId);
   }
