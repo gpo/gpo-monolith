@@ -516,3 +516,105 @@ through the public endpoint, and confirmed a replayed token 404s.
    sysadmin being able to read any donor's active confirmation token is a
    reasonable support tool, but it's a different risk profile in production
    than it is as a pure dev convenience.
+
+## Ticket 3.10 — Correction actions: cancel / reissue (first slice)
+
+corrections.md catalogues 11 correction actions. This ticket does not build
+all of them in one pass — actions 1 (cancel) and 2 (reissue) are the
+foundational primitives every other action composes from (a donor move, a
+split, a refund are all "cancel this, issue that" at their core), and they
+are also where corrections.md's own emphasis lands: "cascade preview first"
+and "EO-awareness is automatic" only mean something once a cascade actually
+exists. STATUS.md marks 3.10 `wip`, not `done`, the same honest-partial
+stance ticket 3.12 took.
+
+Built on real, already-shipped primitives rather than new machinery:
+`remainingEligibleCents` (invariant 1) already excludes a non-`ISSUED`
+receipt's allocations, so "releasing" them on cancel needed no schema change
+or extra write at all; invariant 7's `replacedById`/`reissuedFromId` fields
+(ticket 3.3) were built anticipating exactly this; the `OWED_TO_EO`
+`WorkItemKind` (ticket 0.2) and `generateDc1aAmendment` (ticket 2.4) already
+existed waiting for a real producer — ticket 2.8's own note called this out
+by name ("the owed-to-EO queue, which nothing populates yet (ticket 3.10)").
+
+| Where | What |
+|---|---|
+| `apps/tax-receipts/api/src/corrections/cancel.ts` | `previewReceiptCorrection` (the cascade preview: every allocated contribution, its amount, whether it's RTD-reported); `cancelReceipt` (action 1: flips `status` to `CANCELLED`, renders a watermarked cancellation-notice PDF when the original had one, opens one `OWED_TO_EO` `WorkItem` per RTD-reported allocated contribution); `reissueReceipt` (action 2: cancel, then issue one replacement covering every contribution the old receipt carried, re-deriving each amount fresh from `remainingEligibleCents` rather than copying the old allocation). |
+| `apps/tax-receipts/api/src/corrections/cancellation-notice.ts` | `renderCancellationNoticePdf`: stamps "CANCELLED" diagonally across every page of the original receipt PDF (`pdf-lib`), the same treatment workflows.md's "Current" process already does by hand in Adobe. |
+| `apps/tax-receipts/api/src/routes/receipts.ts` | `GET /receipts/:id/correction-preview` (broad `read`), `POST /receipts/:id/cancel` and `POST /receipts/:id/reissue` (both `correct Receipt`, the same gate `allocateToReceipt`'s route already uses). |
+
+Tests: `src/corrections/cancel.test.ts` (9 tests: cancel happy path incl.
+watermark + re-issuability of the released allocation; unknown/already-
+cancelled receipt; a foreign receipt with no PDF to watermark; the
+OWED_TO_EO round trip proven against the *real* `generateDc1aAmendment`,
+not a mock; single- and multi-allocation reissue; kill-switch on reissue but
+not cancel; a stale address blocking reissue; a partially-allocated
+contribution reissued for exactly what's left, unaffected by a second
+receipt already covering the rest), route tests appended to
+`routes/receipts.test.ts` (auth, CASL 403, preview/cancel/reissue happy
+paths). `pnpm turbo run lint typecheck test build` green (314 tests).
+
+### Deviations / judgment calls
+
+1. **Only actions 1 and 2 are built.** Actions 3 (lightweight reprint) and
+   11 (DC-1A) overlap with tickets 3.11 and 2.4 respectively — 3.11's own
+   backlog line ("Lost status, 'Copy' reprint, cancellation notice, and
+   'cancels and replaces receipt #' text") is explicitly the exact-wording/
+   stamp-placement layer on top of what this ticket built the mechanism for,
+   and 2.4 already built the DC-1A generator this ticket now feeds for
+   real. Actions 4 (correct contribution amount), 5/6 (move contributions/
+   receipt between donors), 7 (split), 8 (refund and cancel), 9 (guided B2
+   reallocation), and 10 (merge duplicate contacts) are each a real,
+   separate slice of work — donor-identity questions (5, 10), a UX-heavy
+   guided flow (9), and a genuinely different receipt-splitting shape (7) —
+   not attempted here. Each can now build on `cancelReceipt`/`reissueReceipt`
+   rather than reimplementing the cascade.
+2. **The Cancellation Notice IS the watermarked copy**, not two separate
+   documents. corrections.md's action 1 reads as if there are two things (a
+   rendered "Cancellation Notice" and a separately "queued" donor notice
+   "with the cancelled copy") — no second document exists anywhere else in
+   this tool's design (no cancellation-notice template, unlike the receipt
+   itself), and workflows.md's "Current" process describes exactly one
+   artifact (the watermarked original). Treating them as the same thing is
+   the same kind of call ticket 3.5 made for the cover letter: build the one
+   real artifact, don't invent a second one nothing specifies.
+3. **`reissueReceipt` re-derives every contribution's amount fresh** rather
+   than copying the old allocation's amount forward. This is what makes a
+   multi-allocation reissue correct (and what actually resolves the "belongs
+   with the correction/consolidation workflow" forward-reference
+   `receipts/allocate.ts`'s header comment left for this ticket) — but it
+   does NOT resolve O44 (which contribution's `acceptedAt`/`goodsServices`
+   prints on the new PDF): the first-allocated contribution is used as a
+   stand-in, same unresolved guess ticket 3.2 already declined to make, just
+   now actually exercised by a real reissued PDF instead of a receipt
+   nothing could report on. `reports/load-receipts.ts`'s
+   `MultiAllocationReceiptError` guard is untouched and still blocks the
+   ALL/S2P2 generators on any such receipt (O44 updated, not resolved).
+4. **No kill-switch check on `cancelReceipt`.** Cancelling reduces the
+   year's receipted count; the statutory freeze exists to stop new receipts
+   from being issued, not to trap staff into being unable to fix a mistake
+   during an EO-requested freeze. `reissueReceipt` mints a new sequence
+   number, so it gets the same `assertIssuanceEnabled` check every other
+   issuance path has.
+5. **`OWED_TO_EO` `WorkItem.dueAt` is left `null`.** corrections.md says
+   only "RTD amendments promptly" — no compliance.md or rollout.md source
+   gives promptly a number of days, and inventing one felt like the wrong
+   kind of shortcut on a real EO deadline. Flagged, not guessed at.
+6. **No riding-scope check on the new routes**, matching
+   `routes/receipts.ts`'s and `routes/contributions.ts`'s existing
+   convention for single-resource-by-id routes: riding scoping happens at
+   list-query level (`ridingScopeWhere`) so a scoped user never sees a
+   receipt outside their grant to begin with; direct-by-id routes across
+   this codebase don't re-check it (unlike the space-scoped routes in
+   `routes/spaces.ts`, which take a riding as a query parameter and so have
+   no row to load one from first).
+7. **No donor communication is actually sent.** corrections.md: "each action
+   queues the appropriate donor notice... delivered per donor preference,
+   each send logged as a Qomon activity" — same two gaps tickets 3.5/3.6
+   already carry (no Qomon activity facility exists at all, O45; no real
+   email provider, O24) and ticket 3.6 is still blocked on. The cancellation
+   notice artifact exists and is stored; nothing delivers it yet.
+8. **No web UI.** Same gap every correction-adjacent ticket has left so far
+   (3.2's allocation, 3.9's pre-check) — `routes/receipt-registry.tsx` and
+   the guarded correction-actions modal are screens 7/8, tickets 3.13/3.14,
+   not built yet.

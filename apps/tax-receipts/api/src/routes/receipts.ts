@@ -4,6 +4,7 @@ import { ReceiptDelivery } from '@gpo/tax-receipts-core';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { cancelReceipt, previewReceiptCorrection, reissueReceipt } from '../corrections/cancel.js';
 import { allocateToReceipt } from '../receipts/allocate.js';
 import { recordForeignReceipt } from '../receipts/foreign.js';
 import { issueReceipt } from '../receipts/issue.js';
@@ -19,7 +20,9 @@ import type { SessionUser } from '../plugins/auth.js';
  * `issue`: attaching another contribution to an already-issued receipt is a
  * correction-adjacent action on existing money, not the act of originating a
  * new receipt — the same `correct` action `abilities.ts` already reserves
- * for administrators and the party CFO alike.
+ * for administrators and the party CFO alike. `cancel`/`reissue` (ticket
+ * 3.10, corrections.md actions 1/2) are gated the same way for the same
+ * reason.
  */
 export async function receiptRoutes(
   app: FastifyInstance,
@@ -129,6 +132,74 @@ export async function receiptRoutes(
           actorUserId: user.id,
           reason: request.body.reason,
           amountCents: request.body.amountCents,
+        },
+      );
+      return reply.code(201).send(result);
+    },
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/receipts/:id/correction-preview',
+    schema: { params: z.object({ id: z.string() }) },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('read', 'Receipt')) {
+        return reply.code(403).send({ error: 'not permitted to read receipts' });
+      }
+
+      const result = await previewReceiptCorrection(app.prisma, request.params.id);
+      return reply.send(result);
+    },
+  });
+
+  const CancelReceiptBody = z.object({ reason: z.string().min(3) });
+
+  r.route({
+    method: 'POST',
+    url: '/receipts/:id/cancel',
+    schema: { params: z.object({ id: z.string() }), body: CancelReceiptBody },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('correct', 'Receipt')) {
+        return reply.code(403).send({ error: 'not permitted to correct receipts' });
+      }
+
+      const result = await cancelReceipt(
+        { prisma: app.prisma, storageDir: opts.storageDir },
+        { receiptId: request.params.id, actorUserId: user.id, reason: request.body.reason },
+      );
+      return reply.code(200).send(result);
+    },
+  });
+
+  const ReissueReceiptBody = z.object({
+    reason: z.string().min(3),
+    politicalEntityLabel: z.string().min(1),
+    delivery: ReceiptDelivery.optional(),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/receipts/:id/reissue',
+    schema: { params: z.object({ id: z.string() }), body: ReissueReceiptBody },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('correct', 'Receipt')) {
+        return reply.code(403).send({ error: 'not permitted to correct receipts' });
+      }
+
+      const result = await reissueReceipt(
+        { prisma: app.prisma, storageDir: opts.storageDir },
+        {
+          receiptId: request.params.id,
+          actorUserId: user.id,
+          reason: request.body.reason,
+          politicalEntityLabel: request.body.politicalEntityLabel,
+          delivery: request.body.delivery,
         },
       );
       return reply.code(201).send(result);
