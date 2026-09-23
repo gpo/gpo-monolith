@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { allocateToReceipt } from '../receipts/allocate.js';
+import { recordForeignReceipt } from '../receipts/foreign.js';
 import { issueReceipt } from '../receipts/issue.js';
 import type { SessionUser } from '../plugins/auth.js';
 
@@ -56,6 +57,44 @@ export async function receiptRoutes(
           amountCents: request.body.amountCents,
           delivery: request.body.delivery,
           politicalEntityLabel: request.body.politicalEntityLabel,
+        },
+      );
+      return reply.code(201).send(result);
+    },
+  });
+
+  const RecordForeignReceiptBody = z.object({
+    reason: z.string().min(3),
+    receiptNumber: z.string().min(1),
+    amountCents: z.number().int().positive().optional(),
+    issueDate: z.coerce.date().optional(),
+    delivery: ReceiptDelivery.optional(),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/contributions/:id/receipts/foreign',
+    schema: {
+      params: z.object({ id: z.string() }),
+      body: RecordForeignReceiptBody,
+    },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('issue', 'Receipt')) {
+        return reply.code(403).send({ error: 'not permitted to issue receipts' });
+      }
+
+      const result = await recordForeignReceipt(
+        { prisma: app.prisma },
+        {
+          contributionId: request.params.id,
+          actorUserId: user.id,
+          reason: request.body.reason,
+          receiptNumber: request.body.receiptNumber,
+          amountCents: request.body.amountCents,
+          issueDate: request.body.issueDate,
+          delivery: request.body.delivery,
         },
       );
       return reply.code(201).send(result);
