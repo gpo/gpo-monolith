@@ -46,8 +46,8 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         ),
         generateEntityReports: request.ability.can('create', 'EntityReport'),
         shareEntityReports: request.ability.can('share', 'EntityReport'),
-        stampRtdFilings: request.ability.can('create', 'RtdFiling'),
-        fileRtdFilings: request.ability.can('file', 'RtdFiling'),
+        prepareRtdFilings: request.ability.can('create', 'RtdFiling'),
+        sendRtdFilings: request.ability.can('file', 'RtdFiling'),
         fileEOForms: request.ability.can('file', 'EOForm'),
       },
     });

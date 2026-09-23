@@ -20,10 +20,14 @@ import {
 import { api, ApiError, type RtdDraftRow, type RtdFilingSummary } from '../api.js';
 
 /**
- * RTD filings (ticket 2.8, screens.md screen 9): the filing table (every
- * `RtdFiling` with artifact and status) plus the draft builder (unreported
- * over-threshold rows with per-row business days remaining and gate-check
- * results), export format choice, and the stamp step.
+ * RTD filings (ticket 2.8, screens.md screen 9; reworked for the
+ * prepare/send redesign): the filing table (every `RtdFiling` with artifact
+ * and send status) plus the draft builder (unreported over-threshold rows
+ * with per-row business days remaining and gate-check results), export
+ * format choice, and the prepare step. A filing's send confirmation is a
+ * separate action lower down the table — see `SendControls` — so nothing is
+ * treated as "EO has seen this" until a human confirms it actually went
+ * out.
  *
  * DC-1A generation is NOT built into this screen: screens.md's own wording
  * — "DC-1A amendments generate from owed-to-EO items and appear as linked
@@ -62,6 +66,7 @@ function DraftBuilder() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reason, setReason] = useState('');
+  const [cfoName, setCfoName] = useState('');
   const [format, setFormat] = useState<'CSV' | 'PIPE'>('CSV');
   const [error, setError] = useState<string | null>(null);
 
@@ -75,8 +80,8 @@ function DraftBuilder() {
     [draft.data],
   );
 
-  const stamp = useMutation({
-    mutationFn: () => api.stampRtdFiling({ year, contributionIds: [...selected], reason, format }),
+  const prepare = useMutation({
+    mutationFn: () => api.prepareRtdFiling({ year, contributionIds: [...selected], reason, cfoName, format }),
     onSuccess: () => {
       setError(null);
       setSelected(new Set());
@@ -84,7 +89,7 @@ function DraftBuilder() {
       void qc.invalidateQueries({ queryKey: ['rtd-draft', year] });
       return qc.invalidateQueries({ queryKey: ['rtd-filings'] });
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to stamp the filing.'),
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to prepare the filing.'),
   });
 
   function toggleRow(id: string) {
@@ -104,7 +109,7 @@ function DraftBuilder() {
     );
   }
 
-  const canStamp = me.data?.can.stampRtdFilings ?? false;
+  const canPrepare = me.data?.can.prepareRtdFilings ?? false;
 
   return (
     <Card withBorder>
@@ -168,8 +173,8 @@ function DraftBuilder() {
           <Text c="dimmed">No unreported over-threshold deposits for {year}.</Text>
         )}
 
-        {!canStamp && (
-          <Alert color="yellow">Only the filer role (or a CFO designate) may stamp a new filing.</Alert>
+        {!canPrepare && (
+          <Alert color="yellow">Only the filer role (or a CFO designate) may prepare a new filing.</Alert>
         )}
         <Group align="flex-end">
           <NativeSelect
@@ -182,6 +187,12 @@ function DraftBuilder() {
             onChange={(e) => setFormat(e.currentTarget.value as 'CSV' | 'PIPE')}
           />
           <TextInput
+            label="CFO name (required)"
+            placeholder="printed on the filing"
+            value={cfoName}
+            onChange={(e) => setCfoName(e.currentTarget.value)}
+          />
+          <TextInput
             label="Reason (required)"
             placeholder="e.g. period-end RTD filing"
             value={reason}
@@ -189,11 +200,11 @@ function DraftBuilder() {
             style={{ flex: 1 }}
           />
           <Button
-            onClick={() => stamp.mutate()}
-            loading={stamp.isPending}
-            disabled={!canStamp || selected.size === 0 || reason.trim().length < 3}
+            onClick={() => prepare.mutate()}
+            loading={prepare.isPending}
+            disabled={!canPrepare || selected.size === 0 || reason.trim().length < 3 || cfoName.trim().length === 0}
           >
-            Stamp filing ({selected.size} row{selected.size === 1 ? '' : 's'})
+            Prepare filing ({selected.size} row{selected.size === 1 ? '' : 's'})
           </Button>
         </Group>
         {error && <Alert color="red">{error}</Alert>}
@@ -202,57 +213,76 @@ function DraftBuilder() {
   );
 }
 
-function ArchiveControls({ filing }: { filing: RtdFilingSummary }) {
+function SendControls({ filing }: { filing: RtdFilingSummary }) {
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const [cfoName, setCfoName] = useState('');
   const [reason, setReason] = useState('');
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const archive = useMutation({
-    mutationFn: () => api.archiveRtdFiling(filing.id, { cfoName, reason }),
+  const send = useMutation({
+    mutationFn: () => api.sendRtdFiling(filing.id, { reason }),
     onSuccess: () => {
       setOpen(false);
       setError(null);
       return qc.invalidateQueries({ queryKey: ['rtd-filings'] });
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to archive the filing.'),
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to mark the filing sent.'),
   });
 
-  if (filing.artifactId) {
+  const download = filing.artifactId ? (
+    <Text component="a" href={api.rtdFilingDownloadUrl(filing.id)} c="blue" size="sm">
+      Download
+    </Text>
+  ) : null;
+
+  if (filing.submittedAt) {
     return (
-      <Text component="a" href={api.rtdFilingDownloadUrl(filing.id)} c="blue" size="sm">
-        Download
-      </Text>
+      <Stack gap={2}>
+        {download}
+        <Badge color="green" size="sm">
+          Sent {new Date(filing.submittedAt).toLocaleDateString()}
+        </Badge>
+      </Stack>
     );
   }
-  if (!(me.data?.can.fileRtdFilings ?? false)) {
+  if (!(me.data?.can.sendRtdFilings ?? false)) {
     return (
-      <Text c="dimmed" size="sm">
-        Not yet archived
-      </Text>
+      <Stack gap={2}>
+        {download}
+        <Text c="dimmed" size="xs">
+          Not yet sent
+        </Text>
+      </Stack>
     );
   }
   if (!open) {
     return (
-      <Button size="xs" variant="light" onClick={() => setOpen(true)}>
-        Archive
-      </Button>
+      <Stack gap={2}>
+        {download}
+        <Button size="xs" variant="light" onClick={() => setOpen(true)}>
+          Send
+        </Button>
+      </Stack>
     );
   }
   return (
     <Stack gap={4} miw={220}>
-      <TextInput size="xs" placeholder="CFO name" value={cfoName} onChange={(e) => setCfoName(e.currentTarget.value)} />
-      <TextInput size="xs" placeholder="Reason" value={reason} onChange={(e) => setReason(e.currentTarget.value)} />
+      {download}
+      <TextInput
+        size="xs"
+        placeholder="Reason (e.g. emailed to EO 2026-03-06)"
+        value={reason}
+        onChange={(e) => setReason(e.currentTarget.value)}
+      />
       <Group gap="xs">
         <Button
           size="xs"
-          loading={archive.isPending}
-          disabled={cfoName.trim().length === 0 || reason.trim().length < 3}
-          onClick={() => archive.mutate()}
+          loading={send.isPending}
+          disabled={reason.trim().length < 3}
+          onClick={() => send.mutate()}
         >
-          Confirm
+          Confirm sent
         </Button>
         <Button size="xs" variant="subtle" onClick={() => setOpen(false)}>
           Cancel
@@ -311,7 +341,7 @@ function FilingTable() {
             <Table.Td>{filing.rowCount}</Table.Td>
             <Table.Td>{new Date(filing.generatedAt).toLocaleString()}</Table.Td>
             <Table.Td>
-              <ArchiveControls filing={filing} />
+              <SendControls filing={filing} />
             </Table.Td>
           </Table.Tr>
         ))}

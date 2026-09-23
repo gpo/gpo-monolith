@@ -6,8 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
 import { makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
 import { buildRtdDraft } from './draft.js';
-import { stampRtdFiling } from './stamp.js';
-import { archiveRtdFiling } from './archive.js';
+import { prepareRtdFiling } from './prepare.js';
 
 const prisma = testPrisma();
 
@@ -130,7 +129,9 @@ describe('December-straddle case (ticket 2.7)', () => {
       acceptedAt: new Date('2026-06-01T12:00:00Z'),
       periodId: baseline.periodId,
     });
-    const legacyFiling = await prisma.rtdFiling.create({ data: { name: '2026_RTD_8_060520261200' } });
+    const legacyFiling = await prisma.rtdFiling.create({
+      data: { name: '2026_RTD_8_060520261200', submittedAt: new Date('2026-06-05T12:00:00Z'), submittedBy: baseline.cfoUserId },
+    });
     await prisma.rtdInclusion.create({
       data: {
         contributionId: legacyReported.contributionId,
@@ -170,21 +171,21 @@ describe('December-straddle case (ticket 2.7)', () => {
     expect(row.overdue).toBe(true);
     expect(row.businessDaysRemaining).toBeLessThan(0);
 
-    const stamped = await stampRtdFiling(prisma, {
-      year: 2026,
-      contributionIds: [decemberDeposit.contributionId],
-      actorUserId: baseline.cfoUserId,
-      reason: 'residual 2026 filing, submitted post-cutover',
-      asOf,
-    });
-    // 2026 filename despite a January 2027 submission timestamp.
-    expect(stamped.filingName).toBe('2026_RTD_8_012020271000');
-
-    const archived = await archiveRtdFiling(
+    const prepared = await prepareRtdFiling(
       { prisma, storageDir },
-      { rtdFilingId: stamped.rtdFilingId, cfoName: 'Casey CFO', actorUserId: baseline.cfoUserId, reason: 'archive it' },
+      {
+        year: 2026,
+        contributionIds: [decemberDeposit.contributionId],
+        actorUserId: baseline.cfoUserId,
+        reason: 'residual 2026 filing, submitted post-cutover',
+        cfoName: 'Casey CFO',
+        asOf,
+      },
     );
-    const artifact = await prisma.artifact.findUniqueOrThrow({ where: { id: archived.artifactId } });
+    // 2026 filename despite a January 2027 submission timestamp.
+    expect(prepared.filingName).toBe('2026_RTD_8_012020271000');
+
+    const artifact = await prisma.artifact.findUniqueOrThrow({ where: { id: prepared.artifactId } });
     const text = await readFile(path.join(storageDir, artifact.uri), 'utf8');
     const dataLine = text.trim().split('\n')[1]!;
     expect(dataLine).toContain(',2026,'); // Contribution Year
@@ -202,7 +203,11 @@ describe('December-straddle case (ticket 2.7)', () => {
     await prisma.rtdInclusion.create({
       data: {
         contributionId: legacyReported.contributionId,
-        rtdFilingId: (await prisma.rtdFiling.create({ data: { name: '2026_RTD_8_060520261200' } })).id,
+        rtdFilingId: (
+          await prisma.rtdFiling.create({
+            data: { name: '2026_RTD_8_060520261200', submittedAt: new Date('2026-06-05T12:00:00Z'), submittedBy: baseline.cfoUserId },
+          })
+        ).id,
         amountCents: 25_000,
         aggregateAfterCents: 25_000,
       },

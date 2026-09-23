@@ -3,20 +3,21 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { archiveRtdFiling } from '../rtd/archive.js';
 import { generateDc1aAmendment } from '../rtd/dc1a.js';
 import { buildRtdDraft } from '../rtd/draft.js';
-import { stampRtdFiling } from '../rtd/stamp.js';
+import { markRtdFilingSent } from '../rtd/mark-sent.js';
+import { prepareRtdFiling } from '../rtd/prepare.js';
 import type { SessionUser } from '../plugins/auth.js';
 
 /**
- * RTD filings screen (ticket 2.8, screens.md screen 9): the filing table
- * (every `RtdFiling` with artifact and status) plus the draft builder
- * (unreported over-threshold rows with per-row business days remaining and
- * gate-check results), export, and the stamp step. DC-1A generation is
- * exposed too, decoupled from an "owed-to-EO item" trigger the same way
- * `rtd/dc1a.ts` itself is (ticket 2.4's header comment) — a filer can
- * generate one directly given a contribution id and reason.
+ * RTD filings screen (ticket 2.8, screens.md screen 9, reworked for the
+ * prepare/send redesign): the filing table (every `RtdFiling` with artifact
+ * and send status) plus the draft builder (unreported over-threshold rows
+ * with per-row business days remaining and gate-check results), the prepare
+ * step (locks a selection, renders the artifact), and the send-confirmation
+ * step. DC-1A generation is exposed too, decoupled from an "owed-to-EO item"
+ * trigger the same way `rtd/dc1a.ts` itself is (ticket 2.4's header comment)
+ * — a filer can generate one directly given a contribution id and reason.
  */
 export async function rtdRoutes(app: FastifyInstance, opts: { storageDir: string }): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -150,60 +151,58 @@ export async function rtdRoutes(app: FastifyInstance, opts: { storageDir: string
     },
   });
 
-  const StampFilingBody = z.object({
+  const PrepareFilingBody = z.object({
     year: z.number().int(),
     contributionIds: z.array(z.string()).min(1),
     reason: z.string().min(3),
+    cfoName: z.string().min(1),
     format: z.enum(['CSV', 'PIPE']).optional(),
   });
 
   r.route({
     method: 'POST',
     url: '/rtd/filings',
-    schema: { body: StampFilingBody },
+    schema: { body: PrepareFilingBody },
     handler: async (request, reply) => {
       const user = request.user as SessionUser | undefined;
       if (!user) return reply.code(401).send({ error: 'authentication required' });
       if (!request.ability.can('create', 'RtdFiling')) {
-        return reply.code(403).send({ error: 'not permitted to stamp an RTD filing' });
+        return reply.code(403).send({ error: 'not permitted to prepare an RTD filing' });
       }
 
-      const result = await stampRtdFiling(app.prisma, {
-        year: request.body.year,
-        contributionIds: request.body.contributionIds,
-        actorUserId: user.id,
-        reason: request.body.reason,
-        format: request.body.format,
-      });
+      const result = await prepareRtdFiling(
+        { prisma: app.prisma, storageDir: opts.storageDir },
+        {
+          year: request.body.year,
+          contributionIds: request.body.contributionIds,
+          actorUserId: user.id,
+          reason: request.body.reason,
+          cfoName: request.body.cfoName,
+          format: request.body.format,
+        },
+      );
       return reply.code(201).send(result);
     },
   });
 
-  const ArchiveFilingBody = z.object({
-    cfoName: z.string().min(1),
-    reason: z.string().min(3),
-  });
+  const SendFilingBody = z.object({ reason: z.string().min(3) });
 
   r.route({
     method: 'POST',
-    url: '/rtd/filings/:id/archive',
-    schema: { params: FilingIdParams, body: ArchiveFilingBody },
+    url: '/rtd/filings/:id/send',
+    schema: { params: FilingIdParams, body: SendFilingBody },
     handler: async (request, reply) => {
       const user = request.user as SessionUser | undefined;
       if (!user) return reply.code(401).send({ error: 'authentication required' });
       if (!request.ability.can('file', 'RtdFiling')) {
-        return reply.code(403).send({ error: 'not permitted to archive an RTD filing' });
+        return reply.code(403).send({ error: 'not permitted to mark an RTD filing sent' });
       }
 
-      const result = await archiveRtdFiling(
-        { prisma: app.prisma, storageDir: opts.storageDir },
-        {
-          rtdFilingId: request.params.id,
-          cfoName: request.body.cfoName,
-          actorUserId: user.id,
-          reason: request.body.reason,
-        },
-      );
+      const result = await markRtdFilingSent(app.prisma, {
+        rtdFilingId: request.params.id,
+        actorUserId: user.id,
+        reason: request.body.reason,
+      });
       return reply.code(201).send(result);
     },
   });

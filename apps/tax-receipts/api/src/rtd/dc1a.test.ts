@@ -4,7 +4,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
 import { makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
-import { stampRtdFiling } from './stamp.js';
+import { markRtdFilingSent } from './mark-sent.js';
+import { prepareRtdFiling } from './prepare.js';
 import {
   AmendmentWorkItemError,
   ContributionNotRtdReportedError,
@@ -58,14 +59,26 @@ describe('DC-1A amendment generation, DB-backed (ticket 2.4)', () => {
       contactLastName: 'Donor',
     });
     await seedMetadata(made.contributionId);
-    const stamped = await stampRtdFiling(prisma, {
-      year: 2026,
-      contributionIds: [made.contributionId],
+    const prepared = await prepareRtdFiling(
+      { prisma, storageDir },
+      {
+        year: 2026,
+        contributionIds: [made.contributionId],
+        actorUserId: baseline.cfoUserId,
+        reason: 'initial filing',
+        cfoName: 'Casey CFO',
+        asOf: new Date('2026-03-06T15:00:00Z'),
+      },
+    );
+    // DC-1A only applies to a filing EO has actually seen (dc1a.ts) --
+    // confirm the send so `seedReportedContribution` really means reported.
+    await markRtdFilingSent(prisma, {
+      rtdFilingId: prepared.rtdFilingId,
       actorUserId: baseline.cfoUserId,
-      reason: 'initial filing',
-      asOf: new Date('2026-03-06T15:00:00Z'),
+      reason: 'emailed to EO',
+      asOf: new Date('2026-03-06T16:00:00Z'),
     });
-    return { ...made, stamped };
+    return { ...made, stamped: prepared };
   }
 
   it('generates a DC1A_AMENDMENT filing that links back to the original', async () => {
