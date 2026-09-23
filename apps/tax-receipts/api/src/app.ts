@@ -16,6 +16,10 @@ import {
   QomonWriteUnconfirmedError,
 } from './contributions/metadata-write-through.js';
 import { ContributionNotMirroredError } from './contributions/refresh.js';
+import {
+  DonorPrecheckTokenExpiredError,
+  DonorPrecheckTokenNotFoundError,
+} from './donors/precheck.js';
 import { EntityReportNotFoundError } from './reports/entity-reports.js';
 import {
   AllocationContactMismatchError,
@@ -59,6 +63,7 @@ import prismaPlugin from './plugins/prisma.js';
 import { adminRoutes } from './routes/admin.js';
 import { changeLogRoutes } from './routes/change-log.js';
 import { contributionRoutes } from './routes/contributions.js';
+import { donorPrecheckRoutes } from './routes/donor-precheck.js';
 import { entityReportRoutes } from './routes/entity-reports.js';
 import { healthRoutes } from './routes/health.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
@@ -145,6 +150,12 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
     if (error instanceof ForeignReceiptNumberFormatError) {
       return reply.code(400).send({ error: error.message });
+    }
+    if (error instanceof DonorPrecheckTokenNotFoundError) {
+      return reply.code(404).send({ error: error.message });
+    }
+    if (error instanceof DonorPrecheckTokenExpiredError) {
+      return reply.code(410).send({ error: error.message });
     }
     if (error instanceof SpaceIssuanceBlockedError) {
       return reply.code(409).send({ error: error.message, blockers: error.blockers });
@@ -240,6 +251,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     buildRidingQomon: opts.buildRidingQomon,
   });
   await app.register(contributionRoutes, { qomon: opts.qomon });
+  await app.register(donorPrecheckRoutes);
   await app.register(receiptRoutes, {
     storageDir: opts.artifactStorageDir ?? './storage/artifacts',
   });

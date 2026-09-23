@@ -202,3 +202,92 @@ describe('per-space issuance routes (ticket 3.12)', () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+describe('donor pre-check send route (ticket 3.9)', () => {
+  let app: FastifyInstance;
+  let baseline: Awaited<ReturnType<typeof seedBaseline>>;
+  let contactId: string;
+
+  beforeEach(async () => {
+    await resetDb(prisma);
+    baseline = await seedBaseline(prisma);
+    await prisma.user.update({
+      where: { id: baseline.adminUserId },
+      data: { passwordHash: await hashPassword('admin-pass-phrase') },
+    });
+    await prisma.user.update({
+      where: { id: baseline.cfoUserId },
+      data: { passwordHash: await hashPassword('cfo-pass-phrase') },
+    });
+    await prisma.user.create({
+      data: {
+        email: 'bookkeeper@gpo.test',
+        name: 'Bookkeeper',
+        role: 'bookkeeper',
+        passwordHash: await hashPassword('bookkeeper-pass-phrase'),
+        allRidings: true,
+      },
+    });
+
+    const contact = await prisma.contact.create({
+      data: { qomonContactId: 1n, name: 'Dana Donor', email: 'dana@example.org' },
+    });
+    contactId = contact.id;
+    const contribution = await prisma.contribution.create({
+      data: { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') },
+    });
+    await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
+      const after = await ctx.tx.contributionMetadata.create({
+        data: { contributionId: contribution.id, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },
+      });
+      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+    });
+
+    app = await buildApp({ prisma, sessionSecret: SECRET });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  async function login(email: string, password: string) {
+    const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { email, password } });
+    return res.cookies[0]!;
+  }
+
+  it('requires authentication', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/spaces/${baseline.periodId}/PARTY/precheck`,
+      payload: { reason: 'no session' },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('403s a role with no ContributionMetadata update ability (e.g. bookkeeper)', async () => {
+    const cookie = await login('bookkeeper@gpo.test', 'bookkeeper-pass-phrase');
+    const res = await app.inject({
+      method: 'POST',
+      url: `/spaces/${baseline.periodId}/PARTY/precheck`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: { reason: 'not allowed' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('lets an administrator send pre-checks for the space', async () => {
+    const cookie = await login('admin@gpo.test', 'admin-pass-phrase');
+    const res = await app.inject({
+      method: 'POST',
+      url: `/spaces/${baseline.periodId}/PARTY/precheck`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: { reason: 'annual pre-check window opens' },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.sent).toHaveLength(1);
+    expect(body.sent[0].contactId).toBe(contactId);
+    expect(body.sent[0].confirmationToken).toBeTruthy();
+  });
+});

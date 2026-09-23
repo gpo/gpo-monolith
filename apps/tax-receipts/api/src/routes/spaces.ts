@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { canSeeRiding } from '../auth/abilities.js';
+import { sendDonorPrechecksForSpace } from '../donors/precheck.js';
 import { deliverSpaceReceipts } from '../receipts/delivery.js';
 import { getSpaceDashboard } from '../space/dashboard.js';
 import { issueReceiptsForSpace, previewSpaceIssuance } from '../space/issuance.js';
@@ -87,6 +88,38 @@ export async function spaceRoutes(
           delivery: request.body.delivery,
         },
       );
+      return reply.code(201).send(result);
+    },
+  });
+
+  const SendPrechecksBody = z.object({
+    reason: z.string().min(3),
+    expiresInDays: z.number().int().positive().optional(),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/spaces/:periodId/:entityKind/precheck',
+    schema: { params: SpaceParams, querystring: SpaceQuery, body: SendPrechecksBody },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('update', 'ContributionMetadata')) {
+        return reply.code(403).send({ error: 'not permitted to run the donor pre-check' });
+      }
+      const ridingNumber = request.query.ridingNumber ?? null;
+      if (!canSeeRiding(user, ridingNumber)) {
+        return reply.code(403).send({ error: 'not permitted to see this riding' });
+      }
+
+      const result = await sendDonorPrechecksForSpace(app.prisma, {
+        periodId: request.params.periodId,
+        ridingNumber,
+        entityKind: request.params.entityKind,
+        actorUserId: user.id,
+        reason: request.body.reason,
+        expiresInDays: request.body.expiresInDays,
+      });
       return reply.code(201).send(result);
     },
   });
