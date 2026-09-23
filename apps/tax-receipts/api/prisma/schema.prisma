@@ -366,6 +366,7 @@ model Period {
   receipts         Receipt[]
   entityReports    EntityReport[]
   spaceStates      SpaceState[]
+  donorCyclePreferences DonorCyclePreference[]
 
   @@map("period")
 }
@@ -560,9 +561,18 @@ model DonorCyclePreference {
   delivery           ReceiptDelivery @default(MAIL)
   precheckSentAt     DateTime?
   addressConfirmedAt DateTime?
+  /// bearer token for the donor-facing confirm link (ticket 3.9); cleared
+  /// once used, so a stale/replayed link 404s rather than re-confirming
+  confirmationToken          String?   @unique
+  confirmationTokenExpiresAt DateTime?
+  /// which space's send this outstanding token belongs to, so confirming it
+  /// files the resulting AddressSnapshot under the right period; cleared
+  /// alongside the token
+  confirmationPeriodId       Int?
   updatedAt          DateTime @updatedAt
 
   contact            Contact  @relation(fields: [contactId], references: [id])
+  confirmationPeriod Period?  @relation(fields: [confirmationPeriodId], references: [id])
 
   @@unique([contactId, year])
   @@map("donor_cycle_preference")

@@ -397,3 +397,77 @@ sequence-format 400). `pnpm turbo run lint typecheck test build` green.
    manual number looks nothing like the tool's own sequence output, so a
    match is far more likely an operator error (meant to look up a real
    issued receipt, typed the wrong endpoint) than a genuine foreign receipt.
+
+## Ticket 3.9 — Donor pre-check (V4)
+
+PRD.md story V4: "before issuance I receive a pre-check (tied to my email)
+confirming my address and delivery preference." `DonorCyclePreference` has
+existed since ticket 0.2, and `space/issuance.ts` (3.12) already reads its
+`delivery` column when resolving a receipt's channel — but nothing before
+this ticket ever wrote `precheckSentAt` or `addressConfirmedAt`. Closes
+traceability.md gap 2 ("pre-check send/response state has no test").
+
+Split the same way ticket 3.5's delivery is split from 3.6's real send:
+sending is a staff action that stamps state and hands back a confirmation
+token; nothing here emails that token to anyone, since no provider/warmed
+subdomain exists yet (O24, the same gap 3.6 itself is blocked on). The
+donor-facing confirm half is real and complete — it's specifically the
+"put this in an actual email" step that's missing, matching 3.5's own
+scope line.
+
+| Where | What |
+|---|---|
+| `prisma/migrations/20260923140000_donor_precheck_token` | Adds `confirmationToken` (unique), `confirmationTokenExpiresAt`, and `confirmationPeriodId` to `donor_cycle_preference`. Purely additive; no invariant trigger changes. |
+| `apps/tax-receipts/api/src/donors/precheck.ts` | `sendDonorPrechecksForSpace(prisma, input)`: for every contact behind a still-eligible (`remainingEligibleCents` > 0) contribution in a space, upserts that donor's `DonorCyclePreference` for the period's year with a fresh bearer token and `precheckSentAt`; a donor with no email on file is skipped, not failed. `confirmDonorPrecheck(prisma, input)`: the unauthenticated, token-only half — looks the row up by token, rejects an unknown or expired one, writes a new `AddressSnapshot` (source `donor-precheck`, a value that field's own schema comment already anticipated back in ticket 0.2) under the space's period, and atomically clears the token via a guarded `updateMany` so a replayed link can't re-confirm. |
+| `apps/tax-receipts/api/src/routes/spaces.ts` | `POST /spaces/:periodId/:entityKind/precheck`, gated on CASL `update ContributionMetadata` (the one action party_cfo, administrator, and rules_authority all already share — no new CASL action invented for this). Returns each sent token in the response body, since there's no channel yet for it to travel any other way. |
+| `apps/tax-receipts/api/src/routes/donor-precheck.ts` | `POST /donor-precheck/:token/confirm` — registered with no auth check at all, the one deliberately public route in the app. |
+
+Tests: `src/donors/precheck.test.ts` (send: happy path + change-log entry,
+skips a no-email donor, skips a fully-non-deductible contribution, defaults
+to MAIL unconfirmed, re-sending rotates the token; confirm: happy path +
+new AddressSnapshot, unknown token, expired token, already-used token,
+old token invalidated by a re-send), route tests in `routes/spaces.test.ts`
+(auth, CASL 403, happy path) and a new `routes/donor-precheck.test.ts`
+(no-session confirm, unknown/expired/reused token, a validation 400).
+`pnpm turbo run lint typecheck test build` green (299 tests).
+
+### Deviations / judgment calls
+
+1. **No email is ever sent.** Same stance as 3.5/3.6: no provider or warmed
+   subdomain exists (O24), so this stops at "here is a token and an
+   expiry," returned to the staff caller who triggered the send. Once 3.6
+   ships, wiring an actual send is additive — nothing here needs to change,
+   the token/expiry shape it produces doesn't assume any particular
+   delivery channel.
+2. **A confirmed address becomes a new `AddressSnapshot`, never a write onto
+   `Contact.addresses`.** The confirm route has no session and no CASL —
+   letting an unauthenticated caller mutate the Qomon-synced contact cache
+   would be a real integrity hole, and `AddressSnapshot.source`'s own doc
+   comment (`"donor-precheck"`) already signals this was the intended shape
+   from ticket 0.2 onward. A donor who reports a materially different
+   address than what's on file in Qomon isn't reconciled anywhere yet — the
+   snapshot exists and is real, but nothing diffs it against
+   `Contact.addresses` or flags the mismatch for staff. Flagged, not solved:
+   no rule or screen currently owns "the donor said X, Qomon says Y."
+3. **Population is "every contact behind a still-eligible contribution in
+   the space," independent of `getSpaceIssuanceGate`.** screens.md screen 6
+   places the pre-check send "ahead of the window," before generate — gating
+   it on the same validation-queue-empty condition that blocks generate
+   would default to sending pre-checks too late to matter, since these are
+   two different points in the wizard's timeline.
+4. **The send route is gated on `update ContributionMetadata`**, not a new
+   CASL action. No action in `abilities.ts` maps cleanly onto "send a
+   pre-check" — it's not `issue` (nothing is issued), and it's not
+   `correct` (nothing is being fixed). `update ContributionMetadata` is the
+   one action party_cfo, administrator, and rules_authority already share
+   and no one else does, which matches this being pre-issuance prep work
+   rather than the issuance act itself.
+5. **The confirmation token is single-use**, cleared via a guarded
+   `updateMany` matched on the token itself (not the row id) inside the same
+   transaction that writes the `AddressSnapshot` — a concurrent replay of
+   the same link finds zero rows to update and 404s, rather than racing to
+   silently double-confirm.
+6. **No web UI**, on both sides. The pre-check send button belongs on the
+   issuance wizard's screens.md screen 6 (not built here — 3.12 shipped
+   Review/Generate/Done only); the donor-facing confirm form is a public,
+   unauthenticated page with no precedent yet in `apps/tax-receipts/web/`.
