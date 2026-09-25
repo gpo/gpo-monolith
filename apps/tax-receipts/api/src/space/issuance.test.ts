@@ -53,17 +53,14 @@ describe('per-space issuance (ticket 3.12, first slice)', () => {
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
       });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: contribution.id,
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: {
           periodId: SPACE.periodId,
           ridingNumber: SPACE.ridingNumber,
           entityKind: SPACE.entityKind,
           receivedBy: 'GPO',
           ...overrides,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
     return { contactId: contact.id, contributionId: contribution.id };
   }
@@ -188,16 +185,13 @@ describe('per-space issuance (ticket 3.12, first slice)', () => {
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
       });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: badContribution.id,
+      const after = await ctx.tx.contribution.update({ where: { id: badContribution.id }, data: {
           periodId: SPACE.periodId,
           ridingNumber: SPACE.ridingNumber,
           entityKind: SPACE.entityKind,
           receivedBy: 'GPO',
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: badContribution.id, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: badContribution.id, after });
     });
 
     const result = await issueReceiptsForSpace(

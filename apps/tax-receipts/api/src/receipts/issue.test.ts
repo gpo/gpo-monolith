@@ -52,16 +52,13 @@ describe('receipt issuance (ticket 3.1)', () => {
 
   async function seedMetadata(contributionId: string, overrides: Record<string, unknown> = {}) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId: baseline.periodId,
           entityKind: 'PARTY',
           receivedBy: 'GPO',
           ...overrides,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
     });
   }

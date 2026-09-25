@@ -5,7 +5,6 @@ import {
   type PaymentMethod,
 } from '@gpo/tax-receipts-core';
 import { withChangeLog } from '../changelog/write.js';
-import { descriptiveToRow } from '../contributions/metadata-cache.js';
 import { loadPeriods } from '../sync/mirror-sweep.js';
 import { runValidationForContribution } from '../validation/run.js';
 import { createPaymentWithContribution } from './create.js';
@@ -118,7 +117,7 @@ export async function enterManualPayment(prisma: PrismaClient, input: ManualPaym
         externalRef: input.externalRef ?? null,
         note: input.note ?? null,
         createdByUserId: input.actorUserId,
-        metadataRow: descriptiveToRow(descriptive, null),
+        descriptive,
       }),
   );
 

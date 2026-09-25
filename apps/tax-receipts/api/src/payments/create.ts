@@ -1,6 +1,6 @@
-import type { PaymentMethod, PaymentSource, PaymentState } from '@gpo/tax-receipts-core';
+import type { GpoMetadataDescriptive, PaymentMethod, PaymentSource, PaymentState } from '@gpo/tax-receipts-core';
 import type { ChangeLogContext } from '../changelog/write.js';
-import type { descriptiveToRow } from '../contributions/metadata-cache.js';
+import { descriptiveToColumns } from '../contributions/metadata-cache.js';
 
 /**
  * Payment + initial Contribution creation (data-model §2, D12): the one
@@ -8,9 +8,9 @@ import type { descriptiveToRow } from '../contributions/metadata-cache.js';
  * produce identical rows and identical change-log entries.
  *
  * Runs inside the caller's `withChangeLog` transaction: the Payment, its
- * optional Qomon link, the initial Contribution, and (when the caller has
- * already derived it) the contribution's descriptive metadata all commit or
- * roll back together, each with a ChangeLogEntry.
+ * optional Qomon link, and the initial Contribution (carrying its descriptive
+ * fields, when the caller has already derived them) all commit or roll back
+ * together, each with a ChangeLogEntry.
  *
  * Invariant 9's Qomon-link gate is deliberately not enforced here yet:
  * during development and testing a contribution may be attributed to a
@@ -49,10 +49,10 @@ export interface NewPaymentInput {
     acceptedAt?: Date;
     note?: string | null;
   };
-  /** already-derived descriptive fields, as a `descriptiveToRow` result. Left
-   *  out when no period resolves yet (the contribution then mirrors without
-   *  metadata and a later pass backfills it). */
-  metadataRow?: ReturnType<typeof descriptiveToRow>;
+  /** already-derived descriptive fields, written onto the contribution.
+   *  Left out when no period resolves yet: the contribution then imports
+   *  with no period (defaults elsewhere) and a later pass backfills it. */
+  descriptive?: GpoMetadataDescriptive;
 }
 
 export async function createPaymentWithContribution(ctx: ChangeLogContext, input: NewPaymentInput) {
@@ -98,16 +98,10 @@ export async function createPaymentWithContribution(ctx: ChangeLogContext, input
       note: input.contribution?.note ?? null,
       correlationId: ctx.correlationId,
       createdByUserId: input.createdByUserId ?? null,
+      ...(input.descriptive ? descriptiveToColumns(input.descriptive) : {}),
     },
   });
   await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after: contribution });
-
-  if (input.metadataRow) {
-    const metadata = await tx.contributionMetadata.create({
-      data: { contributionId: contribution.id, ...input.metadataRow },
-    });
-    await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after: metadata });
-  }
 
   return { payment, contribution };
 }

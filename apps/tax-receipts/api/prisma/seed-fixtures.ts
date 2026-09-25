@@ -1,5 +1,5 @@
 import { contributionYear, paymentMethodFromQomon } from '@gpo/tax-receipts-core';
-import { PrismaClient } from '../src/generated/prisma/index.js';
+import { PrismaClient, type EntityKind, type ReceivedBy } from '../src/generated/prisma/index.js';
 import { allocateToReceipt } from '../src/receipts/allocate.js';
 import { issueReceipt } from '../src/receipts/issue.js';
 import { withChangeLog } from '../src/changelog/write.js';
@@ -606,9 +606,10 @@ async function findSeededContribution(qomonTransactionId: bigint) {
   return link?.payment.contributions[0] ?? null;
 }
 
-/** Payment + Qomon link + initial contribution in one write, as an import
- *  would create them. Direct insert (no change-log context): none of the
- *  three tables is guarded by invariant 5. */
+/** Payment + Qomon link + initial contribution (with its descriptive fields,
+ *  when given) in one change-logged write, as an import would create them.
+ *  `contribution` is a guarded table (invariant 5), so it goes through
+ *  `withChangeLog`. */
 async function createSeedContribution(args: {
   contactId: string;
   qomonTransactionId: bigint;
@@ -616,29 +617,47 @@ async function createSeedContribution(args: {
   acceptedAt: Date;
   paymentMethodKind: string;
   externalRef?: string | null;
+  reason: string;
+  descriptive?: {
+    periodId: number;
+    ridingNumber?: number | null;
+    entityKind: EntityKind;
+    receivedBy: ReceivedBy;
+    nonDeductibleCents?: number;
+    goodsServices?: boolean;
+  };
 }) {
-  const payment = await prisma.payment.create({
-    data: {
-      source: 'QOMON_IMPORT',
-      contactId: args.contactId,
-      amountCents: args.amountCents,
-      receivedAt: args.acceptedAt,
-      method: paymentMethodFromQomon(args.paymentMethodKind),
-      externalRef: args.externalRef ?? null,
-      qomonLink: {
-        create: {
-          qomonTransactionId: args.qomonTransactionId,
-          qomonPaymentMethodKind: args.paymentMethodKind,
-          lastSyncedAt: new Date(),
+  return withChangeLog(prisma, { userId: null, reason: args.reason }, async (ctx) => {
+    const payment = await ctx.tx.payment.create({
+      data: {
+        source: 'QOMON_IMPORT',
+        contactId: args.contactId,
+        amountCents: args.amountCents,
+        receivedAt: args.acceptedAt,
+        method: paymentMethodFromQomon(args.paymentMethodKind),
+        externalRef: args.externalRef ?? null,
+        qomonLink: {
+          create: {
+            qomonTransactionId: args.qomonTransactionId,
+            qomonPaymentMethodKind: args.paymentMethodKind,
+            lastSyncedAt: new Date(),
+          },
+        },
+        contributions: {
+          create: {
+            contactId: args.contactId,
+            amountCents: args.amountCents,
+            acceptedAt: args.acceptedAt,
+            ...(args.descriptive ?? {}),
+          },
         },
       },
-      contributions: {
-        create: { contactId: args.contactId, amountCents: args.amountCents, acceptedAt: args.acceptedAt },
-      },
-    },
-    include: { contributions: true },
+      include: { contributions: true },
+    });
+    const contribution = payment.contributions[0]!;
+    await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after: contribution });
+    return contribution;
   });
-  return payment.contributions[0]!;
 }
 
 const GROUP_3_CONTRIBUTIONS = [
@@ -666,17 +685,12 @@ async function ensureGroup3(cfoUserId: string): Promise<void> {
       amountCents: c.amountCents,
       acceptedAt: new Date(c.acceptedAt),
       paymentMethodKind: 'card',
-    });
-    await withChangeLog(prisma, { userId: null, reason: 'phase-3 fixture: allocation consolidation (ticket 3.2)' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: contribution.id,
-          periodId: SPACE_A_PERIOD_ID,
-          entityKind: 'PARTY',
-          receivedBy: 'GPO',
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+      reason: 'phase-3 fixture: allocation consolidation (ticket 3.2)',
+      descriptive: {
+        periodId: SPACE_A_PERIOD_ID,
+        entityKind: 'PARTY',
+        receivedBy: 'GPO',
+      },
     });
     contributionIds.push(contribution.id);
   }
@@ -771,19 +785,13 @@ async function ensureGroup1Fixture(f: Group1Fixture): Promise<void> {
     acceptedAt: new Date(f.acceptedAt),
     paymentMethodKind: f.paymentMethodKind ?? 'card',
     externalRef: f.externalRef ?? null,
-  });
-
-  await withChangeLog(prisma, { userId: null, reason: `fixture: ${f.demonstrates}` }, async (ctx) => {
-    const after = await ctx.tx.contributionMetadata.create({
-      data: {
-        contributionId: contribution.id,
-        periodId: f.periodId,
-        ridingNumber: f.ridingNumber,
-        entityKind: f.entityKind,
-        receivedBy: f.receivedBy,
-      },
-    });
-    await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+    reason: `fixture: ${f.demonstrates}`,
+    descriptive: {
+      periodId: f.periodId,
+      ridingNumber: f.ridingNumber,
+      entityKind: f.entityKind,
+      receivedBy: f.receivedBy,
+    },
   });
 
   console.log(`  created: ${f.demonstrates}`);
@@ -814,21 +822,15 @@ async function ensureGroup2Fixture(f: Group2Fixture, cfoUserId: string): Promise
     amountCents: f.amountCents,
     acceptedAt,
     paymentMethodKind: 'card',
-  });
-
-  await withChangeLog(prisma, { userId: null, reason: `fixture: ${f.demonstrates}` }, async (ctx) => {
-    const after = await ctx.tx.contributionMetadata.create({
-      data: {
-        contributionId: contribution.id,
-        periodId: f.periodId,
-        ridingNumber: f.ridingNumber,
-        entityKind: f.entityKind,
-        receivedBy: f.receivedBy,
-        nonDeductibleCents: f.nonDeductibleCents ?? 0,
-        goodsServices: (f.nonDeductibleCents ?? 0) > 0,
-      },
-    });
-    await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+    reason: `fixture: ${f.demonstrates}`,
+    descriptive: {
+      periodId: f.periodId,
+      ridingNumber: f.ridingNumber,
+      entityKind: f.entityKind,
+      receivedBy: f.receivedBy,
+      nonDeductibleCents: f.nonDeductibleCents ?? 0,
+      goodsServices: (f.nonDeductibleCents ?? 0) > 0,
+    },
   });
 
   if (f.deliveryPreference) {

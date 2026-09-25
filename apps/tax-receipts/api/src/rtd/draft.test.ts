@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
 import type { EntityKind, PaymentState } from '../generated/prisma/index.js';
-import { makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution, fixtureWrite } from '../test/db.js';
 import { buildRtdDraft, getRtdGateFindings } from './draft.js';
 
 const prisma = testPrisma();
@@ -28,18 +28,15 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
     } = {},
   ) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId: overrides.periodId ?? baseline.periodId,
           entityKind: overrides.entityKind ?? 'PARTY',
           ridingNumber: null,
           receivedBy: 'GPO',
           goodsServices: overrides.goodsServices ?? false,
           eoContributorId: overrides.eoContributorId ?? null,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
     });
   }
@@ -101,7 +98,7 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
       });
     }
     if (opts.superseded) {
-      await prisma.contribution.update({ where: { id: contributionId }, data: { status: 'SUPERSEDED' } });
+      await fixtureWrite(prisma, (tx) => tx.contribution.update({ where: { id: contributionId }, data: { status: 'SUPERSEDED' } }));
     }
   }
 

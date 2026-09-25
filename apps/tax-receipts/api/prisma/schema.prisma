@@ -169,6 +169,8 @@ enum UserRole {
 enum ChangeLogSubjectType {
   Payment
   Contribution
+  /// legacy: historical change-log rows only; since D12 the descriptive
+  /// fields live on Contribution and are logged as Contribution
   ContributionMetadata
   Contact
   AddressSnapshot
@@ -319,16 +321,34 @@ model Contribution {
   /// one guarded action's cascade shares a correlation id
   correlationId        String?
   note                 String?
+
+  // --- descriptive fields (data-model §3; folded in from ContributionMetadata, D12) ---
+  /// null until a reporting period resolves (data-model §6: never from a Qomon
+  /// default): a row with no period is awaiting intake derivation and belongs
+  /// to no processing space.
+  periodId             Int?
+  /// null = party-level (no riding)
+  ridingNumber         Int?
+  entityKind           EntityKind @default(PARTY)
+  receivedBy           ReceivedBy @default(GPO)
+  goodsServices        Boolean    @default(false)
+  nonDeductibleCents   Int        @default(0)
+  /// accounting date when it differs from the acceptance date
+  processedDate        DateTime?
+  sourceCode           String     @default("")
+  eoContributorId      String?
+  exceptionReason      String?
+
   createdByUserId      String?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
   payment              Payment   @relation(fields: [paymentId], references: [id])
+  period               Period?              @relation(fields: [periodId], references: [id])
   contact              Contact              @relation(fields: [contactId], references: [id])
   createdBy            User?                @relation(fields: [createdByUserId], references: [id])
   supersedes           Contribution?        @relation("ContributionSupersedes", fields: [supersedesId], references: [id])
   supersededBy         Contribution[]       @relation("ContributionSupersedes")
-  metadata             ContributionMetadata?
   allocations          ReceiptAllocation[]
   rtdInclusions        RtdInclusion[]
   reconciliationMatches ReconciliationMatch[]
@@ -337,35 +357,9 @@ model Contribution {
   @@index([contactId])
   @@index([acceptedAt])
   @@index([status])
-  @@map("contribution")
-}
-
-model ContributionMetadata {
-  id                 String     @id @default(cuid())
-  contributionId     String     @unique
-  periodId           Int
-  /// null = party-level (no riding)
-  ridingNumber       Int?
-  entityKind         EntityKind
-  receivedBy         ReceivedBy
-  goodsServices      Boolean    @default(false)
-  nonDeductibleCents Int        @default(0)
-  /// accounting date when it differs from the acceptance date
-  processedDate      DateTime?
-  sourceCode         String     @default("")
-  eoContributorId    String?
-  exceptionReason    String?
-  /// sha256 checksum over the descriptive fields, as last written to Qomon
-  checksum           String?
-  syncedAt           DateTime?
-  updatedAt          DateTime   @updatedAt
-
-  contribution       Contribution @relation(fields: [contributionId], references: [id])
-  period             Period       @relation(fields: [periodId], references: [id])
-
   @@index([periodId])
   @@index([ridingNumber, entityKind])
-  @@map("contribution_metadata")
+  @@map("contribution")
 }
 
 model ReceiptSequence {
@@ -448,7 +442,7 @@ model Period {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  metadata         ContributionMetadata[]
+  contributions    Contribution[]
   addressSnapshots AddressSnapshot[]
   receipts         Receipt[]
   entityReports    EntityReport[]

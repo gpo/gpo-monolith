@@ -105,16 +105,15 @@ async function eligibleSpaceContacts(
   const contributions = await prisma.contribution.findMany({
     where: {
       status: 'ACTIVE',
-      metadata: {
-        is: { periodId: space.periodId, ridingNumber: space.ridingNumber, entityKind: space.entityKind },
-      },
+      periodId: space.periodId,
+      ridingNumber: space.ridingNumber,
+      entityKind: space.entityKind,
     },
-    include: { metadata: true, contact: true, allocations: { include: { receipt: true } } },
+    include: { contact: true, allocations: { include: { receipt: true } } },
   });
 
   const byContact = new Map<string, { id: string; name: string; email: string | null }>();
   for (const c of contributions) {
-    if (!c.metadata) continue;
     const allocationRows: AllocationRow[] = c.allocations.map((a) => ({
       receiptId: a.receiptId,
       contributionId: a.contributionId,
@@ -122,7 +121,7 @@ async function eligibleSpaceContacts(
       receiptStatus: a.receipt.status,
     }));
     const remaining = remainingEligibleCents(
-      { id: c.id, amountCents: c.amountCents, nonDeductibleCents: c.metadata.nonDeductibleCents },
+      { id: c.id, amountCents: c.amountCents, nonDeductibleCents: c.nonDeductibleCents },
       allocationRows,
     );
     if (remaining <= 0) continue;

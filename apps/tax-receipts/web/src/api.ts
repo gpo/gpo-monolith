@@ -162,8 +162,6 @@ export interface ContributionDetail {
     sourceCode: string;
     eoContributorId: string | null;
     exceptionReason: string | null;
-    checksum: string | null;
-    syncedAt: string | null;
   } | null;
   allocations: Array<{
     id: string;

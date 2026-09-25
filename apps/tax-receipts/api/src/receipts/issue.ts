@@ -112,17 +112,16 @@ export async function issueReceipt(
     where: { id: input.contributionId },
     include: {
       contact: true,
-      metadata: true,
       allocations: { include: { receipt: true } },
     },
   });
   if (!contribution) throw new ContributionNotFoundError(input.contributionId);
-  if (!contribution.metadata) {
+  if (contribution.periodId === null) {
     throw new ReceiptIssuanceValidationError(
       `contribution ${input.contributionId} has no metadata yet; intake derivation has not resolved this row`,
     );
   }
-  const metadata = contribution.metadata;
+  const periodId = contribution.periodId;
 
   const allocationRows: AllocationRow[] = contribution.allocations.map((a) => ({
     receiptId: a.receiptId,
@@ -134,7 +133,7 @@ export async function issueReceipt(
     {
       id: contribution.id,
       amountCents: contribution.amountCents,
-      nonDeductibleCents: metadata.nonDeductibleCents,
+      nonDeductibleCents: contribution.nonDeductibleCents,
     },
     allocationRows,
   );
@@ -175,7 +174,7 @@ export async function issueReceipt(
       const snapshot = await ctx.tx.addressSnapshot.create({
         data: {
           contactId: contribution.contact.id,
-          periodId: metadata.periodId,
+          periodId: periodId,
           line1: addressLine1 || 'unknown',
           city: address.city!,
           province,
@@ -204,9 +203,9 @@ export async function issueReceipt(
         data: {
           receiptNumber,
           numberSource: 'SEQUENCE',
-          entityKind: metadata.entityKind,
-          ridingNumber: metadata.ridingNumber,
-          periodId: metadata.periodId,
+          entityKind: contribution.entityKind,
+          ridingNumber: contribution.ridingNumber,
+          periodId: periodId,
           issueDate: new Date(),
           contactId: contribution.contact.id,
           contactNameSnapshot: contribution.contact.name,
@@ -236,9 +235,9 @@ export async function issueReceipt(
     issueDate: created.issueDate,
     acceptedAt: contribution.acceptedAt,
     eligibleAmountCents: amountCents,
-    isGoodsServices: metadata.goodsServices,
+    isGoodsServices: contribution.goodsServices,
     politicalEntityLabel: input.politicalEntityLabel,
-    eoContributorId: metadata.eoContributorId,
+    eoContributorId: contribution.eoContributorId,
     contributorName: contribution.contact.name,
     addressLine1,
     addressLine2: null,

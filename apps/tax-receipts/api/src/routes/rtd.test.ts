@@ -65,17 +65,14 @@ describe('RTD filings routes (ticket 2.8, reworked for the prepare/send redesign
       contactLastName: 'Donor',
     });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: made.contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: made.contributionId }, data: {
           periodId: baseline.periodId,
           entityKind: 'PARTY',
           ridingNumber: null,
           receivedBy: 'GPO',
           goodsServices: false,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: made.contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: made.contributionId, after });
     });
     return made;
   }

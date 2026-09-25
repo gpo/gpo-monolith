@@ -22,10 +22,8 @@ describe('donor pre-check confirmation route (ticket 3.9)', () => {
     });
     const contribution = await createTestContribution(prisma, { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: { contributionId: contribution.id, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
 
     const sent = await sendDonorPrechecksForSpace(prisma, {

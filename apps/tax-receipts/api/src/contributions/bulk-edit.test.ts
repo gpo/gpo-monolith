@@ -26,18 +26,15 @@ describe('bulkEditContributionMetadata (ticket 1.4, local-only since D12)', () =
       acceptedAt: new Date('2026-03-01T00:00:00Z'),
     });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: contribution.id,
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: {
           periodId: baseline.periodId,
           ridingNumber: opts.ridingNumber ?? null,
           entityKind: opts.ridingNumber ? 'CA' : 'PARTY',
           receivedBy: 'GPO',
           nonDeductibleCents: opts.nonDeductibleCents ?? 0,
           sourceCode: 'keep-me',
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
     return contribution;
   }
@@ -58,12 +55,12 @@ describe('bulkEditContributionMetadata (ticket 1.4, local-only since D12)', () =
 
     expect(result).toMatchObject({ succeeded: 2, failed: 0 });
     for (const id of [a.id, b.id]) {
-      const row = await prisma.contributionMetadata.findUnique({ where: { contributionId: id } });
+      const row = await prisma.contribution.findUnique({ where: { id: id } });
       expect(row).toMatchObject({ periodId: 67, ridingNumber: 84, sourceCode: 'keep-me' });
     }
 
     const entries = await prisma.changeLogEntry.findMany({
-      where: { subjectType: 'ContributionMetadata', reason: 'reassign period for the by-election window' },
+      where: { subjectType: 'Contribution', reason: 'reassign period for the by-election window' },
     });
     expect(entries).toHaveLength(2); // one change-log entry per row
   });
@@ -79,7 +76,7 @@ describe('bulkEditContributionMetadata (ticket 1.4, local-only since D12)', () =
         changes: { ridingNumber: null, entityKind: 'PARTY' },
       },
     );
-    const row = await prisma.contributionMetadata.findUnique({ where: { contributionId: a.id } });
+    const row = await prisma.contribution.findUnique({ where: { id: a.id } });
     expect(row?.ridingNumber).toBeNull();
   });
 
@@ -126,7 +123,7 @@ describe('bulkEditContributionMetadata (ticket 1.4, local-only since D12)', () =
       },
     );
     expect(result.failed).toBe(1);
-    const row = await prisma.contributionMetadata.findUnique({ where: { contributionId: a.id } });
+    const row = await prisma.contribution.findUnique({ where: { id: a.id } });
     expect(row?.periodId).toBe(baseline.periodId); // untouched
   });
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { fixtureWrite, makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
 
 const prisma = testPrisma();
 
@@ -7,7 +7,9 @@ const prisma = testPrisma();
  * Database invariants for the payment/contribution split (D12, data-model
  * invariants 1 and 4): the active contributions on a payment never exceed it,
  * a correction (supersede + replace) is judged only at commit, and payments
- * and their Qomon links are never hard-deleted.
+ * and their Qomon links are never hard-deleted. `contribution` is also
+ * change-log guarded (invariant 5), so every direct write here runs through
+ * `fixtureWrite`.
  */
 describe('payment/contribution invariants (D12)', () => {
   beforeEach(async () => {
@@ -25,11 +27,12 @@ describe('payment/contribution invariants (D12)', () => {
     });
     // a couple's single cheque: halve the original, attribute the rest to a spouse
     const spouse = await prisma.contact.create({ data: { name: 'Sam Donor' } });
-    await prisma.$transaction(async (tx) => {
+    await fixtureWrite(prisma, async (tx) => {
       await tx.contribution.update({ where: { id: contributionId }, data: { amountCents: 5_000 } });
       await tx.contribution.create({
         data: { paymentId, contactId: spouse.id, amountCents: 5_000, acceptedAt },
       });
+      return { id: contributionId };
     });
     const rows = await prisma.contribution.findMany({ where: { paymentId, status: 'ACTIVE' } });
     expect(rows.map((r) => r.amountCents).sort()).toEqual([5_000, 5_000]);
@@ -43,7 +46,7 @@ describe('payment/contribution invariants (D12)', () => {
       amountCents: 10_000,
     });
     await expect(
-      prisma.contribution.create({ data: { paymentId, contactId, amountCents: 1, acceptedAt } }),
+      fixtureWrite(prisma, (tx) => tx.contribution.create({ data: { paymentId, contactId, amountCents: 1, acceptedAt } })),
     ).rejects.toThrow(/invariant 1: payment .* exceed its amount/);
   });
 
@@ -67,7 +70,7 @@ describe('payment/contribution invariants (D12)', () => {
     const other = await prisma.contact.create({ data: { name: 'Right Person' } });
     // mid-transaction the payment is over-attributed (old still ACTIVE + new);
     // the deferred trigger judges only the committed state
-    const replacement = await prisma.$transaction(async (tx) => {
+    const replacement = await fixtureWrite(prisma, async (tx) => {
       const created = await tx.contribution.create({
         data: { paymentId, contactId: other.id, amountCents: 10_000, acceptedAt, supersedesId: contributionId },
       });
@@ -85,10 +88,10 @@ describe('payment/contribution invariants (D12)', () => {
       qomonTransactionId: 1n,
       amountCents: 10_000,
     });
-    await prisma.contribution.update({ where: { id: contributionId }, data: { status: 'REFUNDED' } });
+    await fixtureWrite(prisma, (tx) => tx.contribution.update({ where: { id: contributionId }, data: { status: 'REFUNDED' } }));
     // the full amount is free again for a fresh attribution
     await expect(
-      prisma.contribution.create({ data: { paymentId, contactId, amountCents: 10_000, acceptedAt } }),
+      fixtureWrite(prisma, (tx) => tx.contribution.create({ data: { paymentId, contactId, amountCents: 10_000, acceptedAt } })),
     ).resolves.toBeTruthy();
   });
 
@@ -109,7 +112,7 @@ describe('payment/contribution invariants (D12)', () => {
     expect(await prisma.qomonTransactionLink.count()).toBe(0);
     expect((await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).source).toBe('MANUAL');
     await expect(
-      prisma.contribution.create({ data: { paymentId, contactId, amountCents: 1, acceptedAt } }),
+      fixtureWrite(prisma, (tx) => tx.contribution.create({ data: { paymentId, contactId, amountCents: 1, acceptedAt } })),
     ).rejects.toThrow(/invariant 1/);
   });
 });

@@ -28,18 +28,15 @@ describe('RTD filing prepare, DB-backed (redesigned from tickets 2.3/2.6)', () =
 
   async function seedMetadata(contributionId: string, eoContributorId: string | null = null) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId: baseline.periodId,
           entityKind: 'PARTY',
           ridingNumber: null,
           receivedBy: 'GPO',
           goodsServices: false,
           eoContributorId,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
     });
   }

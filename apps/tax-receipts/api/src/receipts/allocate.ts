@@ -111,10 +111,10 @@ export async function allocateToReceipt(
 
   const contribution = await prisma.contribution.findUnique({
     where: { id: input.contributionId },
-    include: { metadata: true, allocations: { include: { receipt: true } } },
+    include: { allocations: { include: { receipt: true } } },
   });
   if (!contribution) throw new ContributionNotFoundError(input.contributionId);
-  if (!contribution.metadata) {
+  if (contribution.periodId === null) {
     throw new ReceiptIssuanceValidationError(
       `contribution ${input.contributionId} has no metadata yet; intake derivation has not resolved this row`,
     );
@@ -136,7 +136,7 @@ export async function allocateToReceipt(
     {
       id: contribution.id,
       amountCents: contribution.amountCents,
-      nonDeductibleCents: contribution.metadata.nonDeductibleCents,
+      nonDeductibleCents: contribution.nonDeductibleCents,
     },
     allocationRows,
   );

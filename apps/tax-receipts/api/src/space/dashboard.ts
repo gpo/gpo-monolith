@@ -3,7 +3,7 @@ import type { PrismaClient } from '../generated/prisma/index.js';
 /**
  * Space dashboard (ticket 1.10, screens.md 1, PRD I3): "a grid of derived
  * spaces" — DESIGN.md §4: "spaces are derived, not stored". This computes
- * the grid from what actually has data (`ContributionMetadata`, grouped by
+ * the grid from what actually has data (active contributions, grouped by
  * period/riding/entity kind) rather than from `SpaceState` rows, since a
  * space exists the moment a contribution is metadata-tagged into it, not
  * only once someone has explicitly moved its ladder stage. `SpaceState` is
@@ -34,10 +34,14 @@ export async function getSpaceDashboard(
   prisma: PrismaClient,
   ridingScope: readonly number[] | null,
 ): Promise<SpaceDashboardRow[]> {
-  const grouped = await prisma.contributionMetadata.groupBy({
-    by: ['periodId', 'ridingNumber', 'entityKind'],
-    _count: { _all: true },
-  });
+  // a row with no period yet belongs to no processing space
+  const grouped = (
+    await prisma.contribution.groupBy({
+      by: ['periodId', 'ridingNumber', 'entityKind'],
+      where: { status: 'ACTIVE', periodId: { not: null } },
+      _count: { _all: true },
+    })
+  ).flatMap((g) => (g.periodId === null ? [] : [{ ...g, periodId: g.periodId }]));
 
   const inScope = grouped.filter(
     (g) => ridingScope === null || g.ridingNumber === null || ridingScope.includes(g.ridingNumber),
@@ -55,17 +59,17 @@ export async function getSpaceDashboard(
   const openContributionIds = [...new Set(openItems.map((i) => i.subjectId))];
   const metaForOpenItems =
     openContributionIds.length > 0
-      ? await prisma.contributionMetadata.findMany({
-          where: { contributionId: { in: openContributionIds } },
-          select: { contributionId: true, periodId: true, ridingNumber: true, entityKind: true },
+      ? await prisma.contribution.findMany({
+          where: { id: { in: openContributionIds }, status: 'ACTIVE', periodId: { not: null } },
+          select: { id: true, periodId: true, ridingNumber: true, entityKind: true },
         })
       : [];
-  const metaByContribution = new Map(metaForOpenItems.map((m) => [m.contributionId, m]));
+  const metaByContribution = new Map(metaForOpenItems.map((m) => [m.id, m]));
   const openCountByKey = new Map<string, number>();
   for (const item of openItems) {
     const meta = metaByContribution.get(item.subjectId);
     if (!meta) continue;
-    const k = spaceKey(meta.periodId, meta.ridingNumber, meta.entityKind);
+    const k = spaceKey(meta.periodId!, meta.ridingNumber, meta.entityKind);
     openCountByKey.set(k, (openCountByKey.get(k) ?? 0) + 1);
   }
 

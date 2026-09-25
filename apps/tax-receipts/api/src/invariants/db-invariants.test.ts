@@ -30,16 +30,13 @@ describe('database invariants 1-5 (ticket 0.3) reject bad writes', () => {
       prisma,
       { userId: baseline.adminUserId, reason: 'non-deductible' },
       async (ctx) => {
-        await ctx.tx.contributionMetadata.create({
-          data: {
-            contributionId,
+        await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
             periodId: baseline.periodId,
             entityKind: 'PARTY',
             receivedBy: 'GPO',
             nonDeductibleCents: 4_000, // eligible = 6_000
-          },
-        });
-        await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId });
+          } });
+        await ctx.log({ subjectType: 'Contribution', subjectId: contributionId });
       },
     );
 
@@ -209,20 +206,16 @@ describe('database invariants 1-5 (ticket 0.3) reject bad writes', () => {
 
   // ---- Invariant 5: guarded mutations need a change-logged transaction ----
 
-  it('5: a raw metadata insert with no correlation id is refused', async () => {
+  it('5: a raw contribution write with no correlation id is refused', async () => {
     const { contributionId } = await makeContribution(prisma, {
       qomonContactId: 7n,
       qomonTransactionId: 7n,
       amountCents: 5_000,
     });
     await expect(
-      prisma.contributionMetadata.create({
-        data: {
-          contributionId,
-          periodId: baseline.periodId,
-          entityKind: 'PARTY',
-          receivedBy: 'GPO',
-        },
+      prisma.contribution.update({
+        where: { id: contributionId },
+        data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },
       }),
     ).rejects.toThrow(/invariant 5/);
   });

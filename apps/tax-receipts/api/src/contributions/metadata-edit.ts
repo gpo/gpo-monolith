@@ -1,14 +1,14 @@
 import type { GpoMetadataDescriptive } from '@gpo/tax-receipts-core';
 import { withChangeLog } from '../changelog/write.js';
 import { runValidationForContribution } from '../validation/run.js';
-import { descriptiveToRow, isReceiptedOrReported } from './metadata-cache.js';
-import type { ContributionMetadata, PrismaClient } from '../generated/prisma/index.js';
+import { descriptiveToColumns, isReceiptedOrReported } from './metadata-cache.js';
+import type { Contribution, PrismaClient } from '../generated/prisma/index.js';
 
 /**
  * Contribution metadata edit (ticket 1.2, reworked for D12). The tool owns
  * contributions, so an edit is one local, change-logged transaction with no
  * Qomon call and therefore no write-first failure mode: the whole
- * descriptive object replaces the row, `external_ref` (which lives on the
+ * descriptive object replaces the contribution's descriptive columns, `external_ref` (which lives on the
  * payment) is written to the payment, and every change carries the actor's
  * reason (invariant 5).
  *
@@ -45,12 +45,12 @@ export interface MetadataEditInput {
 export async function editContributionMetadata(
   deps: { prisma: PrismaClient },
   input: MetadataEditInput,
-): Promise<ContributionMetadata> {
+): Promise<Contribution> {
   const { prisma } = deps;
 
   const contribution = await prisma.contribution.findUnique({
     where: { id: input.contributionId },
-    include: { metadata: true, payment: true },
+    include: { payment: true },
   });
   if (!contribution) throw new ContributionNotFoundError(input.contributionId);
 
@@ -69,15 +69,13 @@ export async function editContributionMetadata(
     prisma,
     { userId: input.actorUserId, reason: input.reason },
     async (ctx) => {
-      const before = contribution.metadata;
-      const row = descriptiveToRow(input.descriptive, null);
-      const after = await ctx.tx.contributionMetadata.upsert({
-        where: { contributionId: contribution.id },
-        create: { contributionId: contribution.id, ...row },
-        update: row,
+      const { payment: _payment, ...before } = contribution;
+      const after = await ctx.tx.contribution.update({
+        where: { id: contribution.id },
+        data: descriptiveToColumns(input.descriptive),
       });
       await ctx.log({
-        subjectType: 'ContributionMetadata',
+        subjectType: 'Contribution',
         subjectId: contribution.id,
         before,
         after,

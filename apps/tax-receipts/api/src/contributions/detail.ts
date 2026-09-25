@@ -51,8 +51,6 @@ export interface ContributionDetail {
     sourceCode: string;
     eoContributorId: string | null;
     exceptionReason: string | null;
-    checksum: string | null;
-    syncedAt: string | null;
   } | null;
   allocations: Array<{
     id: string;
@@ -97,18 +95,13 @@ export async function getContributionDetail(
     where: { id: contributionId },
     include: {
       contact: true,
-      metadata: true,
       payment: { include: { qomonLink: true } },
       allocations: { include: { receipt: true } },
       rtdInclusions: true,
     },
   });
   if (!row) return null;
-  if (
-    ridingScope !== null &&
-    row.metadata?.ridingNumber != null &&
-    !ridingScope.includes(row.metadata.ridingNumber)
-  ) {
+  if (ridingScope !== null && row.ridingNumber != null && !ridingScope.includes(row.ridingNumber)) {
     return null;
   }
 
@@ -120,6 +113,7 @@ export async function getContributionDetail(
     prisma.changeLogEntry.findMany({
       where: {
         OR: [
+          // 'ContributionMetadata' is legacy: entries written before the fold (D12)
           { subjectId: contributionId, subjectType: { in: ['Contribution', 'ContributionMetadata'] } },
           { subjectId: row.paymentId, subjectType: 'Payment' },
         ],
@@ -171,22 +165,22 @@ export async function getContributionDetail(
             : null,
         }
       : null,
-    metadata: row.metadata
-      ? {
-          periodId: row.metadata.periodId,
-          ridingNumber: row.metadata.ridingNumber,
-          entityKind: row.metadata.entityKind,
-          receivedBy: row.metadata.receivedBy,
-          goodsServices: row.metadata.goodsServices,
-          nonDeductibleCents: row.metadata.nonDeductibleCents,
-          processedDate: row.metadata.processedDate ? row.metadata.processedDate.toISOString() : null,
-          sourceCode: row.metadata.sourceCode,
-          eoContributorId: row.metadata.eoContributorId,
-          exceptionReason: row.metadata.exceptionReason,
-          checksum: row.metadata.checksum,
-          syncedAt: row.metadata.syncedAt ? row.metadata.syncedAt.toISOString() : null,
-        }
-      : null,
+    // null until a period resolves: the columns' defaults are not "metadata yet"
+    metadata:
+      row.periodId !== null
+        ? {
+            periodId: row.periodId,
+            ridingNumber: row.ridingNumber,
+            entityKind: row.entityKind,
+            receivedBy: row.receivedBy,
+            goodsServices: row.goodsServices,
+            nonDeductibleCents: row.nonDeductibleCents,
+            processedDate: row.processedDate ? row.processedDate.toISOString() : null,
+            sourceCode: row.sourceCode,
+            eoContributorId: row.eoContributorId,
+            exceptionReason: row.exceptionReason,
+          }
+        : null,
     allocations: row.allocations.map((a) => ({
       id: a.id,
       amountCents: a.amountCents,

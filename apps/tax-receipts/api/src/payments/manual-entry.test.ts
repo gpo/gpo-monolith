@@ -52,14 +52,14 @@ describe('manual entry (D12): a payment and contribution with no Qomon transacti
     });
     expect(contribution.acceptedAt).toEqual(new Date('2026-04-10T15:00:00Z'));
 
-    const metadata = await prisma.contributionMetadata.findUniqueOrThrow({ where: { contributionId: contribution.id } });
+    const metadata = await prisma.contribution.findUniqueOrThrow({ where: { id: contribution.id } });
     expect(metadata).toMatchObject({ periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' });
   });
 
   it('logs the payment, contribution, and metadata in one cascade carrying the actor and reason', async () => {
     await enterManualPayment(prisma, base());
     const entries = await prisma.changeLogEntry.findMany();
-    expect(entries.map((e) => e.subjectType).sort()).toEqual(['Contribution', 'ContributionMetadata', 'Payment']);
+    expect(entries.map((e) => e.subjectType).sort()).toEqual(['Contribution', 'Payment']);
     expect(new Set(entries.map((e) => e.correlationId)).size).toBe(1);
     expect(entries.every((e) => e.actorUserId === baseline.cfoUserId && e.reason === base().reason)).toBe(true);
   });
@@ -69,7 +69,7 @@ describe('manual entry (D12): a payment and contribution with no Qomon transacti
       ...base(),
       descriptive: { entity_kind: 'CA', riding_number: 84, received_by: 'ENTITY', source_code: 'subspace:84' },
     });
-    const metadata = await prisma.contributionMetadata.findUniqueOrThrow({ where: { contributionId: contribution.id } });
+    const metadata = await prisma.contribution.findUniqueOrThrow({ where: { id: contribution.id } });
     expect(metadata).toMatchObject({ entityKind: 'CA', ridingNumber: 84, receivedBy: 'ENTITY', sourceCode: 'subspace:84' });
   });
 
@@ -93,7 +93,7 @@ describe('manual entry (D12): a payment and contribution with no Qomon transacti
       ...outOfRange,
       descriptive: { period_id: baseline.periodId },
     });
-    const metadata = await prisma.contributionMetadata.findUniqueOrThrow({ where: { contributionId: contribution.id } });
+    const metadata = await prisma.contribution.findUniqueOrThrow({ where: { id: contribution.id } });
     expect(metadata.periodId).toBe(baseline.periodId);
   });
 

@@ -103,7 +103,7 @@ export interface AllReportSourceRow {
   acceptedAt: Date;
   goodsServices: boolean;
   receivedBy: ReceivedBy;
-  /** ContributionMetadata.eoContributorId. Null in the common case today —
+  /** Contribution.eoContributorId. Null in the common case today —
    *  no ticket populates it yet (data-model.md §3 marks it optional); emitted
    *  as an empty field rather than fabricated. EO's spec calls this
    *  mandatory for GPO (eo-reporting.md §1), so a report with blank

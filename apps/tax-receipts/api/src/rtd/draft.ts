@@ -76,7 +76,7 @@ export class RtdDraftMissingMetadataError extends Error {
   constructor(readonly contributionId: string) {
     super(
       `contribution ${contributionId} matched the RTD candidate query (party, monetary, valid) ` +
-        'but has no ContributionMetadata row — this should be unreachable given the query filter',
+        'but has no period — this should be unreachable given the query filter',
     );
     this.name = 'RtdDraftMissingMetadataError';
   }
@@ -86,9 +86,9 @@ export interface RtdDraftEntry extends RtdDraftRowWithClock {
   contactName: string;
   contactFirstName: string;
   contactLastName: string;
-  /** ContributionMetadata.periodId (rule A1's derivation, ticket 1.6). */
+  /** Contribution.periodId (rule A1's derivation, ticket 1.6). */
   periodId: number;
-  /** ContributionMetadata.eoContributorId. Null in the common case — no
+  /** Contribution.eoContributorId. Null in the common case — no
    *  ticket assigns it yet (open-questions.md O38); emitted as null rather
    *  than fabricated. */
   eoContributorId: string | null;
@@ -134,9 +134,13 @@ export async function buildRtdDraft(prisma: PrismaClient, input: RtdDraftInput):
       acceptedAt: { gte: rangeStart, lt: rangeEnd },
       // RTD "covers monetary contributions to the central party only"
       // (eo-reporting.md §1): party-directed, and not goods & services.
-      metadata: { is: { entityKind: 'PARTY', goodsServices: false } },
+      entityKind: 'PARTY',
+      goodsServices: false,
+      // a row with no period yet is still awaiting intake derivation and is
+      // not a disclosure candidate (its PARTY is only the column default)
+      periodId: { not: null },
     },
-    include: { contact: true, metadata: true, rtdInclusions: { select: { id: true }, take: 1 } },
+    include: { contact: true, rtdInclusions: { select: { id: true }, take: 1 } },
   });
 
   const inYear = contributions.filter((c) => contributionYear(c.acceptedAt) === input.year);
@@ -162,15 +166,15 @@ export async function buildRtdDraft(prisma: PrismaClient, input: RtdDraftInput):
   const rows: RtdDraftEntry[] = withClock.map((row) => {
     const source = bySource.get(row.contributionId);
     if (!source) throw new RtdDraftMissingMetadataError(row.contributionId);
-    const metadata = source.metadata;
-    if (!metadata) throw new RtdDraftMissingMetadataError(row.contributionId);
+    const periodId = source.periodId;
+    if (periodId === null) throw new RtdDraftMissingMetadataError(row.contributionId);
     return {
       ...row,
       contactName: source.contact.name,
       contactFirstName: source.contact.firstName ?? '',
       contactLastName: source.contact.lastName ?? source.contact.name,
-      periodId: metadata.periodId,
-      eoContributorId: metadata.eoContributorId,
+      periodId,
+      eoContributorId: source.eoContributorId,
       gateFindings: gateFindings.get(row.contributionId) ?? [],
     };
   });

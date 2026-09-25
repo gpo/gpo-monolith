@@ -34,17 +34,14 @@ describe('DC-1A amendment generation, DB-backed (ticket 2.4)', () => {
 
   async function seedMetadata(contributionId: string) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId: baseline.periodId,
           entityKind: 'PARTY',
           ridingNumber: null,
           receivedBy: 'GPO',
           goodsServices: false,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
     });
   }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution, fixtureWrite } from '../test/db.js';
 import { listContributions } from './list.js';
 
 const prisma = testPrisma();
@@ -36,16 +36,13 @@ describe('listContributions (ticket 1.3)', () => {
         acceptedAt: opts.acceptedAt ?? new Date('2026-03-01T12:00:00Z'),
       });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: contribution.id,
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: {
           periodId: baseline.periodId,
           ridingNumber: opts.ridingNumber ?? null,
           entityKind: opts.entityKind ?? 'PARTY',
           receivedBy: 'GPO',
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
     return { contact, contribution };
   }
@@ -169,7 +166,7 @@ describe('listContributions (ticket 1.3)', () => {
 
   it('excludes superseded contributions (history, not the working set)', async () => {
     const { contribution } = await seedRow({ qomonTransactionId: 200n });
-    await prisma.contribution.update({ where: { id: contribution.id }, data: { status: 'SUPERSEDED' } });
+    await fixtureWrite(prisma, (tx) => tx.contribution.update({ where: { id: contribution.id }, data: { status: 'SUPERSEDED' } }));
     const page = await listContributions(prisma, { filters: {}, ridingScope: null });
     expect(page.data).toHaveLength(0);
   });

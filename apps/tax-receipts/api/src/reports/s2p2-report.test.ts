@@ -39,17 +39,14 @@ describe('S2P2 report generator (ticket 4.2)', () => {
     } = {},
   ) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId: baseline.periodId,
           entityKind: overrides.entityKind ?? 'PARTY',
           ridingNumber: overrides.ridingNumber ?? null,
           receivedBy: 'GPO',
           eoContributorId: overrides.eoContributorId ?? null,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
     });
   }

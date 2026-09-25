@@ -68,7 +68,8 @@ describe('PATCH /contributions/:id/metadata (ticket 1.2)', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ridingNumber: 84, entityKind: 'CA' });
-    expect(await prisma.changeLogEntry.count({ where: { subjectType: 'ContributionMetadata' } })).toBe(1);
+    // the edit's own entry (the fixture's creation entry has a different reason)
+    expect(await prisma.changeLogEntry.count({ where: { subjectType: 'Contribution', reason: body.reason } })).toBe(1);
   });
 
   it('saves a valid edit by a permitted role', async () => {
@@ -227,10 +228,8 @@ describe('POST /contributions/bulk-edit (ticket 1.4)', () => {
         acceptedAt: new Date('2026-03-01T00:00:00Z'),
       });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: { contributionId: contribution.id, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
     contributionId = contribution.id;
   });

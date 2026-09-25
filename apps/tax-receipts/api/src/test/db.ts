@@ -1,5 +1,5 @@
 import { paymentMethodFromQomon, paymentStateFromQomonKind, standardOntarioEsaHolidays } from '@gpo/tax-receipts-core';
-import { PrismaClient, type PaymentMethod, type PaymentState } from '../generated/prisma/index.js';
+import { PrismaClient, type Prisma, type PaymentMethod, type PaymentState } from '../generated/prisma/index.js';
 import { withChangeLog } from '../changelog/write.js';
 
 let shared: PrismaClient | undefined;
@@ -89,6 +89,26 @@ export async function seedBaseline(prisma: PrismaClient): Promise<Baseline> {
   };
 }
 
+/**
+ * Run a test's direct contribution writes inside a change-logged
+ * transaction. `contribution` is a guarded table (invariant 5, D12), so a
+ * bare `prisma.contribution.create/update` is refused by the database; the
+ * fixtures and the few tests that write one directly go through here.
+ */
+export async function fixtureWrite<T extends { id?: string; contributions?: Array<{ id: string }> }>(
+  prisma: PrismaClient,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return withChangeLog(prisma, { userId: null, reason: 'test fixture' }, async (ctx) => {
+    const result = await fn(ctx.tx);
+    await ctx.log({
+      subjectType: 'Contribution',
+      subjectId: result.contributions?.[0]?.id ?? result.id ?? 'fixture',
+    });
+    return result;
+  });
+}
+
 export interface ContributionFixture {
   contactId: string;
   contributionId: string;
@@ -130,7 +150,7 @@ export async function makeContribution(
       })
     ).id;
   const acceptedAt = opts.acceptedAt ?? new Date('2026-03-01T12:00:00Z');
-  const payment = await prisma.payment.create({
+  const payment = await fixtureWrite(prisma, async (tx) => tx.payment.create({
     data: {
       source: opts.qomonTransactionId != null ? 'QOMON_IMPORT' : 'MANUAL',
       contactId,
@@ -147,7 +167,7 @@ export async function makeContribution(
       },
     },
     include: { contributions: true },
-  });
+  }));
   return { contactId, contributionId: payment.contributions[0]!.id, paymentId: payment.id };
 }
 
@@ -158,7 +178,7 @@ export async function makeContribution(
  * reads the same: Qomon-shaped facts land on the payment and its link.
  */
 export async function createTestContribution(
-  db: Pick<PrismaClient, 'payment'>,
+  db: PrismaClient,
   data: {
     contactId: string;
     amountCents: number;
@@ -175,7 +195,7 @@ export async function createTestContribution(
     status?: 'ACTIVE' | 'SUPERSEDED' | 'REFUNDED';
   },
 ) {
-  const payment = await db.payment.create({
+  const payment = await fixtureWrite(db, async (tx) => tx.payment.create({
     data: {
       source: data.qomonTransactionId != null ? 'QOMON_IMPORT' : 'MANUAL',
       contactId: data.contactId,
@@ -210,7 +230,7 @@ export async function createTestContribution(
       },
     },
     include: { contributions: true },
-  });
+  }));
   return payment.contributions[0]!;
 }
 

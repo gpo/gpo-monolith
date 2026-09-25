@@ -139,14 +139,18 @@ export async function bulkEditContributionMetadata(
     try {
       const current = await deps.prisma.contribution.findUnique({
         where: { id: contributionId },
-        include: { metadata: true, payment: true },
+        include: { payment: true },
       });
       if (!current) throw new Error('contribution not found');
-      if (!current.metadata) {
+      if (current.periodId === null) {
         throw new Error('no metadata yet; intake derivation has not resolved this row');
       }
 
-      const descriptive = mergeDescriptive(current.metadata, current.payment.externalRef, input.changes);
+      const descriptive = mergeDescriptive(
+        { ...current, periodId: current.periodId },
+        current.payment.externalRef,
+        input.changes,
+      );
       await editContributionMetadata(deps, {
         contributionId,
         actorUserId: input.actorUserId,

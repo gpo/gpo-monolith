@@ -100,17 +100,16 @@ export async function recordForeignReceipt(
     where: { id: input.contributionId },
     include: {
       contact: true,
-      metadata: true,
       allocations: { include: { receipt: true } },
     },
   });
   if (!contribution) throw new ContributionNotFoundError(input.contributionId);
-  if (!contribution.metadata) {
+  if (contribution.periodId === null) {
     throw new ReceiptIssuanceValidationError(
       `contribution ${input.contributionId} has no metadata yet; intake derivation has not resolved this row`,
     );
   }
-  const metadata = contribution.metadata;
+  const periodId = contribution.periodId;
 
   const allocationRows: AllocationRow[] = contribution.allocations.map((a) => ({
     receiptId: a.receiptId,
@@ -119,7 +118,7 @@ export async function recordForeignReceipt(
     receiptStatus: a.receipt.status,
   }));
   const remaining = remainingEligibleCents(
-    { id: contribution.id, amountCents: contribution.amountCents, nonDeductibleCents: metadata.nonDeductibleCents },
+    { id: contribution.id, amountCents: contribution.amountCents, nonDeductibleCents: contribution.nonDeductibleCents },
     allocationRows,
   );
   const amountCents = input.amountCents ?? remaining;
@@ -152,7 +151,7 @@ export async function recordForeignReceipt(
       const snapshot = await ctx.tx.addressSnapshot.create({
         data: {
           contactId: contribution.contact.id,
-          periodId: metadata.periodId,
+          periodId: periodId,
           line1: addressLine1 || 'unknown',
           city: address.city!,
           province: address.state ?? 'ON',
@@ -167,9 +166,9 @@ export async function recordForeignReceipt(
         data: {
           receiptNumber: input.receiptNumber,
           numberSource: 'FOREIGN',
-          entityKind: metadata.entityKind,
-          ridingNumber: metadata.ridingNumber,
-          periodId: metadata.periodId,
+          entityKind: contribution.entityKind,
+          ridingNumber: contribution.ridingNumber,
+          periodId: periodId,
           issueDate: input.issueDate ?? new Date(),
           contactId: contribution.contact.id,
           contactNameSnapshot: contribution.contact.name,

@@ -20,11 +20,11 @@ import {
   type QomonTransaction,
 } from '@gpo/qomon-client';
 import { withChangeLog } from '../changelog/write.js';
-import { descriptiveToRow } from '../contributions/metadata-cache.js';
+import { descriptiveToColumns } from '../contributions/metadata-cache.js';
 import { createPaymentWithContribution } from '../payments/create.js';
 import { runValidationForContribution } from '../validation/run.js';
 import type { Prisma } from '../generated/prisma/index.js';
-import type { ContributionMetadata, PrismaClient } from '../generated/prisma/index.js';
+import type { PrismaClient } from '../generated/prisma/index.js';
 
 /**
  * Qomon import sweep (ticket 1.1, reworked for D12; data-model §5): the
@@ -191,7 +191,7 @@ export async function ingestChange(
 
   const link = await prisma.qomonTransactionLink.findUnique({
     where: { qomonTransactionId },
-    include: { payment: { include: { contributions: { include: { metadata: true } } } } },
+    include: { payment: { include: { contributions: true } } },
   });
 
   if (!link) {
@@ -212,12 +212,12 @@ export async function ingestChange(
   }
 
   // The tool's own derivation can still be incomplete: a contribution
-  // imported before any period covered its date has no metadata. Backfill it
-  // once a period resolves (ticket 1.6), deriving from the contribution's own
-  // recorded facts, never re-reading Qomon's copy.
+  // imported before any period covered its date has no period. Backfill its
+  // descriptive fields once one resolves (ticket 1.6), deriving from the
+  // contribution's own recorded facts, never re-reading Qomon's copy.
   let backfilledAny = false;
   for (const contribution of link.payment.contributions) {
-    if (contribution.status !== 'ACTIVE' || contribution.metadata !== null) continue;
+    if (contribution.status !== 'ACTIVE' || contribution.periodId !== null) continue;
     const touched = await backfillMetadataIfPossible(
       prisma,
       periods,
@@ -266,7 +266,7 @@ async function ingestNewTransaction(
   let flags: readonly IntakeFlag[] = [];
   let reason = REASON_NEW_FROM_QOMON;
   if (incoming) {
-    descriptive = mergeSyncedWithLocalDefaults(incoming, null, externalRef);
+    descriptive = mergeSyncedWithLocalDefaults(incoming, externalRef);
   } else {
     const derived = deriveIntakeDefaults({
       acceptedAt,
@@ -276,8 +276,8 @@ async function ingestNewTransaction(
     });
     descriptive = derived.descriptive;
     flags = derived.flags;
-    // else: no period resolves yet. The contribution imports without
-    // metadata (data-model §6: "never from a Qomon default"); the intake
+    // else: no period resolves yet. The contribution imports with no
+    // period (data-model §6: "never from a Qomon default"); the intake
     // flag work items below are how it surfaces, and a later sweep
     // backfills once a period is configured.
     reason = descriptive ? REASON_NEW_STUB : REASON_NEW_NO_PERIOD;
@@ -300,14 +300,14 @@ async function ingestNewTransaction(
         codeCampaign: transaction.code_campaign ?? null,
         syncHash,
       },
-      ...(descriptive ? { metadataRow: descriptiveToRow(descriptive, null) } : {}),
+      ...(descriptive ? { descriptive } : {}),
     }),
   );
 
   if (!incoming) await openIntakeFlagWorkItems(prisma, contribution.id, contactId, flags);
 
   // "on intake, all rules against the new row" (validation-rules.md). A
-  // no-op when metadata is still missing (runValidationForContribution
+  // no-op when no period has resolved yet (runValidationForContribution
   // returns null in that case).
   await runValidationForContribution(prisma, contribution.id);
 }
@@ -349,10 +349,12 @@ async function backfillMetadataIfPossible(
   const derived = deriveIntakeDefaults({ acceptedAt, codeCampaign, externalRef, periods });
   if (!derived.descriptive) return false;
   await withChangeLog(prisma, { userId: null, reason: REASON_BACKFILL }, async (ctx) => {
-    const after = await ctx.tx.contributionMetadata.create({
-      data: { contributionId, ...descriptiveToRow(derived.descriptive!, null) },
+    const before = await ctx.tx.contribution.findUniqueOrThrow({ where: { id: contributionId } });
+    const after = await ctx.tx.contribution.update({
+      where: { id: contributionId },
+      data: descriptiveToColumns(derived.descriptive!),
     });
-    await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+    await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, before, after });
   });
   await openIntakeFlagWorkItems(prisma, contributionId, contactId, derived.flags);
   return true;
@@ -506,19 +508,18 @@ function parseIncomingMetadata(transaction: QomonTransaction): QomonSyncedFields
 
 /** Combines Qomon's six synced fields with this tool's five local-only
  *  fields (see transaction-extra-fields.ts) to produce a full descriptive
- *  object. Local-only fields come from the same static defaults
+ *  object. The local-only fields take the same static defaults
  *  intake-derivation uses (intake/defaults.ts) — never guessed beyond that. */
 function mergeSyncedWithLocalDefaults(
   synced: QomonSyncedFields,
-  cachedRow: ContributionMetadata | null,
   externalRef: string | null,
 ): GpoMetadataDescriptive {
   return {
     ...synced,
-    received_by: cachedRow?.receivedBy ?? 'GPO',
-    non_deductible_cents: cachedRow?.nonDeductibleCents ?? 0,
-    eo_contributor_id: cachedRow?.eoContributorId ?? null,
-    exception_reason: cachedRow?.exceptionReason ?? null,
+    received_by: 'GPO',
+    non_deductible_cents: 0,
+    eo_contributor_id: null,
+    exception_reason: null,
     external_ref: externalRef,
   };
 }

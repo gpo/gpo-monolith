@@ -48,10 +48,8 @@ describe('entity report routes (ticket 4.5)', () => {
       });
     contributionId = contribution.id;
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: { contributionId, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
     });
     await fixtureIssueReceipt(prisma, {
       contactId: contact.id,
@@ -158,19 +156,23 @@ describe('entity report routes (ticket 4.5)', () => {
     // CAMPAIGN during the ANNUAL baseline period is never a valid entity (REP4).
     const cookie = await login('cfo@gpo.test', 'cfo-pass-phrase');
     await prisma.riding.create({ data: { ridingNumber: 84, name: 'Parry Sound-Muskoka', qomonApiKey: 'x' } });
+    const campaignContribution = await createTestContribution(prisma, {
+      qomonTransactionId: 2n,
+      contactId: (await prisma.contact.findFirstOrThrow()).id,
+      amountCents: 1_000,
+      acceptedAt: new Date('2026-03-01T12:00:00Z'),
+    });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
+      const after = await ctx.tx.contribution.update({
+        where: { id: campaignContribution.id },
         data: {
-          contributionId: (
-            await createTestContribution(prisma, { qomonTransactionId: 2n, contactId: (await prisma.contact.findFirstOrThrow()).id, amountCents: 1_000, acceptedAt: new Date('2026-03-01T12:00:00Z') })
-          ).id,
           periodId: baseline.periodId,
           entityKind: 'CAMPAIGN',
           ridingNumber: 84,
           receivedBy: 'GPO',
         },
       });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: after.contributionId, after });
+      await ctx.log({ subjectType: 'Contribution', subjectId: after.id, after });
     });
     // Issue the campaign receipt directly (bypassing the request path) so
     // its receiptNumber sequences after the fixture's.
@@ -191,9 +193,9 @@ describe('entity report routes (ticket 4.5)', () => {
           addressSnapshotId: snapshot.id,
         },
       });
-      const contributionMeta = await prisma.contributionMetadata.findFirstOrThrow({ where: { entityKind: 'CAMPAIGN' } });
+      const campaignRow = await prisma.contribution.findFirstOrThrow({ where: { entityKind: 'CAMPAIGN' } });
       const allocation = await ctx.tx.receiptAllocation.create({
-        data: { receiptId: receipt.id, contributionId: contributionMeta.contributionId, amountCents: 1_000 },
+        data: { receiptId: receipt.id, contributionId: campaignRow.id, amountCents: 1_000 },
       });
       await ctx.log({ subjectType: 'Receipt', subjectId: receipt.id, after: receipt });
       await ctx.log({ subjectType: 'ReceiptAllocation', subjectId: allocation.id, after: allocation });

@@ -18,15 +18,13 @@ describe('getSpaceDashboard (ticket 1.10)', () => {
     const contact = await prisma.contact.create({ data: { qomonContactId: qomonId, name: 'Dana Donor' } });
     const contribution = await createTestContribution(prisma, { contactId: contact.id, qomonTransactionId: qomonId, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: { contributionId: contribution.id, periodId: baseline.periodId, ridingNumber, entityKind, receivedBy: 'GPO' },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: { periodId: baseline.periodId, ridingNumber, entityKind, receivedBy: 'GPO' } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
     return contribution;
   }
 
-  it('derives spaces from ContributionMetadata, defaulting stage to intake', async () => {
+  it('derives spaces from active contributions, defaulting stage to intake', async () => {
     await seedContribution(84, 'CA', 1n);
     await seedContribution(null, 'PARTY', 2n);
 

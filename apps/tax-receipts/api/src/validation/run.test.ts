@@ -54,9 +54,7 @@ describe('validation engine v1 (ticket 1.7)', () => {
       });
     if (opts.metadata !== null) {
       await withChangeLog(prisma, { userId: null, reason: 'test fixture' }, async (ctx) => {
-        const after = await ctx.tx.contributionMetadata.create({
-          data: {
-            contributionId: contribution.id,
+        const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: {
             periodId: baseline.periodId,
             ridingNumber: opts.metadata?.ridingNumber ?? null,
             entityKind: opts.metadata?.entityKind ?? 'PARTY',
@@ -64,9 +62,8 @@ describe('validation engine v1 (ticket 1.7)', () => {
             goodsServices: opts.metadata?.goodsServices ?? false,
             nonDeductibleCents: opts.metadata?.nonDeductibleCents ?? 0,
             sourceCode: opts.metadata?.sourceCode ?? '',
-          },
-        });
-        await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+          } });
+        await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
       });
     }
     return contribution;
@@ -106,11 +103,8 @@ describe('validation engine v1 (ticket 1.7)', () => {
     const opened = await prisma.workItem.findFirstOrThrow({ where: { subjectId: contribution.id, ruleRef: 'A2' } });
 
     await withChangeLog(prisma, { userId: null, reason: 'test fixture' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.update({
-        where: { contributionId: contribution.id },
-        data: { ridingNumber: null },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: { ridingNumber: null } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
     const second = await runValidationForContribution(prisma, contribution.id);
     expect(second?.resolved).toBe(1);
@@ -118,11 +112,8 @@ describe('validation engine v1 (ticket 1.7)', () => {
     expect(resolved.status).toBe('RESOLVED');
 
     await withChangeLog(prisma, { userId: null, reason: 'test fixture' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.update({
-        where: { contributionId: contribution.id },
-        data: { ridingNumber: 84 },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: { ridingNumber: 84 } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
     const third = await runValidationForContribution(prisma, contribution.id);
     expect(third?.reopened).toBe(1);

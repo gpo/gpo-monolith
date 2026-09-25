@@ -17,7 +17,7 @@ import type {
  * subset; ticket 2.1 completes A/B/C coverage except for two rules that
  * need data no ticket populates yet — see the doc comments on
  * `checkA9GoodsServicesInvoice`-shaped gap (A9 was never added: no
- * `ContributionMetadata` field records invoice amount/paid status, and the
+ * `Contribution` field records invoice amount/paid status, and the
  * Qomon metadata JSON schema doesn't carry one either) and
  * `checkB5PayerAttribution` likewise (B5: no structured payer-name field
  * exists on a Qomon transaction, only a free-text `comment`; matching
@@ -136,7 +136,7 @@ export function checkA4ReceivedByProvenance(
 }
 
 /** The "or contribution marked non-receiptable" half of A5 has no field to
- *  check yet — no such flag exists on ContributionMetadata. */
+ *  check yet — no such flag exists on Contribution. */
 export function checkA5NonDeductible(
   c: ContributionForValidationRules,
 ): ValidationFinding | null {
@@ -227,7 +227,7 @@ export function checkA8CashLimit(c: ContributionForValidationRules): ValidationF
 }
 
 /** Only the "out of province" half is checkable: no `non_deductible`-style
- *  non-resident flag exists on ContributionMetadata. A null address defers
+ *  non-resident flag exists on Contribution. A null address defers
  *  to C1 (address completeness) rather than double-reporting. */
 export function checkB1OutOfProvince(
   address: AddressForValidation | null,

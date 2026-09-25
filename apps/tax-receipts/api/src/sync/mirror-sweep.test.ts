@@ -45,7 +45,7 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
     expect(result).toMatchObject({ created: 1, backfilled: 0, changedInQomon: 0, unchanged: 0 });
 
     const contribution = await prisma.contribution.findFirst({
-      include: { metadata: true, contact: true, payment: { include: { qomonLink: true } } },
+      include: { contact: true, payment: { include: { qomonLink: true } } },
     });
     expect(contribution?.amountCents).toBe(5_000);
     expect(contribution?.status).toBe('ACTIVE');
@@ -64,13 +64,13 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
       deletedInQomonAt: null,
     });
     expect(contribution?.contact.name).toBe('Dana Donor');
-    expect(contribution?.metadata).toMatchObject({
+    // the descriptive fields are columns on the contribution itself (D12)
+    expect(contribution).toMatchObject({
       periodId: baseline.periodId,
       ridingNumber: null,
       entityKind: 'PARTY',
       receivedBy: 'GPO',
       sourceCode: 'NC.W.DON.DBK.BTN50',
-      checksum: null, // stub default, never written to/confirmed against Qomon
     });
 
     // one intake-flag work item per ticket-1.6 field the stub couldn't derive
@@ -87,7 +87,7 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
     // the import's writes go through the guarded change-log path, one entry
     // per created row, all in one cascade
     const entries = await prisma.changeLogEntry.findMany();
-    expect(entries.map((e) => e.subjectType).sort()).toEqual(['Contribution', 'ContributionMetadata', 'Payment']);
+    expect(entries.map((e) => e.subjectType).sort()).toEqual(['Contribution', 'Payment']);
     expect(new Set(entries.map((e) => e.correlationId)).size).toBe(1);
     expect(entries.every((e) => e.actorUserId === null)).toBe(true); // system actor
     expect(contribution?.correlationId).toBe(entries[0]?.correlationId);
@@ -131,7 +131,7 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
     expect((await prisma.contribution.findFirst())?.amountCents).toBe(5_000);
   });
 
-  it('mirrors a new transaction without metadata when no period covers its acceptance date, and flags it', async () => {
+  it('imports a new transaction with no period when none covers its acceptance date, and flags it', async () => {
     const qomon = new InMemoryQomon();
     qomon.seedContact({ id: 9, firstname: 'Out', surname: 'OfRange' });
     qomon.seedBundle({
@@ -142,8 +142,8 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
     const result = await runMirrorSweep({ prisma, feed, qomon });
     expect(result.created).toBe(1);
 
-    const contribution = await prisma.contribution.findFirst({ include: { metadata: true } });
-    expect(contribution?.metadata).toBeNull();
+    const contribution = await prisma.contribution.findFirst();
+    expect(contribution?.periodId).toBeNull(); // no period yet: awaiting intake derivation
     const workItems = await prisma.workItem.findMany({ where: { kind: 'VALIDATION' } });
     expect(workItems.map((w) => w.ruleRef).sort()).toEqual([
       'INTAKE:entity_kind',
@@ -163,8 +163,8 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
     });
     const feed = new QomonPollChangeFeed(qomon);
     await runMirrorSweep({ prisma, feed, qomon });
-    let contribution = await prisma.contribution.findFirst({ include: { metadata: true } });
-    expect(contribution?.metadata).toBeNull();
+    let contribution = await prisma.contribution.findFirst();
+    expect(contribution?.periodId).toBeNull();
 
     await prisma.period.create({
       data: {
@@ -179,8 +179,8 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
     // the underlying transaction didn't change, so only a full sweep (which
     // re-evaluates everything) will notice the metadata gap can now be filled
     await runMirrorSweep({ prisma, feed, qomon, }, { mode: 'full' });
-    contribution = await prisma.contribution.findFirst({ include: { metadata: true } });
-    expect(contribution?.metadata).toMatchObject({ periodId: 2020 });
+    contribution = await prisma.contribution.findFirst();
+    expect(contribution).toMatchObject({ periodId: 2020 });
   });
 
   it('records a Qomon-side edit on the link and opens one sync incident, changing nothing local (D12, O47)', async () => {
@@ -325,8 +325,8 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
     const feed = new QomonPollChangeFeed(qomon);
     await runMirrorSweep({ prisma, feed, qomon });
 
-    const contribution = await prisma.contribution.findFirst({ include: { metadata: true } });
-    expect(contribution?.metadata).toMatchObject({
+    const contribution = await prisma.contribution.findFirst();
+    expect(contribution).toMatchObject({
       ridingNumber: 84,
       entityKind: 'CA',
       sourceCode: 'subspace:84',
@@ -334,7 +334,5 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
       // intake-derivation (intake/defaults.ts), not read from extra_json
       receivedBy: 'GPO',
     });
-    // intake input only (D12): no Qomon checksum is tracked or compared any more
-    expect(contribution?.metadata?.checksum).toBeNull();
   });
 });
