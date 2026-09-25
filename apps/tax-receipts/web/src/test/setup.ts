@@ -30,3 +30,14 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: () => false,
   }),
 });
+
+// Floating UI asks every ancestor whether it is in the top layer with
+// `matches(':popover-open')` and `matches(':modal')`. jsdom's selector engine
+// (nwsapi) does not know those pseudo-classes: it recompiles the selector and
+// throws on every call, which made a page with a dozen tooltips take ten
+// seconds to render. Nothing in jsdom is ever in the top layer.
+const nativeMatches = Element.prototype.matches;
+Element.prototype.matches = function matches(this: Element, selector: string): boolean {
+  if (selector === ':popover-open' || selector === ':modal') return false;
+  return nativeMatches.call(this, selector);
+};

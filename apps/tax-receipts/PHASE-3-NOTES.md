@@ -618,3 +618,89 @@ paths). `pnpm turbo run lint typecheck test build` green (314 tests).
    (3.2's allocation, 3.9's pre-check) — `routes/receipt-registry.tsx` and
    the guarded correction-actions modal are screens 7/8, tickets 3.13/3.14,
    not built yet.
+
+## Tickets 3.10 (the rest), 3.11, and 3.14: the correction actions
+
+Everything in corrections.md's catalogue is now built except the free-standing
+"Retract from EO" screen (action 11 is `rtd/dc1a.ts`, fed by the owed-to-EO
+items the actions below queue). Built on the D12 model, where contributions are
+versioned: a correction never edits a contribution that backs a receipt or an
+RTD filing, it supersedes the row with new ones on the same payment.
+
+| Action | Where |
+|---|---|
+| 4 correct amount, 5 move, 6 move a receipt, 8 refund, 9 reallocate, 12 split a contribution, 10 merge contacts | `api/src/corrections/contribution-correction.ts` (the engine) plus `actions.ts` and `merge-contacts.ts` (each just builds a change list) |
+| 7 split a receipt | `api/src/corrections/receipt-split.ts` |
+| 3 lightweight reprint, lost status, "Copy" | `api/src/corrections/reprint.ts` |
+| the guided over-limit proposal for 9 | `api/src/corrections/reallocation-proposal.ts` |
+| routes | `api/src/routes/corrections.ts`: `POST /corrections/preview` and `POST /corrections` (one body shape for actions 4, 5, 8, 9, 10, 12), `POST /receipts/:id/split[-preview]`, `POST /receipts/:id/reprint`, `POST /contacts/:id/unmerge`, `GET /contacts` (donor picker), `GET /contributions/:id/reallocation-proposal` |
+| screen 8 | `web/src/components/correction-panel.tsx` (on contribution detail: preview the cascade, then commit exactly what was previewed) and `receipt-actions.tsx` (cancel, reissue, lost copy, spelling fix, per receipt) |
+
+Database (three migrations, `20260926*`): a receipt-allocated or RTD-included
+contribution's material fields are frozen and a SUPERSEDED or REFUNDED row is
+frozen entirely; a SUPERSEDED row must have a successor (checked at commit);
+`receipt.reissuedFromId` is no longer unique so one receipt can be replaced by
+several; `entity_report.filedAt`; `receipt_reprint`; `contact.mergedIntoId`.
+
+What one commit does (one correlation id, all in the change log): supersede or
+refund the contributions and correct the payment when asked; cancel every ISSUED
+receipt that allocated to them, with the watermarked notice; issue the
+replacements (the donor's own receipt is reissued carrying its untouched
+contributions, anything moved to another donor or entity gets a fresh receipt);
+queue a DC-1A for anything RTD-reported and a return note for anything inside a
+filed report; close open validation findings on the retired rows; validate the
+replacements. The preview computes all of it without writing and lists blockers
+(kill switch, a donor with no printable address, a replacement with no period).
+
+### Deviations / judgment calls
+
+1. **A move does not consolidate into the new donor's existing receipt.**
+   corrections.md action 5 says the new donor's receipt for the period is
+   cancelled and reissued with the moved contribution. That would cancel a
+   receipt EO may already hold in order to add a line whose printed date and
+   goods-and-services flag are still an open question (O44), so the moved
+   contribution gets its own new receipt instead. Consolidating is one
+   `allocateToReceipt` plus a reissue away if that is wanted.
+2. **A split must account for the whole contribution.** corrections.md says
+   the parts must sum to "at most the payment amount"; action 12 requires
+   parts equal to the contribution and points at correct-amount to change the
+   total. The payment invariant (ACTIVE contributions sum to at most the
+   payment) is enforced regardless, in code and by the deferred trigger.
+3. **"In a filed return" is a new marker.** Nothing recorded that an entity
+   report went into a filed AR-1, so `EntityReport.filedAt` was added. Nothing
+   sets it yet (ticket 4.6 does), so the return-note step is exercised by tests
+   and idle in practice until then.
+4. **The non-deductible amount is never guessed.** A replacement whose amount
+   differs from the original's must state its non-deductible amount when the
+   original had one; a split's parts must add up to the original's.
+5. **A replacement drops the EO contributor id when the donor changes, and
+   always drops the year-expiry exception reason.** Both belong to the row's
+   old facts.
+6. **A spelling fix is judged by edit distance** (at most three characters and
+   a quarter of the name, ignoring case, accents, and punctuation). It is a
+   conservative heuristic: a refusal only sends the operator to a reissue.
+   The receipt row and its snapshot are frozen (invariant 7), so a reprint is a
+   `ReceiptReprint` row; the ALL and S2P2 reports read the name from the
+   contact, so the corrected spelling reaches EO by fixing the contact.
+7. **A lost receipt files as `L`** in the ALL report (an ISSUED receipt with
+   `lost` set), following EO's spec column D. This closes the code half of
+   open-questions O41; whether EO wants `L` rather than the receipt's own
+   status still wants confirming.
+8. **A merge is reversible only as a flag.** `unmerge` clears `mergedIntoId`;
+   the contributions the merge moved stay on the surviving contact and go back
+   with an ordinary move. Contacts are Qomon-owned, so the preview lists
+   "merge it in Qomon too" as a follow-up. Nothing offers or accepts a merged
+   contact afterwards.
+9. **Reallocation needs `file EOForm`** (the party CFO and CFO designates), as
+   the doc's "filer sign-off, initially $0 threshold, so always". There is no
+   configurable threshold yet.
+10. **Authority.** `correct Contribution` for any action, plus `correct
+    Receipt` when receipts are cancelled or issued. A DC-1 designate has
+    `correct Receipt` but not `correct Contribution`, so a designate cannot run
+    the contribution actions today; that is a policy question, not changed here.
+    A riding-scoped user may touch only their granted ridings.
+11. **Not done:** no donor notice is actually sent (3.6, O24, O45 are unchanged),
+    no UI for split-receipt or for unmerging (both are API-only), and PDFs are
+    still rendered after the database commit, so a crash between them leaves a
+    receipt without its PDF (the same window `issueReceipt` has).
+

@@ -29,6 +29,8 @@ export interface ContributionDetail {
     externalRef: string | null;
     payerName: string | null;
     note: string | null;
+    /** what no ACTIVE contribution on this payment covers yet */
+    unattributedCents: number;
   };
   /** import provenance; null for MANUAL and LEGACY_IMPORT payments */
   qomon: {
@@ -105,6 +107,11 @@ export async function getContributionDetail(
     return null;
   }
 
+  const attributed = await prisma.contribution.aggregate({
+    where: { paymentId: row.paymentId, status: 'ACTIVE' },
+    _sum: { amountCents: true },
+  });
+
   const [workItems, changeLog] = await Promise.all([
     prisma.workItem.findMany({
       where: { subjectType: 'Contribution', subjectId: contributionId },
@@ -146,6 +153,7 @@ export async function getContributionDetail(
       externalRef: row.payment.externalRef,
       payerName: row.payment.payerName,
       note: row.payment.note,
+      unattributedCents: row.payment.amountCents - (attributed._sum.amountCents ?? 0),
     },
     qomon: row.payment.qomonLink
       ? {

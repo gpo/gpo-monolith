@@ -58,6 +58,9 @@ export interface Me {
     prepareRtdFilings: boolean;
     sendRtdFilings: boolean;
     fileEOForms: boolean;
+    enterPayments: boolean;
+    correctContributions: boolean;
+    correctReceipts: boolean;
   };
 }
 
@@ -140,6 +143,8 @@ export interface ContributionDetail {
     externalRef: string | null;
     payerName: string | null;
     note: string | null;
+    /** what no ACTIVE contribution on this payment covers yet */
+    unattributedCents: number;
   };
   /** import provenance; null for manual and legacy-imported payments */
   qomon: {
@@ -188,6 +193,168 @@ export interface ContributionDetail {
     at: string;
     correlationId: string;
   }>;
+}
+
+// --- corrections (corrections.md; api/src/corrections) ----------------------
+
+export interface CorrectionPart {
+  amountCents: number;
+  contactId?: string;
+  entityKind?: 'PARTY' | 'CA' | 'CAMPAIGN';
+  ridingNumber?: number | null;
+  nonDeductibleCents?: number;
+}
+
+interface CorrectionCommon {
+  reason: string;
+  politicalEntityLabel?: string;
+  entityLabels?: Record<string, string>;
+}
+
+export type CorrectionRequest =
+  | (CorrectionCommon & {
+      action: 'CORRECT_AMOUNT';
+      contributionId: string;
+      amountCents: number;
+      nonDeductibleCents?: number;
+      paymentAmountCents?: number;
+    })
+  | (CorrectionCommon & { action: 'MOVE'; contributionIds: string[]; toContactId: string })
+  | (CorrectionCommon & { action: 'SPLIT_CONTRIBUTION'; contributionId: string; parts: CorrectionPart[] })
+  | (CorrectionCommon & { action: 'REALLOCATE'; contributionId: string; parts: CorrectionPart[] })
+  | (CorrectionCommon & { action: 'REFUND'; contributionIds?: string[]; paymentId?: string })
+  | (CorrectionCommon & { action: 'MERGE_CONTACTS'; survivorId: string; mergedAwayId: string; evidence?: string });
+
+export interface CorrectionPlan {
+  action: string;
+  changes: Array<{
+    contributionId: string;
+    kind: 'supersede' | 'refund';
+    before: { contactName: string; amountCents: number; entityKind: string; ridingNumber: number | null };
+    replacements: Array<{
+      ref: string;
+      contactName: string;
+      amountCents: number;
+      entityKind: string;
+      ridingNumber: number | null;
+      nonDeductibleCents: number;
+    }>;
+  }>;
+  payments: Array<{ paymentId: string; amountBeforeCents: number; amountAfterCents: number; stateBefore: string; stateAfter: string }>;
+  cancelReceipts: Array<{ receiptId: string; receiptNumber: string; contactName: string; totalAmountCents: number; hasPdf: boolean }>;
+  issueReceipts: Array<{
+    key: string;
+    contactName: string;
+    entityKind: string;
+    ridingNumber: number | null;
+    totalAmountCents: number;
+    replacesReceiptNumber: string | null;
+  }>;
+  owedToEo: Array<{ kind: 'DC1A' | 'RETURN_NOTE'; description: string }>;
+  dirtyReports: Array<{ entityReportId: string; kind: string; periodId: number; filed: boolean }>;
+  labelsNeeded: Array<{ entityKind: string; ridingNumber: number | null; key: string }>;
+  followUps: string[];
+  blockers: string[];
+}
+
+export interface CorrectionResult {
+  correlationId: string;
+  supersededContributionIds: string[];
+  refundedContributionIds: string[];
+  createdContributionIds: string[];
+  cancelledReceiptIds: string[];
+  issuedReceipts: Array<{ id: string; receiptNumber: string; contactId: string; amountCents: number }>;
+  owedToEoWorkItemIds: string[];
+  followUps: string[];
+  validationFailures: string[];
+}
+
+export interface ContactHit {
+  id: string;
+  name: string;
+  email: string | null;
+  qomonContactId: string | null;
+}
+
+export interface ReallocationProposal {
+  contributionId: string;
+  year: number;
+  amountCents: number;
+  overLimitBucket: { bucket: string; limitCents: number; aggregateCents: number; overageCents: number } | null;
+  options: Array<{
+    entityKind: 'PARTY' | 'CA' | 'CAMPAIGN';
+    ridingNumber: number | null;
+    needsRiding: boolean;
+    headroomCents: number;
+    moveCents: number;
+  }>;
+}
+
+export interface ReprintInput {
+  kind: 'LOST_COPY' | 'CORRECTED';
+  reason: string;
+  correctedName?: string;
+  politicalEntityLabel: string;
+}
+
+// --- manual entry (D12; api/src/payments) -----------------------------------
+
+export type PaymentMethodKey = 'CARD' | 'CHEQUE' | 'CASH' | 'PAD' | 'EFT' | 'IN_KIND' | 'OTHER';
+
+/** Only the fields the operator chose; the server derives the rest from the date. */
+export interface DescriptiveOverrides {
+  period_id?: number;
+  riding_number?: number | null;
+  entity_kind?: 'PARTY' | 'CA' | 'CAMPAIGN';
+  received_by?: 'GPO' | 'ENTITY';
+  goods_services?: boolean;
+  non_deductible_cents?: number;
+  source_code?: string;
+}
+
+export interface ContributionEntryInput {
+  amountCents: number;
+  contactId?: string;
+  acceptedAt?: string;
+  note?: string | null;
+  descriptive?: DescriptiveOverrides;
+}
+
+export interface NewPaymentInput {
+  reason: string;
+  contactId: string;
+  amountCents: number;
+  receivedAt: string;
+  method: PaymentMethodKey;
+  payerName?: string | null;
+  externalRef?: string | null;
+  note?: string | null;
+  contributions?: ContributionEntryInput[];
+}
+
+export interface IntakeFlag {
+  field: string;
+  reason: string;
+}
+
+export interface IntakePreview {
+  descriptive: { period_id: number; riding_number: number | null; entity_kind: string; received_by: string } | null;
+  flags: IntakeFlag[];
+}
+
+export interface PaymentSummary {
+  id: string;
+  contactId: string;
+  contactName: string;
+  amountCents: number;
+  receivedAt: string;
+  method: string;
+  state: string;
+  source: string;
+  externalRef: string | null;
+  attributedCents: number;
+  unattributedCents: number;
+  contributions: Array<{ id: string; contactName: string; amountCents: number; status: string }>;
 }
 
 export interface IssueReceiptInput {
@@ -620,6 +787,41 @@ export const api = {
       body: JSON.stringify(input),
     }),
   receiptPdfUrl: (receiptId: string) => `${BASE}/receipts/${receiptId}/pdf`,
+  createPayment: (input: NewPaymentInput) =>
+    request<{ paymentId: string; contributions: Array<{ id: string; amountCents: number; periodId: number | null; flags: IntakeFlag[] }> }>(
+      '/payments',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  addContributionToPayment: (paymentId: string, input: ContributionEntryInput & { reason: string }) =>
+    request<{ contributionId: string; remainingCents: number; flags: IntakeFlag[] }>(
+      `/payments/${paymentId}/contributions`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  getPayment: (paymentId: string) => request<PaymentSummary>(`/payments/${paymentId}`),
+  intakePreview: (q: { acceptedAt: string; ridingNumber?: number | null; sourceCode?: string; externalRef?: string }) => {
+    const params = new URLSearchParams({ acceptedAt: q.acceptedAt });
+    if (q.ridingNumber != null) params.set('ridingNumber', String(q.ridingNumber));
+    if (q.sourceCode) params.set('sourceCode', q.sourceCode);
+    if (q.externalRef) params.set('externalRef', q.externalRef);
+    return request<IntakePreview>(`/intake-preview?${params.toString()}`);
+  },
+  searchContacts: (query: string) => request<{ data: ContactHit[] }>(`/contacts?query=${encodeURIComponent(query)}`),
+  previewCorrection: (body: CorrectionRequest) =>
+    request<CorrectionPlan>('/corrections/preview', { method: 'POST', body: JSON.stringify(body) }),
+  applyCorrection: (body: CorrectionRequest) =>
+    request<CorrectionResult>('/corrections', { method: 'POST', body: JSON.stringify(body) }),
+  reallocationProposal: (contributionId: string) =>
+    request<ReallocationProposal>(`/contributions/${contributionId}/reallocation-proposal`),
+  cancelReceipt: (receiptId: string, reason: string) =>
+    request<{ receiptId: string }>(`/receipts/${receiptId}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  reissueReceipt: (receiptId: string, input: { reason: string; politicalEntityLabel: string }) =>
+    request<{ newReceiptNumber: string }>(`/receipts/${receiptId}/reissue`, { method: 'POST', body: JSON.stringify(input) }),
+  reprintReceipt: (receiptId: string, input: ReprintInput) =>
+    request<{ reprintId: string; kind: string }>(`/receipts/${receiptId}/reprint`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  reprintPdfUrl: (receiptId: string, reprintId: string) => `${BASE}/receipts/${receiptId}/reprints/${reprintId}/pdf`,
   listWorkItems: (filters: { kind?: string; status?: string; cursor?: string } = {}) => {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);

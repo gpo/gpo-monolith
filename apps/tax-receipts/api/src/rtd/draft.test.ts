@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
 import type { EntityKind, PaymentState } from '../generated/prisma/index.js';
-import { makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution, fixtureWrite } from '../test/db.js';
+import { makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution, markSuperseded } from '../test/db.js';
 import { buildRtdDraft, getRtdGateFindings } from './draft.js';
 
 const prisma = testPrisma();
@@ -67,8 +67,8 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
         contactLastName: 'Donor',
       });
       contactId = made.contactId;
-      await maybeUpdateStatus(made.contributionId, opts);
       await seedMetadata(made.contributionId, { entityKind: opts.entityKind, goodsServices: opts.goodsServices });
+      await maybeUpdateStatus(made.contributionId, opts);
       return { contactId, contributionId: made.contributionId };
     }
 
@@ -78,8 +78,8 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
         amountCents: opts.amountCents,
         acceptedAt: opts.acceptedAt ?? new Date('2026-03-01T12:00:00Z'),
       });
-    await maybeUpdateStatus(contribution.id, opts);
     await seedMetadata(contribution.id, { entityKind: opts.entityKind, goodsServices: opts.goodsServices });
+    await maybeUpdateStatus(contribution.id, opts);
     return { contactId, contributionId: contribution.id };
   }
 
@@ -98,7 +98,7 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
       });
     }
     if (opts.superseded) {
-      await fixtureWrite(prisma, (tx) => tx.contribution.update({ where: { id: contributionId }, data: { status: 'SUPERSEDED' } }));
+      await markSuperseded(prisma, contributionId);
     }
   }
 

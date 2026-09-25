@@ -30,6 +30,7 @@ import {
 import gpoLogo from './assets/gpo-logo-EN-horizontal-green.svg';
 import { api } from './api.js';
 import { ADMIN_SECTIONS, AdminLayout, visibleAdminSections } from './routes/admin.js';
+import { AttributePaymentPage, NewPaymentPage } from './routes/payment-entry.js';
 import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
 import { DashboardPage } from './routes/dashboard.js';
@@ -214,6 +215,21 @@ const contributionDetailRoute = createRoute({
   },
 });
 
+const newPaymentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/payments/new',
+  component: NewPaymentPage,
+});
+
+const attributePaymentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/payments/$id/attribute',
+  component: () => {
+    const { id } = useParams({ from: '/payments/$id/attribute' });
+    return <AttributePaymentPage paymentId={id} />;
+  },
+});
+
 const workQueueRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/work-queue',
@@ -290,6 +306,8 @@ const routeTree = rootRoute.addChildren([
   donorPrecheckRoute,
   contributionsRoute,
   contributionDetailRoute,
+  newPaymentRoute,
+  attributePaymentRoute,
   workQueueRoute,
   spaceIssuanceRoute,
   entityReportsRoute,

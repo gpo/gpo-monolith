@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution, fixtureWrite } from '../test/db.js';
+import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution, markSuperseded } from '../test/db.js';
 import { listContributions } from './list.js';
 
 const prisma = testPrisma();
@@ -166,7 +166,7 @@ describe('listContributions (ticket 1.3)', () => {
 
   it('excludes superseded contributions (history, not the working set)', async () => {
     const { contribution } = await seedRow({ qomonTransactionId: 200n });
-    await fixtureWrite(prisma, (tx) => tx.contribution.update({ where: { id: contribution.id }, data: { status: 'SUPERSEDED' } }));
+    await markSuperseded(prisma, contribution.id);
     const page = await listContributions(prisma, { filters: {}, ridingScope: null });
     expect(page.data).toHaveLength(0);
   });

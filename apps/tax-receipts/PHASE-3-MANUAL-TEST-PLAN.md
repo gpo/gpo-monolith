@@ -224,6 +224,60 @@ receipt).
       what's already seeded; the API/service layer is what ticket 3.2
       shipped.
 
+## 4. Correction actions (tickets 3.10, 3.11, 3.14)
+
+The API is covered by tests; these are the checks worth a human pass on the
+screen (nothing here was clicked through when it was built). Use a receipted
+fixture donor, for example one of Space A's.
+
+- [ ] Open a receipted contribution. The **Correct this contribution** card is
+      there for an administrator, party CFO, or rules authority, and absent for
+      a read-only user.
+- [ ] Correct the amount to something smaller, tick "the payment itself was
+      mis-keyed", give a reason, **Preview cascade**. The preview names the old
+      receipt to cancel and a new one "cancels and replaces GPO-...", and shows
+      the "Qomon still shows ..." follow-up. **Commit correction** stays
+      disabled until you preview; change any field afterwards and the preview
+      disappears.
+- [ ] Commit it. The page now shows the contribution as history, and its
+      change-log slice has the reason. Open the new receipt's PDF: every copy
+      carries "This cancels and replaces receipt #...".
+- [ ] Preview a **Move** to a donor with no address: the preview shows the
+      blocker and commit stays disabled.
+- [ ] **Split** a contribution between two donors: the parts total turns green
+      only when it matches the contribution. Both donors end up with a receipt;
+      only the original donor's says it replaces the old one.
+- [ ] **Reallocate** (party CFO only): "Show over-limit proposal" on a donor over
+      the party limit offers a CA with the room available, and "Use this" fills
+      the parts.
+- [ ] Receipt row → **Correct** → **Reprint as a lost-receipt copy**: the PDF is
+      stamped COPY, the receipt stays valid, and the next ALL report lists it
+      with Receipt_Status L. **Fix the spelling** with a different person's name
+      is refused with a pointer to reissue.
+- [ ] RTD-reported contribution: any correction queues a DC-1A on the work
+      queue's owed-to-EO tab, once, even when its receipt is cancelled as well.
+
+## 5. Manual entry form
+
+Nothing here was clicked through when it was built. Use any donor already in
+the dev database (contacts are not created from the form).
+
+- [ ] Contributions → **Add payment** (party CFO or administrator; absent for a
+      read-only user). Pick a donor by typing two letters of their name.
+- [ ] Enter an amount and a received date. Under the contribution, "Will be
+      filed in ..." names the period for that date; pick a date with no
+      configured period and the form warns you instead.
+- [ ] Save. The next screen links to the new contribution; its Payment card shows
+      source MANUAL and no Qomon transaction.
+- [ ] **Split across more contributions**: give two donors part each; the running
+      total turns green at the full amount and red above it (save is refused).
+- [ ] Choose Recipient = Constituency association: saving without a riding is
+      refused; typing a riding shows its name.
+- [ ] Enter a payment for less than the full amount attributed. Its contribution's
+      page shows "... is not attributed" with **Attribute the rest**, which adds
+      a contribution for another donor, and the notice goes away.
+- [ ] A payment dated December 31 lands in that year's period, not the next.
+
 ## Known non-issues
 
 - No Address Ned's work queue entry shows `C1`, status `EXCEPTION`, with a

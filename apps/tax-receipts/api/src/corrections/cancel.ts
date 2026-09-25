@@ -16,6 +16,7 @@ import { renderReceiptPdf } from '../receipts/pdf.js';
 import { ReceiptNotFoundError, TerminalReceiptError } from '../receipts/allocate.js';
 import { MissingAddressError, ReceiptIssuanceValidationError } from '../receipts/issue.js';
 import { renderCancellationNoticePdf } from './cancellation-notice.js';
+import { OWED_DC1A, openOwedToEo } from './owed-to-eo.js';
 
 /**
  * Correction actions 1 and 2 (corrections.md, ticket 3.10): cancel, and
@@ -49,13 +50,13 @@ import { renderCancellationNoticePdf } from './cancellation-notice.js';
  * ticket. `politicalEntityLabel` stays a caller input, same open
  * compliance-wording question ticket 3.1 already declined to guess at.
  *
- * What corrections.md's actions 1/2 ask for that this does NOT build:
- * the exact "This cancels and replaces receipt #[n]" printed text on the
- * new PDF, and the lost-receipt "Copy" stamp -- both ticket 3.11's job
- * (Evaluation Tool rows 59-63), not guessed at here. Actions 3 through 10
- * (lightweight reprint, correct-amount chaining, donor moves, splits,
- * refunds, reallocation, contact merge) are each their own follow-up slice
- * of this ticket, not attempted in this pass -- see PHASE-3-NOTES.md.
+ * The rest of corrections.md's actions build on these two: the contribution
+ * corrections (amount, move, split, refund, reallocate, merge) are the engine
+ * in `contribution-correction.ts`, which supersedes contribution rows and then
+ * runs this same cancel-and-issue cascade; splitting a receipt is
+ * `receipt-split.ts`; the lost-receipt "Copy" and the lightweight reprint are
+ * `reprint.ts`. The "This cancels and replaces receipt #[n]" text is drawn by
+ * `receipts/pdf.ts`.
  */
 
 export interface CorrectionCascadeContribution {
@@ -178,17 +179,14 @@ async function cancelReceiptCore(
 
     for (const c of contributions) {
       if (!c.rtdReported) continue;
-      const item = await ctx.tx.workItem.create({
-        data: {
-          kind: 'OWED_TO_EO',
+      owedToEoWorkItemIds.push(
+        await openOwedToEo(ctx, {
           subjectType: 'Contribution',
           subjectId: c.contributionId,
           contactId: receipt.contactId,
-          ruleRef: 'corrections-11',
-        },
-      });
-      owedToEoWorkItemIds.push(item.id);
-      await ctx.log({ subjectType: 'WorkItem', subjectId: item.id, after: item });
+          ruleRef: OWED_DC1A,
+        }),
+      );
     }
   });
 
@@ -406,6 +404,7 @@ export async function reissueReceipt(
     politicalEntityLabel: input.politicalEntityLabel,
     eoContributorId: primary.eoContributorId,
     contributorName: receipt.contactNameSnapshot,
+    replacesReceiptNumber: receipt.receiptNumber,
     addressLine1,
     addressLine2: null,
     city: address.city!,

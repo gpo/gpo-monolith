@@ -73,6 +73,7 @@ export async function generateAllReport(
     const source: AllReportSourceRow = {
       receiptNumber: row.receiptNumber,
       status: row.status,
+      lost: row.lost,
       entityKind: row.entityKind,
       periodId: row.periodId,
       issueDate: row.issueDate,

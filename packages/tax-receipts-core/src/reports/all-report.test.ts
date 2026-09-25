@@ -49,6 +49,12 @@ describe('receiptStatusLetter', () => {
   it('files VOID as C too (compliance.md: no separate void letter)', () => {
     expect(receiptStatusLetter('VOID')).toBe('C');
   });
+  it('files an ISSUED receipt flagged lost as L (EO spec column D, O41)', () => {
+    expect(receiptStatusLetter('ISSUED', true)).toBe('L');
+  });
+  it('files a lost receipt that was later cancelled as C', () => {
+    expect(receiptStatusLetter('CANCELLED', true)).toBe('C');
+  });
 });
 
 describe('isAgencyContribution', () => {

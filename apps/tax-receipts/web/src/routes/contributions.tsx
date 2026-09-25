@@ -154,6 +154,7 @@ export function ContributionsListPage() {
   const [bulkPartyLevel, setBulkPartyLevel] = useState(false);
   const [bulkReason, setBulkReason] = useState('');
 
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const query = useQuery({
     queryKey: ['contributions', filters, cursor],
     queryFn: () => api.listContributions({ ...filters, cursor }),
@@ -252,7 +253,14 @@ export function ContributionsListPage() {
 
   return (
     <Stack gap="lg">
-      <Title order={2}>Contributions</Title>
+      <Group justify="space-between">
+        <Title order={2}>Contributions</Title>
+        {me.data?.can.enterPayments && (
+          <Button component={Link} to="/payments/new">
+            Add payment
+          </Button>
+        )}
+      </Group>
 
       <Card withBorder>
         <Stack gap="sm">

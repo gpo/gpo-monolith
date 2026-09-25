@@ -47,6 +47,14 @@ enum ReceiptDelivery {
   MAIL
 }
 
+/// why a stored receipt PDF was reproduced without cancelling the receipt
+enum ReceiptReprintKind {
+  /// a lost receipt reprinted unaltered and stamped COPY (EO status L)
+  LOST_COPY
+  /// a non-material spelling fix (corrections.md action 3)
+  CORRECTED
+}
+
 enum ReceiptNumberSource {
   SEQUENCE
   FOREIGN
@@ -211,9 +219,15 @@ model Contact {
   lastSyncedAt     DateTime?
   /// hash over amount/date/contact-relevant fields for cheap drift detection
   syncHash         String?
+  /// set when a duplicate was merged into another contact (corrections.md
+  /// action 10); the record stays, pointing at the survivor
+  mergedIntoId     String?
+  mergedAt         DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  mergedInto       Contact?  @relation("ContactMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom       Contact[] @relation("ContactMerge")
   addressSnapshots AddressSnapshot[]
   payments         Payment[]
   contributions    Contribution[]
@@ -221,6 +235,7 @@ model Contact {
   workItems        WorkItem[]
   cyclePreferences DonorCyclePreference[]
 
+  @@index([mergedIntoId])
   @@map("contact")
 }
 
@@ -380,7 +395,9 @@ model Receipt {
   /// EO status L; reprints are stamped "Copy"
   lost                  Boolean       @default(false)
   replacedById          String?       @unique
-  reissuedFromId        String?       @unique
+  /// a split reissues one cancelled receipt as several, so this is not unique;
+  /// replacedById names the primary replacement
+  reissuedFromId        String?
   ridingNumber          Int?
   entityKind            EntityKind
   periodId              Int
@@ -401,16 +418,39 @@ model Receipt {
   replacedBy            Receipt?          @relation("ReceiptReplacement", fields: [replacedById], references: [id])
   replaces              Receipt?          @relation("ReceiptReplacement")
   reissuedFrom          Receipt?          @relation("ReceiptReissue", fields: [reissuedFromId], references: [id])
-  reissues              Receipt?          @relation("ReceiptReissue")
+  reissues              Receipt[]         @relation("ReceiptReissue")
   pdfArtifact           Artifact?         @relation(fields: [pdfArtifactId], references: [id])
   allocations           ReceiptAllocation[]
   entityReportLinks     EntityReportReceipt[]
   eoForms               EOForm[]
+  reprints              ReceiptReprint[]
 
   @@index([periodId])
   @@index([contactId])
   @@index([status])
+  @@index([reissuedFromId])
   @@map("receipt")
+}
+
+/// A reproduction of an issued receipt's PDF that does not touch the receipt
+/// (its own PDF and fields are frozen, invariant 7): the lost-receipt Copy and
+/// the typo-only lightweight reprint (corrections.md action 3).
+model ReceiptReprint {
+  id              String             @id @default(cuid())
+  receiptId       String
+  kind            ReceiptReprintKind
+  /// the corrected spelling printed on a CORRECTED reprint
+  correctedName   String?
+  artifactId      String
+  reason          String
+  createdByUserId String?
+  createdAt       DateTime           @default(now())
+
+  receipt         Receipt            @relation(fields: [receiptId], references: [id])
+  artifact        Artifact           @relation(fields: [artifactId], references: [id])
+
+  @@index([receiptId])
+  @@map("receipt_reprint")
 }
 
 model ReceiptAllocation {
@@ -519,6 +559,9 @@ model EntityReport {
   /// point-in-time snapshot (data-model §2 "included_set (recorded)")
   includedSet  Json             @default("{}")
   sentToCfoAt  DateTime?
+  /// set when this report went into a filed annual return; a later correction to
+  /// a receipt it covers then owes the current year's return a note (corrections.md)
+  filedAt      DateTime?
   supersededById String?        @unique
   dirty        Boolean          @default(false)
 
@@ -598,6 +641,7 @@ model Artifact {
   entityReports EntityReport[]
   eoForms       EOForm[]
   workItems     WorkItem[]
+  receiptReprints ReceiptReprint[]
 
   @@map("artifact")
 }

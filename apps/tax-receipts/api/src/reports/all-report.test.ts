@@ -214,6 +214,30 @@ describe('ALL report generator (ticket 4.1)', () => {
     expect(row).toContain(',I,Y,N,A,');
   });
 
+  it('files an issued receipt flagged lost as status L (O41, EO spec column D)', async () => {
+    const { receiptId } = await seedReportableReceipt({ amountCents: 4_000 });
+    await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'donor lost the receipt' }, async (ctx) => {
+      await ctx.tx.receipt.update({ where: { id: receiptId }, data: { lost: true } });
+      await ctx.log({ subjectType: 'Receipt', subjectId: receiptId, before: { lost: false }, after: { lost: true } });
+    });
+
+    const result = await generateAllReport(
+      { prisma, storageDir },
+      {
+        periodId: baseline.periodId,
+        entityKind: 'PARTY',
+        ridingNumber: null,
+        actorUserId: baseline.cfoUserId,
+        reason: 'generate',
+        politicalEntityLabel: label,
+      },
+    );
+
+    const row = result.csv.trimEnd().split('\n')[1]!;
+    expect(row).toContain(',L,N,N,P,');
+    expect(row).toContain(',40.00,');
+  });
+
   it('retains a cancelled receipt as a full-value row with status C (REP7)', async () => {
     await seedReportableReceipt({ amountCents: 7_500, status: 'CANCELLED' });
 

@@ -99,6 +99,8 @@ export interface LoadedReceiptRow {
   receiptId: string;
   receiptNumber: string;
   status: ReceiptStatus;
+  /** Receipt.lost: an ISSUED lost receipt files as Receipt_Status L (O41). */
+  lost: boolean;
   entityKind: EntityKind;
   ridingNumber: number | null;
   periodId: number;
@@ -193,6 +195,7 @@ export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScop
       receiptId: receipt.id,
       receiptNumber: receipt.receiptNumber,
       status: receipt.status,
+      lost: receipt.lost,
       entityKind: receipt.entityKind,
       ridingNumber: receipt.ridingNumber,
       periodId: receipt.periodId,

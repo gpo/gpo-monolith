@@ -109,6 +109,21 @@ export async function fixtureWrite<T extends { id?: string; contributions?: Arra
   });
 }
 
+/**
+ * Retire a contribution the way a correction would: SUPERSEDED, with a
+ * replacement row on the same payment (the database refuses a SUPERSEDED row
+ * that nothing replaces). The replacement is created REFUNDED so it stays out
+ * of every ACTIVE working set the calling test is asserting about.
+ */
+export async function markSuperseded(prisma: PrismaClient, contributionId: string): Promise<void> {
+  await fixtureWrite(prisma, async (tx) => {
+    const old = await tx.contribution.findUniqueOrThrow({ where: { id: contributionId } });
+    const { id: _id, createdAt: _c, updatedAt: _u, ...fields } = old;
+    await tx.contribution.create({ data: { ...fields, status: 'REFUNDED', supersedesId: old.id } });
+    return tx.contribution.update({ where: { id: old.id }, data: { status: 'SUPERSEDED' } });
+  });
+}
+
 export interface ContributionFixture {
   contactId: string;
   contributionId: string;
