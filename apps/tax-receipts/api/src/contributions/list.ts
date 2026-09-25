@@ -28,13 +28,15 @@ export interface ContributionListFilters {
 
 export interface ContributionListRow {
   id: string;
-  qomonTransactionId: string;
+  /** null for manual and legacy-imported payments */
+  qomonTransactionId: string | null;
+  source: string;
   contactName: string;
   contactEmail: string | null;
   amountCents: number;
   currency: string;
   acceptedAt: string;
-  statusKind: string;
+  paymentState: string;
   periodId: number | null;
   ridingNumber: number | null;
   entityKind: string | null;
@@ -74,7 +76,8 @@ export async function listContributions(
   if (f.entityKind) metadataWhere.entityKind = f.entityKind;
   if (f.receivedBy) metadataWhere.receivedBy = f.receivedBy;
 
-  const and: Prisma.ContributionWhereInput[] = [{ deletedInQomonAt: null }];
+  // superseded and refunded rows are history, not the working set (D12)
+  const and: Prisma.ContributionWhereInput[] = [{ status: 'ACTIVE' }];
   if (Object.keys(metadataWhere).length > 0) and.push({ metadata: { is: metadataWhere } });
   if (f.contactQuery) {
     and.push({
@@ -134,6 +137,7 @@ export async function listContributions(
     include: {
       contact: true,
       metadata: true,
+      payment: { include: { qomonLink: true } },
       allocations: { where: { receipt: { status: 'ISSUED' } }, select: { id: true } },
     },
     orderBy: [{ acceptedAt: 'desc' }, { id: 'desc' }],
@@ -161,13 +165,14 @@ export async function listContributions(
 
   const data: ContributionListRow[] = page.map((r) => ({
     id: r.id,
-    qomonTransactionId: r.qomonTransactionId.toString(),
+    qomonTransactionId: r.payment.qomonLink ? r.payment.qomonLink.qomonTransactionId.toString() : null,
+    source: r.payment.source,
     contactName: r.contact.name,
     contactEmail: r.contact.email,
     amountCents: r.amountCents,
-    currency: r.currency,
+    currency: r.payment.currency,
     acceptedAt: r.acceptedAt.toISOString(),
-    statusKind: r.statusKind,
+    paymentState: r.payment.state,
     periodId: r.metadata?.periodId ?? null,
     ridingNumber: r.metadata?.ridingNumber ?? null,
     entityKind: r.metadata?.entityKind ?? null,
@@ -176,7 +181,7 @@ export async function listContributions(
     nonDeductibleCents: r.metadata?.nonDeductibleCents ?? null,
     hasReceipt: r.allocations.length > 0,
     openValidationCount: countBySubject.get(r.id) ?? 0,
-    lastSyncedAt: r.lastSyncedAt ? r.lastSyncedAt.toISOString() : null,
+    lastSyncedAt: r.payment.qomonLink?.lastSyncedAt ? r.payment.qomonLink.lastSyncedAt.toISOString() : null,
   }));
 
   return { data, nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null };

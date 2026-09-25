@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { withChangeLog } from '../changelog/write.js';
 import { sendDonorPrechecksForSpace } from '../donors/precheck.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -20,9 +20,7 @@ describe('donor pre-check confirmation route (ticket 3.9)', () => {
     const contact = await prisma.contact.create({
       data: { qomonContactId: 1n, name: 'Dana Donor', email: 'dana@example.org' },
     });
-    const contribution = await prisma.contribution.create({
-      data: { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') },
-    });
+    const contribution = await createTestContribution(prisma, { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
         data: { contributionId: contribution.id, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },

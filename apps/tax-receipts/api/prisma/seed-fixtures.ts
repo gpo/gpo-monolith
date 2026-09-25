@@ -1,4 +1,4 @@
-import { contributionYear } from '@gpo/tax-receipts-core';
+import { contributionYear, paymentMethodFromQomon } from '@gpo/tax-receipts-core';
 import { PrismaClient } from '../src/generated/prisma/index.js';
 import { allocateToReceipt } from '../src/receipts/allocate.js';
 import { issueReceipt } from '../src/receipts/issue.js';
@@ -595,15 +595,59 @@ const GROUP_2_FIXTURES: Group2Fixture[] = [
 // ===========================================================================
 
 const GROUP_3_CONTACT = { qomonContactId: 910_001n, name: 'Consolidating Chris' };
+/** A seeded contribution is found through its Qomon link (D12): the
+ *  fixtures are keyed by a reserved Qomon transaction id, the same way an
+ *  import would key them. */
+async function findSeededContribution(qomonTransactionId: bigint) {
+  const link = await prisma.qomonTransactionLink.findUnique({
+    where: { qomonTransactionId },
+    include: { payment: { include: { contributions: true } } },
+  });
+  return link?.payment.contributions[0] ?? null;
+}
+
+/** Payment + Qomon link + initial contribution in one write, as an import
+ *  would create them. Direct insert (no change-log context): none of the
+ *  three tables is guarded by invariant 5. */
+async function createSeedContribution(args: {
+  contactId: string;
+  qomonTransactionId: bigint;
+  amountCents: number;
+  acceptedAt: Date;
+  paymentMethodKind: string;
+  externalRef?: string | null;
+}) {
+  const payment = await prisma.payment.create({
+    data: {
+      source: 'QOMON_IMPORT',
+      contactId: args.contactId,
+      amountCents: args.amountCents,
+      receivedAt: args.acceptedAt,
+      method: paymentMethodFromQomon(args.paymentMethodKind),
+      externalRef: args.externalRef ?? null,
+      qomonLink: {
+        create: {
+          qomonTransactionId: args.qomonTransactionId,
+          qomonPaymentMethodKind: args.paymentMethodKind,
+          lastSyncedAt: new Date(),
+        },
+      },
+      contributions: {
+        create: { contactId: args.contactId, amountCents: args.amountCents, acceptedAt: args.acceptedAt },
+      },
+    },
+    include: { contributions: true },
+  });
+  return payment.contributions[0]!;
+}
+
 const GROUP_3_CONTRIBUTIONS = [
   { qomonTransactionId: 910_001n, amountCents: 4_000, acceptedAt: '2028-03-05T12:00:00Z' },
   { qomonTransactionId: 910_002n, amountCents: 2_500, acceptedAt: '2028-03-10T12:00:00Z' },
 ];
 
 async function ensureGroup3(cfoUserId: string): Promise<void> {
-  const existing = await prisma.contribution.findUnique({
-    where: { qomonTransactionId: GROUP_3_CONTRIBUTIONS[0]!.qomonTransactionId },
-  });
+  const existing = await findSeededContribution(GROUP_3_CONTRIBUTIONS[0]!.qomonTransactionId);
   if (existing) {
     console.log('  skip (already seeded): Consolidating Chris — allocation consolidation (ticket 3.2)');
     return;
@@ -616,14 +660,12 @@ async function ensureGroup3(cfoUserId: string): Promise<void> {
 
   const contributionIds: string[] = [];
   for (const c of GROUP_3_CONTRIBUTIONS) {
-    const contribution = await prisma.contribution.create({
-      data: {
-        contactId: contact.id,
-        qomonTransactionId: c.qomonTransactionId,
-        amountCents: c.amountCents,
-        acceptedAt: new Date(c.acceptedAt),
-        paymentMethodKind: 'card',
-      },
+    const contribution = await createSeedContribution({
+      contactId: contact.id,
+      qomonTransactionId: c.qomonTransactionId,
+      amountCents: c.amountCents,
+      acceptedAt: new Date(c.acceptedAt),
+      paymentMethodKind: 'card',
     });
     await withChangeLog(prisma, { userId: null, reason: 'phase-3 fixture: allocation consolidation (ticket 3.2)' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
@@ -704,9 +746,7 @@ async function ensurePeriod(id: number, name: string, kind: 'ANNUAL' | 'BY_ELECT
 }
 
 async function ensureGroup1Fixture(f: Group1Fixture): Promise<void> {
-  const existingContribution = await prisma.contribution.findUnique({
-    where: { qomonTransactionId: f.qomonTransactionId },
-  });
+  const existingContribution = await findSeededContribution(f.qomonTransactionId);
   if (existingContribution) {
     console.log(`  skip (already seeded): ${f.demonstrates}`);
     return;
@@ -724,15 +764,13 @@ async function ensureGroup1Fixture(f: Group1Fixture): Promise<void> {
     });
   }
 
-  const contribution = await prisma.contribution.create({
-    data: {
-      contactId: contact.id,
-      qomonTransactionId: f.qomonTransactionId,
-      amountCents: f.amountCents,
-      acceptedAt: new Date(f.acceptedAt),
-      paymentMethodKind: f.paymentMethodKind ?? 'card',
-      externalRef: f.externalRef ?? null,
-    },
+  const contribution = await createSeedContribution({
+    contactId: contact.id,
+    qomonTransactionId: f.qomonTransactionId,
+    amountCents: f.amountCents,
+    acceptedAt: new Date(f.acceptedAt),
+    paymentMethodKind: f.paymentMethodKind ?? 'card',
+    externalRef: f.externalRef ?? null,
   });
 
   await withChangeLog(prisma, { userId: null, reason: `fixture: ${f.demonstrates}` }, async (ctx) => {
@@ -752,9 +790,7 @@ async function ensureGroup1Fixture(f: Group1Fixture): Promise<void> {
 }
 
 async function ensureGroup2Fixture(f: Group2Fixture, cfoUserId: string): Promise<void> {
-  const existingContribution = await prisma.contribution.findUnique({
-    where: { qomonTransactionId: f.qomonTransactionId },
-  });
+  const existingContribution = await findSeededContribution(f.qomonTransactionId);
   if (existingContribution) {
     console.log(`  skip (already seeded): ${f.contactName} — ${f.demonstrates}`);
     return;
@@ -772,14 +808,12 @@ async function ensureGroup2Fixture(f: Group2Fixture, cfoUserId: string): Promise
   }
 
   const acceptedAt = new Date(f.acceptedAt);
-  const contribution = await prisma.contribution.create({
-    data: {
-      contactId: contact.id,
-      qomonTransactionId: f.qomonTransactionId,
-      amountCents: f.amountCents,
-      acceptedAt,
-      paymentMethodKind: 'card',
-    },
+  const contribution = await createSeedContribution({
+    contactId: contact.id,
+    qomonTransactionId: f.qomonTransactionId,
+    amountCents: f.amountCents,
+    acceptedAt,
+    paymentMethodKind: 'card',
   });
 
   await withChangeLog(prisma, { userId: null, reason: `fixture: ${f.demonstrates}` }, async (ctx) => {
@@ -864,7 +898,7 @@ async function main(): Promise<void> {
   // nothing about the missing address actually changed) clears the gate the
   // same way a rules authority granting a real exception would, while
   // leaving the underlying data gap exactly as missing as before.
-  const nedContribution = await prisma.contribution.findUnique({ where: { qomonTransactionId: 900_008n } });
+  const nedContribution = await findSeededContribution(900_008n);
   if (nedContribution) {
     const c1Item = await prisma.workItem.findFirst({
       where: { subjectType: 'Contribution', subjectId: nedContribution.id, ruleRef: 'C1', status: 'OPEN' },

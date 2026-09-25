@@ -5,9 +5,9 @@ import { PDFDocument } from 'pdf-lib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setKillSwitch } from '../auth/kill-switch.js';
 import { withChangeLog } from '../changelog/write.js';
-import { ContributionNotFoundError } from '../contributions/metadata-write-through.js';
+import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
 import type { Prisma } from '../generated/prisma/index.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import {
   AllocationOverageError,
   MissingAddressError,
@@ -42,14 +42,12 @@ describe('receipt issuance (ticket 3.1)', () => {
   }
 
   async function seedContribution(contactId: string, amountCents = 5_000) {
-    return prisma.contribution.create({
-      data: {
+    return createTestContribution(prisma, {
         qomonTransactionId: BigInt(nextTransactionId++),
         contactId,
         amountCents,
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
   }
 
   async function seedMetadata(contributionId: string, overrides: Record<string, unknown> = {}) {

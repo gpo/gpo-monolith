@@ -4,7 +4,7 @@ import {
   type AllocationRow,
 } from '@gpo/tax-receipts-core';
 import { withChangeLog } from '../changelog/write.js';
-import { ContributionNotFoundError } from '../contributions/metadata-write-through.js';
+import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
 import type { PrismaClient, ReceiptAllocation } from '../generated/prisma/index.js';
 import { AllocationOverageError, ReceiptIssuanceValidationError } from './issue.js';
 

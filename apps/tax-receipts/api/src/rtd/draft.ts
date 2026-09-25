@@ -125,12 +125,12 @@ export async function buildRtdDraft(prisma: PrismaClient, input: RtdDraftInput):
 
   const contributions = await prisma.contribution.findMany({
     where: {
-      deletedInQomonAt: null,
+      status: 'ACTIVE',
       // Only a landed deposit counts toward RTD disclosure — unpaid,
-      // reimbursed, and bank-error transactions never actually deposited
+      // reimbursed, and bank-error payments never actually deposited
       // (open-questions.md O42: this filter isn't spelled out verbatim in
       // eo-reporting.md, flagged rather than assumed silently).
-      statusKind: 'valid',
+      payment: { state: 'RECEIVED' },
       acceptedAt: { gte: rangeStart, lt: rangeEnd },
       // RTD "covers monetary contributions to the central party only"
       // (eo-reporting.md §1): party-directed, and not goods & services.

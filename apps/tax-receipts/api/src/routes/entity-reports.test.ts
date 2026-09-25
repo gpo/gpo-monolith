@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
-import { issueReceipt as fixtureIssueReceipt, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { issueReceipt as fixtureIssueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -40,14 +40,12 @@ describe('entity report routes (ticket 4.5)', () => {
         ],
       },
     });
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         qomonTransactionId: 1n,
         contactId: contact.id,
         amountCents: 5_000,
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
     contributionId = contribution.id;
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
@@ -164,9 +162,7 @@ describe('entity report routes (ticket 4.5)', () => {
       const after = await ctx.tx.contributionMetadata.create({
         data: {
           contributionId: (
-            await prisma.contribution.create({
-              data: { qomonTransactionId: 2n, contactId: (await prisma.contact.findFirstOrThrow()).id, amountCents: 1_000, acceptedAt: new Date('2026-03-01T12:00:00Z') },
-            })
+            await createTestContribution(prisma, { qomonTransactionId: 2n, contactId: (await prisma.contact.findFirstOrThrow()).id, amountCents: 1_000, acceptedAt: new Date('2026-03-01T12:00:00Z') })
           ).id,
           periodId: baseline.periodId,
           entityKind: 'CAMPAIGN',

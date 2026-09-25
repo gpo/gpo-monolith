@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import type { ContributionStatusKind, EntityKind } from '../generated/prisma/index.js';
-import { makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import type { EntityKind, PaymentState } from '../generated/prisma/index.js';
+import { makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import { buildRtdDraft, getRtdGateFindings } from './draft.js';
 
 const prisma = testPrisma();
@@ -47,9 +47,12 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
   async function seedPartyContribution(opts: {
     amountCents: number;
     acceptedAt?: Date;
-    statusKind?: ContributionStatusKind;
+    paymentState?: PaymentState;
     entityKind?: EntityKind;
     goodsServices?: boolean;
+    /** the contribution was replaced by a correction (D12) */
+    superseded?: boolean;
+    /** the Qomon transaction later vanished (D12: changes nothing here) */
     deletedInQomonAt?: Date | null;
     /** attach to an existing contact instead of creating a new one — the
      *  only way to get two contributions under one contact, since
@@ -72,14 +75,12 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
       return { contactId, contributionId: made.contributionId };
     }
 
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         qomonTransactionId: nextTxId++,
         contactId,
         amountCents: opts.amountCents,
         acceptedAt: opts.acceptedAt ?? new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
     await maybeUpdateStatus(contribution.id, opts);
     await seedMetadata(contribution.id, { entityKind: opts.entityKind, goodsServices: opts.goodsServices });
     return { contactId, contributionId: contribution.id };
@@ -87,16 +88,20 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
 
   async function maybeUpdateStatus(
     contributionId: string,
-    opts: { statusKind?: ContributionStatusKind; deletedInQomonAt?: Date | null },
+    opts: { paymentState?: PaymentState; superseded?: boolean; deletedInQomonAt?: Date | null },
   ) {
-    if (opts.statusKind || opts.deletedInQomonAt !== undefined) {
-      await prisma.contribution.update({
-        where: { id: contributionId },
-        data: {
-          statusKind: opts.statusKind ?? 'valid',
-          deletedInQomonAt: opts.deletedInQomonAt ?? null,
-        },
+    const contribution = await prisma.contribution.findUniqueOrThrow({ where: { id: contributionId } });
+    if (opts.paymentState) {
+      await prisma.payment.update({ where: { id: contribution.paymentId }, data: { state: opts.paymentState } });
+    }
+    if (opts.deletedInQomonAt !== undefined) {
+      await prisma.qomonTransactionLink.update({
+        where: { paymentId: contribution.paymentId },
+        data: { deletedInQomonAt: opts.deletedInQomonAt },
       });
+    }
+    if (opts.superseded) {
+      await prisma.contribution.update({ where: { id: contributionId }, data: { status: 'SUPERSEDED' } });
     }
   }
 
@@ -132,16 +137,22 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
     expect(draft.rows).toHaveLength(0);
   });
 
-  it('excludes contributions that never landed (non-valid status)', async () => {
-    await seedPartyContribution({ amountCents: 50_000, statusKind: 'unpaid' });
+  it('excludes contributions whose payment never landed (state other than RECEIVED)', async () => {
+    await seedPartyContribution({ amountCents: 50_000, paymentState: 'UNPAID' });
     const draft = await buildRtdDraft(prisma, { year: 2026 });
     expect(draft.rows).toHaveLength(0);
   });
 
-  it('excludes contributions deleted in Qomon', async () => {
-    await seedPartyContribution({ amountCents: 50_000, deletedInQomonAt: new Date('2026-03-02T00:00:00Z') });
+  it('excludes superseded contributions (history, not the working set)', async () => {
+    await seedPartyContribution({ amountCents: 50_000, superseded: true });
     const draft = await buildRtdDraft(prisma, { year: 2026 });
     expect(draft.rows).toHaveLength(0);
+  });
+
+  it('still includes a contribution whose Qomon transaction later vanished (D12: Qomon deletion changes nothing)', async () => {
+    await seedPartyContribution({ amountCents: 50_000, deletedInQomonAt: new Date('2026-03-02T00:00:00Z') });
+    const draft = await buildRtdDraft(prisma, { year: 2026 });
+    expect(draft.rows).toHaveLength(1);
   });
 
   it('scopes to the requested calendar year', async () => {

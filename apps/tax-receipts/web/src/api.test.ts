@@ -16,10 +16,10 @@ afterEach(() => {
 });
 
 test('a bodyless POST does not send a Content-Type header', async () => {
-  const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse({ outcome: 'unchanged' }));
+  const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse({ ok: true }));
   vi.stubGlobal('fetch', fetchMock);
 
-  await api.refreshContribution('c1');
+  await api.logout();
 
   const init = fetchMock.mock.calls[0]?.[1];
   expect(init?.headers).not.toHaveProperty('Content-Type');

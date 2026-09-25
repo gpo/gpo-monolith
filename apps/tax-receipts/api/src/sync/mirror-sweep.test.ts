@@ -6,7 +6,7 @@ import { runMirrorSweep } from './mirror-sweep.js';
 
 const prisma = testPrisma();
 
-describe('mirror sweep (ticket 1.1, data-model §5)', () => {
+describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
   let baseline: Awaited<ReturnType<typeof seedBaseline>>;
 
   beforeEach(async () => {
@@ -14,7 +14,7 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
     baseline = await seedBaseline(prisma);
   });
 
-  it('mirrors a new transaction, applies the 1.6-stub intake defaults, opens a validation work item, and fetches the contact on demand', async () => {
+  it('imports a new transaction as a payment + link + contribution, applies the 1.6-stub intake defaults, opens a validation work item, and fetches the contact on demand', async () => {
     const qomon = new InMemoryQomon();
     qomon.seedContact({
       id: 501,
@@ -33,6 +33,7 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
           currency: 'cad',
           date: '2026-03-01T12:00:00.000Z',
           status_id: 1, // "Valid" in the fake's default statuses
+          payment_method_kind: 'CHE',
           code_campaign: 'NC.W.DON.DBK.BTN50',
         },
       ],
@@ -41,13 +42,27 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
 
     const result = await runMirrorSweep({ prisma, feed, qomon });
 
-    expect(result).toMatchObject({ created: 1, refreshed: 0, diffQueued: 0, unchanged: 0 });
+    expect(result).toMatchObject({ created: 1, backfilled: 0, changedInQomon: 0, unchanged: 0 });
 
     const contribution = await prisma.contribution.findFirst({
-      include: { metadata: true, contact: true },
+      include: { metadata: true, contact: true, payment: { include: { qomonLink: true } } },
     });
     expect(contribution?.amountCents).toBe(5_000);
-    expect(contribution?.statusKind).toBe('valid');
+    expect(contribution?.status).toBe('ACTIVE');
+    // the money fact lives on the payment, mapped from Qomon's vocabulary
+    expect(contribution?.payment).toMatchObject({
+      source: 'QOMON_IMPORT',
+      amountCents: 5_000,
+      method: 'CHEQUE',
+      state: 'RECEIVED',
+      contactId: contribution?.contactId,
+    });
+    // Qomon provenance lives on the link, raw values preserved
+    expect(contribution?.payment.qomonLink).toMatchObject({
+      qomonPaymentMethodKind: 'CHE',
+      codeCampaign: 'NC.W.DON.DBK.BTN50',
+      deletedInQomonAt: null,
+    });
     expect(contribution?.contact.name).toBe('Dana Donor');
     expect(contribution?.metadata).toMatchObject({
       periodId: baseline.periodId,
@@ -69,10 +84,13 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
     ]);
     expect(workItems.every((w) => w.kind === 'VALIDATION' && w.status === 'OPEN')).toBe(true);
 
-    // the sweep's own metadata writes go through the guarded change-log path
-    const entries = await prisma.changeLogEntry.findMany({ where: { subjectType: 'ContributionMetadata' } });
-    expect(entries).toHaveLength(1);
-    expect(entries[0]?.actorUserId).toBeNull(); // system actor
+    // the import's writes go through the guarded change-log path, one entry
+    // per created row, all in one cascade
+    const entries = await prisma.changeLogEntry.findMany();
+    expect(entries.map((e) => e.subjectType).sort()).toEqual(['Contribution', 'ContributionMetadata', 'Payment']);
+    expect(new Set(entries.map((e) => e.correlationId)).size).toBe(1);
+    expect(entries.every((e) => e.actorUserId === null)).toBe(true); // system actor
+    expect(contribution?.correlationId).toBe(entries[0]?.correlationId);
 
     // a second transaction for the same Qomon contact reuses the local Contact row
     // (explicit far-future CreatedAt so the incremental cursor is guaranteed to pick it up)
@@ -165,28 +183,49 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
     expect(contribution?.metadata).toMatchObject({ periodId: 2020 });
   });
 
-  it('refreshes the cache directly for a non-receipted, non-reported contribution that changed', async () => {
-    const qomonA = new InMemoryQomon();
-    qomonA.seedContact({ id: 10, firstname: 'Chris', surname: 'Contributor' });
-    const bundle = qomonA.seedBundle({
+  it('records a Qomon-side edit on the link and opens one sync incident, changing nothing local (D12, O47)', async () => {
+    const qomon = new InMemoryQomon();
+    qomon.seedContact({ id: 10, firstname: 'Chris', surname: 'Contributor' });
+    const bundle = qomon.seedBundle({
       transactions: [{ contact_id: 10, amount: 2_000, date: '2026-04-01T00:00:00.000Z', status_id: 1 }],
     });
-    const feedA = new QomonPollChangeFeed(qomonA);
-    await runMirrorSweep({ prisma, feed: feedA, qomon: qomonA });
+    const feed = new QomonPollChangeFeed(qomon);
+    await runMirrorSweep({ prisma, feed, qomon });
+    const before = await prisma.qomonTransactionLink.findFirstOrThrow();
 
-    await qomonA.patchTransactionBundle({
+    await qomon.patchTransactionBundle({
       id: bundle.id,
       transactions: [{ id: bundle.transactions[0]!.id, amount: 9_999 }],
     });
-    const result = await runMirrorSweep({ prisma, feed: feedA, qomon: qomonA }, { mode: 'full' });
-    expect(result).toMatchObject({ refreshed: 1, diffQueued: 0 });
+    const result = await runMirrorSweep({ prisma, feed, qomon }, { mode: 'full' });
+    expect(result).toMatchObject({ changedInQomon: 1, backfilled: 0, created: 0 });
 
-    const contribution = await prisma.contribution.findFirst();
-    expect(contribution?.amountCents).toBe(9_999);
-    expect(await prisma.workItem.count({ where: { kind: 'DIFF' } })).toBe(0);
+    // the payment and contribution are exactly as imported
+    const contribution = await prisma.contribution.findFirstOrThrow({ include: { payment: true } });
+    expect(contribution.amountCents).toBe(2_000);
+    expect(contribution.payment.amountCents).toBe(2_000);
+    // the link moved its hash forward, so the same edit is not re-detected
+    const after = await prisma.qomonTransactionLink.findFirstOrThrow();
+    expect(after.syncHash).not.toBe(before.syncHash);
+
+    const incidents = await prisma.workItem.findMany({ where: { kind: 'SYNC_INCIDENT' } });
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0]).toMatchObject({ subjectType: 'Payment', subjectId: contribution.paymentId, status: 'OPEN' });
+
+    // sweeping again with no further edit finds nothing new
+    const again = await runMirrorSweep({ prisma, feed, qomon }, { mode: 'full' });
+    expect(again).toMatchObject({ changedInQomon: 0, unchanged: 1 });
+
+    // a second edit before anyone resolves the first does not pile up incidents
+    await qomon.patchTransactionBundle({
+      id: bundle.id,
+      transactions: [{ id: bundle.transactions[0]!.id, amount: 1 }],
+    });
+    await runMirrorSweep({ prisma, feed, qomon }, { mode: 'full' });
+    expect(await prisma.workItem.count({ where: { kind: 'SYNC_INCIDENT' } })).toBe(1);
   });
 
-  it('routes a change to a receipted contribution into the diff queue instead of overwriting it', async () => {
+  it('leaves a receipted contribution and its receipt untouched when Qomon later edits the transaction', async () => {
     const qomon = new InMemoryQomon();
     qomon.seedContact({ id: 11, firstname: 'Pat', surname: 'Payer' });
     const bundle = qomon.seedBundle({
@@ -209,23 +248,15 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
       transactions: [{ id: bundle.transactions[0]!.id, amount: 1 }],
     });
     const result = await runMirrorSweep({ prisma, feed, qomon }, { mode: 'full' });
-    expect(result).toMatchObject({ diffQueued: 1, refreshed: 0 });
+    expect(result).toMatchObject({ changedInQomon: 1 });
 
-    // the mirror row is untouched: the correction workflow owns this change, not the sweep
+    // corrections happen only in the tool: the issued receipt still backs the full amount
     const unchanged = await prisma.contribution.findUniqueOrThrow({ where: { id: contribution.id } });
     expect(unchanged.amountCents).toBe(10_000);
-
-    const diffItems = await prisma.workItem.findMany({ where: { kind: 'DIFF' } });
-    expect(diffItems).toHaveLength(1);
-    expect(diffItems[0]).toMatchObject({
-      subjectType: 'Contribution',
-      subjectId: contribution.id,
-      status: 'OPEN',
-    });
-
-    // re-sweeping without resolving the diff does not pile up duplicate items
-    await runMirrorSweep({ prisma, feed, qomon }, { mode: 'full' });
-    expect(await prisma.workItem.count({ where: { kind: 'DIFF' } })).toBe(1);
+    expect(await prisma.receipt.count({ where: { status: 'ISSUED' } })).toBe(1);
+    expect(await prisma.workItem.count({ where: { kind: 'SYNC_INCIDENT', status: 'OPEN' } })).toBe(1);
+    // and no legacy diff-queue item: attribution is not read from Qomon anymore
+    expect(await prisma.workItem.count({ where: { kind: 'DIFF' } })).toBe(0);
   });
 
   it('flags a Qomon-side deletion as a sync incident, never a silent removal (invariant 4)', async () => {
@@ -244,10 +275,14 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
     const result = await runMirrorSweep({ prisma, feed: feedB, qomon: qomonB }, { mode: 'full' });
     expect(result.syncIncidents).toBe(1);
 
+    // only the link is flagged: the payment and its contributions are untouched (invariant 4, D12)
+    const link = await prisma.qomonTransactionLink.findFirstOrThrow();
+    expect(link.deletedInQomonAt).not.toBeNull();
     const after = await prisma.contribution.findUniqueOrThrow({ where: { id: contribution.id } });
-    expect(after.deletedInQomonAt).not.toBeNull();
+    expect(after.status).toBe('ACTIVE');
     const incidents = await prisma.workItem.findMany({ where: { kind: 'SYNC_INCIDENT' } });
     expect(incidents).toHaveLength(1);
+    expect(incidents[0]).toMatchObject({ subjectType: 'Payment', subjectId: after.paymentId });
   });
 
   it('is idempotent across incremental sweeps: nothing new means nothing pulled, using the persisted cursor', async () => {
@@ -263,10 +298,10 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
     expect(await prisma.syncCursor.findUnique({ where: { feedKind: 'qomon-poll' } })).not.toBeNull();
 
     const second = await runMirrorSweep({ prisma, feed, qomon });
-    expect(second).toMatchObject({ pulled: 0, created: 0, refreshed: 0, diffQueued: 0, unchanged: 0 });
+    expect(second).toMatchObject({ pulled: 0, created: 0, backfilled: 0, changedInQomon: 0, unchanged: 0 });
   });
 
-  it('caches the six Qomon-synced fields directly from an already-present `extra_json`, defaulting the tool-local fields (period_id/riding_number/entity_kind/goods_services/processed_date/source_code sync through Qomon; received_by/non_deductible_cents/eo_contributor_id/exception_reason/external_ref do not)', async () => {
+  it('takes the six Qomon-synced fields from an already-present `extra_json` at import, defaulting the tool-local fields (period_id/riding_number/entity_kind/goods_services/processed_date/source_code sync through Qomon; received_by/non_deductible_cents/eo_contributor_id/exception_reason/external_ref do not)', async () => {
     const qomon = new InMemoryQomon();
     qomon.seedContact({ id: 14, firstname: 'Al', surname: 'Ready' });
     qomon.seedBundle({
@@ -299,6 +334,7 @@ describe('mirror sweep (ticket 1.1, data-model §5)', () => {
       // intake-derivation (intake/defaults.ts), not read from extra_json
       receivedBy: 'GPO',
     });
-    expect(contribution?.metadata?.checksum).not.toBeNull();
+    // intake input only (D12): no Qomon checksum is tracked or compared any more
+    expect(contribution?.metadata?.checksum).toBeNull();
   });
 });

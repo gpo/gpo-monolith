@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -37,15 +37,13 @@ describe('PATCH /contributions/:id/metadata (ticket 1.2)', () => {
       data: { passwordHash: await hashPassword('admin-pass-phrase') },
     });
     const contact = await prisma.contact.create({ data: { qomonContactId: 1n, name: 'Dana Donor' } });
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         qomonTransactionId: 1001n,
         qomonBundleId: 2001n,
         contactId: contact.id,
         amountCents: 5_000,
         acceptedAt: new Date('2026-03-01T00:00:00Z'),
-      },
-    });
+      });
     contributionId = contribution.id;
   });
 
@@ -53,7 +51,7 @@ describe('PATCH /contributions/:id/metadata (ticket 1.2)', () => {
     await app.close();
   });
 
-  it('returns 501 when no Qomon client is configured', async () => {
+  it('edits locally with no Qomon client configured (D12: the tool owns contributions)', async () => {
     app = await buildApp({ prisma, sessionSecret: SECRET });
     await app.ready();
     const login = await app.inject({
@@ -68,13 +66,13 @@ describe('PATCH /contributions/:id/metadata (ticket 1.2)', () => {
       cookies: { [cookie.name]: cookie.value },
       payload: body,
     });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ridingNumber: 84, entityKind: 'CA' });
+    expect(await prisma.changeLogEntry.count({ where: { subjectType: 'ContributionMetadata' } })).toBe(1);
   });
 
-  it('writes through on a valid edit by a permitted role', async () => {
-    const qomon = new InMemoryQomon();
-    qomon.seedBundle({ id: 2001, transactions: [{ id: 1001, contact_id: 1 }] });
-    app = await buildApp({ prisma, sessionSecret: SECRET, qomon });
+  it('saves a valid edit by a permitted role', async () => {
+    app = await buildApp({ prisma, sessionSecret: SECRET });
     await app.ready();
 
     const login = await app.inject({
@@ -93,6 +91,44 @@ describe('PATCH /contributions/:id/metadata (ticket 1.2)', () => {
     expect(res.json()).toMatchObject({ ridingNumber: 84, entityKind: 'CA' });
   });
 
+  async function loginCookie() {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'admin@gpo.test', password: 'admin-pass-phrase' },
+    });
+    return login.cookies[0]!;
+  }
+
+  it('POST refresh-contact returns 501 when no Qomon client is configured (contacts stay Qomon-owned)', async () => {
+    app = await buildApp({ prisma, sessionSecret: SECRET });
+    await app.ready();
+    const cookie = await loginCookie();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/contributions/${contributionId}/refresh-contact`,
+      cookies: { [cookie.name]: cookie.value },
+    });
+    expect(res.statusCode).toBe(501);
+  });
+
+  it('POST refresh-contact refreshes the donor from Qomon when configured', async () => {
+    const qomon = new InMemoryQomon();
+    qomon.seedContact({ id: 1, firstname: 'Dana', surname: 'Donor', mail: 'new@example.org' });
+    app = await buildApp({ prisma, sessionSecret: SECRET, qomon });
+    await app.ready();
+    const cookie = await loginCookie();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/contributions/${contributionId}/refresh-contact`,
+      cookies: { [cookie.name]: cookie.value },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ outcome: 'refreshed' });
+    const contact = await prisma.contact.findFirstOrThrow({ where: { qomonContactId: 1n } });
+    expect(contact.email).toBe('new@example.org');
+  });
+
   it('rejects an edit from a role with no update permission', async () => {
     await prisma.user.create({
       data: {
@@ -103,7 +139,7 @@ describe('PATCH /contributions/:id/metadata (ticket 1.2)', () => {
         allRidings: true,
       },
     });
-    app = await buildApp({ prisma, sessionSecret: SECRET, qomon: new InMemoryQomon() });
+    app = await buildApp({ prisma, sessionSecret: SECRET });
     await app.ready();
 
     const login = await app.inject({
@@ -148,9 +184,7 @@ describe('GET /contributions (ticket 1.3)', () => {
 
   it('lists mirrored contributions for an authenticated user, filterable by query params', async () => {
     const contact = await prisma.contact.create({ data: { qomonContactId: 99n, name: 'Dana Donor' } });
-    await prisma.contribution.create({
-      data: { contactId: contact.id, qomonTransactionId: 99n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') },
-    });
+    await createTestContribution(prisma, { contactId: contact.id, qomonTransactionId: 99n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') });
 
     const login = await app.inject({
       method: 'POST',
@@ -185,15 +219,13 @@ describe('POST /contributions/bulk-edit (ticket 1.4)', () => {
       data: { passwordHash: await hashPassword('admin-pass-phrase') },
     });
     const contact = await prisma.contact.create({ data: { qomonContactId: 500n, name: 'Dana Donor' } });
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         qomonTransactionId: 501n,
         qomonBundleId: 502n,
         contactId: contact.id,
         amountCents: 5_000,
         acceptedAt: new Date('2026-03-01T00:00:00Z'),
-      },
-    });
+      });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
         data: { contributionId: contribution.id, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },
@@ -208,9 +240,7 @@ describe('POST /contributions/bulk-edit (ticket 1.4)', () => {
   });
 
   it('applies a bulk edit end to end through the HTTP layer', async () => {
-    const qomon = new InMemoryQomon();
-    qomon.seedBundle({ id: 502, transactions: [{ id: 501, contact_id: 500 }] });
-    app = await buildApp({ prisma, sessionSecret: SECRET, qomon });
+    app = await buildApp({ prisma, sessionSecret: SECRET });
     await app.ready();
 
     const login = await app.inject({
@@ -234,7 +264,7 @@ describe('POST /contributions/bulk-edit (ticket 1.4)', () => {
   });
 
   it('rejects an empty changes body at the schema level', async () => {
-    app = await buildApp({ prisma, sessionSecret: SECRET, qomon: new InMemoryQomon() });
+    app = await buildApp({ prisma, sessionSecret: SECRET });
     await app.ready();
     const login = await app.inject({
       method: 'POST',

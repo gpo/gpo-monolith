@@ -4,7 +4,7 @@ import path from 'node:path';
 import { standardOntarioEsaHolidays } from '@gpo/tax-receipts-core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import { buildRtdDraft } from './draft.js';
 import { prepareRtdFiling } from './prepare.js';
 
@@ -97,14 +97,12 @@ describe('December-straddle case (ticket 2.7)', () => {
     firstName?: string;
   }) {
     if (opts.contactId) {
-      const contribution = await prisma.contribution.create({
-        data: {
+      const contribution = await createTestContribution(prisma, {
           qomonTransactionId: nextTxId++,
           contactId: opts.contactId,
           amountCents: opts.amountCents,
           acceptedAt: opts.acceptedAt,
-        },
-      });
+        });
       await seedMetadata(contribution.id, opts.periodId);
       return { contactId: opts.contactId, contributionId: contribution.id };
     }

@@ -6,16 +6,17 @@ import { z } from 'zod';
 import { BULK_EDIT_MAX_ROWS, bulkEditContributionMetadata } from '../contributions/bulk-edit.js';
 import { getContributionDetail } from '../contributions/detail.js';
 import { listContributions } from '../contributions/list.js';
-import { writeContributionMetadata } from '../contributions/metadata-write-through.js';
-import { refreshContributionFromQomon } from '../contributions/refresh.js';
+import { editContributionMetadata } from '../contributions/metadata-edit.js';
+import { refreshContributionContact } from '../contributions/refresh-contact.js';
 import type { SessionUser } from '../plugins/auth.js';
 
 /**
  * Contributions list (ticket 1.3, screens.md 2), detail (ticket 1.5,
- * screens.md 3), metadata write-through (ticket 1.2), and bulk edit
- * (ticket 1.4). The write, bulk-edit, and refresh routes register always
- * but return 501 until a Qomon client is configured; the read routes need
- * no such client (they only read the local mirror).
+ * screens.md 3), metadata edit (ticket 1.2), and bulk edit (ticket 1.4).
+ * The tool owns contributions (D12), so the edit and bulk-edit routes work on
+ * the local database only. The one route that talks to Qomon is the donor
+ * refresh, because contacts stay Qomon-owned; it returns 501 until a Qomon
+ * client is configured.
  */
 export async function contributionRoutes(
   app: FastifyInstance,
@@ -93,7 +94,7 @@ export async function contributionRoutes(
 
   r.route({
     method: 'POST',
-    url: '/contributions/:id/refresh',
+    url: '/contributions/:id/refresh-contact',
     schema: { params: z.object({ id: z.string() }) },
     handler: async (request, reply) => {
       const user = request.user as SessionUser | undefined;
@@ -101,9 +102,9 @@ export async function contributionRoutes(
       if (!opts.qomon) {
         return reply
           .code(501)
-          .send({ error: 'Qomon is not configured (QOMON_API_KEY unset); cannot refresh' });
+          .send({ error: 'Qomon is not configured (QOMON_API_KEY unset); cannot refresh the donor' });
       }
-      const outcome = await refreshContributionFromQomon(app.prisma, opts.qomon, request.params.id);
+      const outcome = await refreshContributionContact(app.prisma, opts.qomon, request.params.id);
       return reply.send({ outcome });
     },
   });
@@ -138,13 +139,8 @@ export async function contributionRoutes(
       if (!request.ability.can('update', 'ContributionMetadata')) {
         return reply.code(403).send({ error: 'not permitted to edit contribution metadata' });
       }
-      if (!opts.qomon) {
-        return reply
-          .code(501)
-          .send({ error: 'Qomon is not configured (QOMON_API_KEY unset); cannot write through' });
-      }
       const result = await bulkEditContributionMetadata(
-        { prisma: app.prisma, qomon: opts.qomon },
+        { prisma: app.prisma },
         {
           contributionIds: request.body.contributionIds,
           actorUserId: user.id,
@@ -184,11 +180,6 @@ export async function contributionRoutes(
       if (!request.ability.can('update', 'ContributionMetadata')) {
         return reply.code(403).send({ error: 'not permitted to edit contribution metadata' });
       }
-      if (!opts.qomon) {
-        return reply
-          .code(501)
-          .send({ error: 'Qomon is not configured (QOMON_API_KEY unset); cannot write through' });
-      }
 
       const { reason, ...d } = request.body;
       const descriptive: GpoMetadataDescriptive = {
@@ -205,8 +196,8 @@ export async function contributionRoutes(
         external_ref: d.externalRef,
       };
 
-      const updated = await writeContributionMetadata(
-        { prisma: app.prisma, qomon: opts.qomon },
+      const updated = await editContributionMetadata(
+        { prisma: app.prisma },
         {
           contributionId: request.params.id,
           actorUserId: user.id,

@@ -2,28 +2,44 @@ import { formatAddress, type FormattedAddress } from '../contacts/address.js';
 import type { PrismaClient } from '../generated/prisma/index.js';
 
 /**
- * Contribution detail (ticket 1.5, screens.md 3): one transaction's Qomon
- * facts, editable metadata, allocations/receipts, RTD inclusions,
- * WorkItems, and its slice of the change-log. Sync state (`lastSyncedAt`,
- * `deletedInQomonAt`) is what "cache age, last Qomon fetch" renders from.
+ * Contribution detail (ticket 1.5, screens.md 3): one contribution, the
+ * payment behind it, editable metadata, allocations/receipts, RTD
+ * inclusions, WorkItems, and its slice of the change-log. `qomon` is import
+ * provenance for payments that came from a Qomon transaction (null for
+ * manual entries); its sync state is what "last seen in Qomon" renders from.
  */
 
 export interface ContributionDetail {
   id: string;
-  qomonTransactionId: string;
-  qomonBundleId: string | null;
+  status: string;
+  supersedesId: string | null;
   contact: { id: string; name: string; email: string | null; address: FormattedAddress | null };
   amountCents: number;
-  currency: string;
   acceptedAt: string;
-  paymentMethodKind: string | null;
-  statusKind: string;
-  codeCampaign: string | null;
-  comment: string | null;
-  externalRef: string | null;
-  firstSeenAt: string;
-  lastSyncedAt: string | null;
-  deletedInQomonAt: string | null;
+  note: string | null;
+  /** the money event behind this contribution (D12) */
+  payment: {
+    id: string;
+    source: string;
+    method: string;
+    state: string;
+    amountCents: number;
+    currency: string;
+    receivedAt: string;
+    externalRef: string | null;
+    payerName: string | null;
+    note: string | null;
+  };
+  /** import provenance; null for MANUAL and LEGACY_IMPORT payments */
+  qomon: {
+    transactionId: string;
+    bundleId: string | null;
+    paymentMethodKind: string | null;
+    codeCampaign: string | null;
+    firstSeenAt: string;
+    lastSyncedAt: string | null;
+    deletedInQomonAt: string | null;
+  } | null;
   metadata: {
     periodId: number;
     ridingNumber: number | null;
@@ -82,6 +98,7 @@ export async function getContributionDetail(
     include: {
       contact: true,
       metadata: true,
+      payment: { include: { qomonLink: true } },
       allocations: { include: { receipt: true } },
       rtdInclusions: true,
     },
@@ -102,8 +119,10 @@ export async function getContributionDetail(
     }),
     prisma.changeLogEntry.findMany({
       where: {
-        subjectId: contributionId,
-        subjectType: { in: ['Contribution', 'ContributionMetadata'] },
+        OR: [
+          { subjectId: contributionId, subjectType: { in: ['Contribution', 'ContributionMetadata'] } },
+          { subjectId: row.paymentId, subjectType: 'Payment' },
+        ],
       },
       orderBy: { at: 'desc' },
     }),
@@ -111,8 +130,8 @@ export async function getContributionDetail(
 
   return {
     id: row.id,
-    qomonTransactionId: row.qomonTransactionId.toString(),
-    qomonBundleId: row.qomonBundleId != null ? row.qomonBundleId.toString() : null,
+    status: row.status,
+    supersedesId: row.supersedesId,
     contact: {
       id: row.contact.id,
       name: row.contact.name,
@@ -120,16 +139,38 @@ export async function getContributionDetail(
       address: formatAddress(row.contact.addresses),
     },
     amountCents: row.amountCents,
-    currency: row.currency,
     acceptedAt: row.acceptedAt.toISOString(),
-    paymentMethodKind: row.paymentMethodKind,
-    statusKind: row.statusKind,
-    codeCampaign: row.codeCampaign,
-    comment: row.comment,
-    externalRef: row.externalRef,
-    firstSeenAt: row.firstSeenAt.toISOString(),
-    lastSyncedAt: row.lastSyncedAt ? row.lastSyncedAt.toISOString() : null,
-    deletedInQomonAt: row.deletedInQomonAt ? row.deletedInQomonAt.toISOString() : null,
+    note: row.note,
+    payment: {
+      id: row.payment.id,
+      source: row.payment.source,
+      method: row.payment.method,
+      state: row.payment.state,
+      amountCents: row.payment.amountCents,
+      currency: row.payment.currency,
+      receivedAt: row.payment.receivedAt.toISOString(),
+      externalRef: row.payment.externalRef,
+      payerName: row.payment.payerName,
+      note: row.payment.note,
+    },
+    qomon: row.payment.qomonLink
+      ? {
+          transactionId: row.payment.qomonLink.qomonTransactionId.toString(),
+          bundleId:
+            row.payment.qomonLink.qomonBundleId != null
+              ? row.payment.qomonLink.qomonBundleId.toString()
+              : null,
+          paymentMethodKind: row.payment.qomonLink.qomonPaymentMethodKind,
+          codeCampaign: row.payment.qomonLink.codeCampaign,
+          firstSeenAt: row.payment.qomonLink.firstSeenAt.toISOString(),
+          lastSyncedAt: row.payment.qomonLink.lastSyncedAt
+            ? row.payment.qomonLink.lastSyncedAt.toISOString()
+            : null,
+          deletedInQomonAt: row.payment.qomonLink.deletedInQomonAt
+            ? row.payment.qomonLink.deletedInQomonAt.toISOString()
+            : null,
+        }
+      : null,
     metadata: row.metadata
       ? {
           periodId: row.metadata.periodId,

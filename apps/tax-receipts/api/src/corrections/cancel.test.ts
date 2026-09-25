@@ -12,7 +12,7 @@ import { prepareRtdFiling } from '../rtd/prepare.js';
 import { IssuanceDisabledError } from '../auth/kill-switch.js';
 import { MissingAddressError, issueReceipt } from '../receipts/issue.js';
 import { TerminalReceiptError } from '../receipts/allocate.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import { cancelReceipt, previewReceiptCorrection, reissueReceipt } from './cancel.js';
 
 const prisma = testPrisma();
@@ -45,14 +45,12 @@ describe('correction actions 1 & 2: cancel / reissue (ticket 3.10)', () => {
   }
 
   async function seedContribution(contactId: string, amountCents = 5_000) {
-    return prisma.contribution.create({
-      data: {
+    return createTestContribution(prisma, {
         qomonTransactionId: BigInt(nextTransactionId++),
         contactId,
         amountCents,
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
   }
 
   async function seedMetadata(contributionId: string, overrides: Record<string, unknown> = {}) {

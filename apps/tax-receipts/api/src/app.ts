@@ -1,4 +1,4 @@
-import { QomonError, type QomonApi } from '@gpo/qomon-client';
+import type { QomonApi } from '@gpo/qomon-client';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import {
   serializerCompiler,
@@ -12,10 +12,7 @@ import { BulkEditEmptyChangesError, BulkEditTooLargeError } from './contribution
 import {
   ContributionNotFoundError,
   MetadataWriteBlockedError,
-  QomonWriteRejectedError,
-  QomonWriteUnconfirmedError,
-} from './contributions/metadata-write-through.js';
-import { ContributionNotMirroredError } from './contributions/refresh.js';
+} from './contributions/metadata-edit.js';
 import {
   DonorPrecheckTokenExpiredError,
   DonorPrecheckTokenNotFoundError,
@@ -114,7 +111,6 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
     if (
       error instanceof ContributionNotFoundError ||
-      error instanceof ContributionNotMirroredError ||
       error instanceof WorkItemNotFoundError ||
       error instanceof EntityReportNotFoundError ||
       error instanceof ReceiptNotFoundError
@@ -200,25 +196,6 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
     if (error instanceof BulkEditEmptyChangesError) {
       return reply.code(400).send({ error: error.message });
-    }
-    if (error instanceof QomonWriteRejectedError || error instanceof QomonWriteUnconfirmedError) {
-      const cause = error.cause instanceof QomonError ? error.cause : undefined;
-      request.log.error(
-        {
-          err: error,
-          qomon: cause
-            ? {
-                kind: cause.name,
-                message: cause.message,
-                ...cause.context,
-              }
-            : undefined,
-          unconfirmed:
-            error instanceof QomonWriteUnconfirmedError ? error.diagnostics : undefined,
-        },
-        'Qomon metadata write-through failed',
-      );
-      return reply.code(502).send({ error: error.message });
     }
     if (error.validation) {
       return reply

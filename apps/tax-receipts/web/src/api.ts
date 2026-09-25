@@ -63,13 +63,15 @@ export interface Me {
 
 export interface ContributionListRow {
   id: string;
-  qomonTransactionId: string;
+  /** null for manual and legacy-imported payments */
+  qomonTransactionId: string | null;
+  source: string;
   contactName: string;
   contactEmail: string | null;
   amountCents: number;
   currency: string;
   acceptedAt: string;
-  statusKind: string;
+  paymentState: string;
   periodId: number | null;
   ridingNumber: number | null;
   entityKind: string | null;
@@ -115,8 +117,8 @@ function filtersToQuery(filters: object): string {
 
 export interface ContributionDetail {
   id: string;
-  qomonTransactionId: string;
-  qomonBundleId: string | null;
+  status: string;
+  supersedesId: string | null;
   contact: {
     id: string;
     name: string;
@@ -124,16 +126,31 @@ export interface ContributionDetail {
     address: { line1: string; city: string; province: string; postalCode: string; country: string } | null;
   };
   amountCents: number;
-  currency: string;
   acceptedAt: string;
-  paymentMethodKind: string | null;
-  statusKind: string;
-  codeCampaign: string | null;
-  comment: string | null;
-  externalRef: string | null;
-  firstSeenAt: string;
-  lastSyncedAt: string | null;
-  deletedInQomonAt: string | null;
+  note: string | null;
+  /** the money event behind this contribution */
+  payment: {
+    id: string;
+    source: string;
+    method: string;
+    state: string;
+    amountCents: number;
+    currency: string;
+    receivedAt: string;
+    externalRef: string | null;
+    payerName: string | null;
+    note: string | null;
+  };
+  /** import provenance; null for manual and legacy-imported payments */
+  qomon: {
+    transactionId: string;
+    bundleId: string | null;
+    paymentMethodKind: string | null;
+    codeCampaign: string | null;
+    firstSeenAt: string;
+    lastSyncedAt: string | null;
+    deletedInQomonAt: string | null;
+  } | null;
   metadata: {
     periodId: number;
     ridingNumber: number | null;
@@ -389,8 +406,8 @@ export interface SweepResult {
   mode: 'incremental' | 'full';
   pulled: number;
   created: number;
-  refreshed: number;
-  diffQueued: number;
+  backfilled: number;
+  changedInQomon: number;
   unchanged: number;
   syncIncidents: number;
   hasMore: boolean;
@@ -589,8 +606,11 @@ export const api = {
       succeeded: number;
       failed: number;
     }>('/contributions/bulk-edit', { method: 'POST', body: JSON.stringify(input) }),
-  refreshContribution: (id: string) =>
-    request<{ outcome: string }>(`/contributions/${id}/refresh`, { method: 'POST' }),
+  refreshContributionContact: (id: string) =>
+    request<{ outcome: 'refreshed' | 'not-linked' | 'not-found-in-qomon' }>(
+      `/contributions/${id}/refresh-contact`,
+      { method: 'POST' },
+    ),
   editContributionMetadata: (id: string, input: MetadataEditInput) =>
     request<unknown>(`/contributions/${id}/metadata`, {
       method: 'PATCH',

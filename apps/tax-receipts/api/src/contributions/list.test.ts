@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { issueReceipt, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import { listContributions } from './list.js';
 
 const prisma = testPrisma();
@@ -29,14 +29,12 @@ describe('listContributions (ticket 1.3)', () => {
         email: opts.contactEmail ?? null,
       },
     });
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         contactId: contact.id,
         qomonTransactionId: opts.qomonTransactionId,
         amountCents: opts.amountCents ?? 5_000,
         acceptedAt: opts.acceptedAt ?? new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
         data: {
@@ -169,10 +167,20 @@ describe('listContributions (ticket 1.3)', () => {
     expect(second.data.map((r) => r.id)).not.toEqual(first.data.map((r) => r.id));
   });
 
-  it('excludes contributions deleted in Qomon', async () => {
+  it('excludes superseded contributions (history, not the working set)', async () => {
     const { contribution } = await seedRow({ qomonTransactionId: 200n });
-    await prisma.contribution.update({ where: { id: contribution.id }, data: { deletedInQomonAt: new Date() } });
+    await prisma.contribution.update({ where: { id: contribution.id }, data: { status: 'SUPERSEDED' } });
     const page = await listContributions(prisma, { filters: {}, ridingScope: null });
     expect(page.data).toHaveLength(0);
+  });
+
+  it('still lists a contribution whose Qomon transaction later vanished (D12)', async () => {
+    const { contribution } = await seedRow({ qomonTransactionId: 201n });
+    await prisma.qomonTransactionLink.update({
+      where: { paymentId: contribution.paymentId },
+      data: { deletedInQomonAt: new Date() },
+    });
+    const page = await listContributions(prisma, { filters: {}, ridingScope: null });
+    expect(page.data).toHaveLength(1);
   });
 });

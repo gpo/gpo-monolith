@@ -58,12 +58,34 @@ enum PeriodKind {
   BY_ELECTION
 }
 
-enum ContributionStatusKind {
-  valid
-  unpaid
-  reimbursed
-  bank_error
-  other
+enum PaymentSource {
+  QOMON_IMPORT
+  MANUAL
+  LEGACY_IMPORT
+}
+
+enum PaymentMethod {
+  CARD
+  CHEQUE
+  CASH
+  PAD
+  EFT
+  IN_KIND
+  OTHER
+}
+
+enum PaymentState {
+  RECEIVED
+  UNPAID
+  REFUNDED
+  BANK_ERROR
+  OTHER
+}
+
+enum ContributionStatus {
+  ACTIVE
+  SUPERSEDED
+  REFUNDED
 }
 
 enum ContributionLimitBucket {
@@ -145,6 +167,7 @@ enum UserRole {
 }
 
 enum ChangeLogSubjectType {
+  Payment
   Contribution
   ContributionMetadata
   Contact
@@ -171,7 +194,9 @@ enum ChangeLogSubjectType {
 
 model Contact {
   id               String   @id @default(cuid())
-  qomonContactId   BigInt   @unique
+  /// null only in development and testing (D12): before go-live a contact needs
+  /// a Qomon link before a contribution can be attributed to it (invariant 9).
+  qomonContactId   BigInt?  @unique
   name             String
   /// Qomon's separate firstname/surname (ticket 4.1: the ALL/S2P2 EO reports
   /// need first and last name as distinct columns, which `name` cannot supply
@@ -188,6 +213,7 @@ model Contact {
   updatedAt        DateTime @updatedAt
 
   addressSnapshots AddressSnapshot[]
+  payments         Payment[]
   contributions    Contribution[]
   receipts         Receipt[]
   workItems        WorkItem[]
@@ -219,37 +245,98 @@ model AddressSnapshot {
   @@map("address_snapshot")
 }
 
+/// The money event (data-model §2, D12): what was received, when, and how.
+/// Tool-owned: entered manually or imported once from a Qomon transaction.
+/// One payment carries one or more contributions (a split). Nothing
+/// EO-facing lives here; attribution is on Contribution.
+model Payment {
+  id              String        @id @default(cuid())
+  source          PaymentSource
+  /// who paid, as recorded; never null (invariant 9)
+  contactId       String
+  amountCents     Int
+  currency        String        @default("cad")
+  receivedAt      DateTime
+  method          PaymentMethod
+  /// structured payer when it differs from the contact (rule B5, O36)
+  payerName       String?
+  /// processor id string, for statement matching
+  externalRef     String?
+  state           PaymentState  @default(RECEIVED)
+  note            String?
+  createdByUserId String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  contact         Contact       @relation(fields: [contactId], references: [id])
+  createdBy       User?         @relation(fields: [createdByUserId], references: [id])
+  contributions   Contribution[]
+  qomonLink       QomonTransactionLink?
+
+  @@index([contactId])
+  @@index([receivedAt])
+  @@index([externalRef])
+  @@map("payment")
+}
+
+/// Import provenance only (D12): which Qomon transaction a payment was
+/// created from, and what the sweep last saw. Absent for MANUAL and
+/// LEGACY_IMPORT payments. Never read back as attribution.
+model QomonTransactionLink {
+  id                    String    @id @default(cuid())
+  paymentId             String    @unique
+  qomonTransactionId    BigInt    @unique
+  qomonBundleId         BigInt?
+  /// Qomon's raw `payment_method_kind` and `code_campaign` at import
+  qomonPaymentMethodKind String?
+  codeCampaign          String?
+  firstSeenAt           DateTime  @default(now())
+  lastSyncedAt          DateTime?
+  /// hash over the Qomon transaction's facts as last seen, for cheap change
+  /// detection (a change opens a sync incident and mutates nothing, O47)
+  syncHash              String?
+  /// set, never deleted (invariant 4): a transaction absent from Qomon
+  deletedInQomonAt      DateTime?
+
+  payment               Payment   @relation(fields: [paymentId], references: [id])
+
+  @@map("qomon_transaction_link")
+}
+
+/// The tax attribution of (part of) a payment (data-model §2, D12).
+/// Versioned: once an allocation or RTD inclusion references it, a
+/// correction closes the row as SUPERSEDED and opens its replacements.
 model Contribution {
   id                   String    @id @default(cuid())
-  qomonTransactionId   BigInt    @unique
-  qomonBundleId        BigInt?
+  paymentId            String
   contactId            String
   amountCents          Int
-  currency             String    @default("cad")
-  /// acceptance date (drives everything EO)
+  /// acceptance date (drives everything EO); defaults from the payment's receivedAt
   acceptedAt           DateTime
-  paymentMethodKind    String?
-  statusKind           ContributionStatusKind @default(valid)
-  codeCampaign         String?
-  comment              String?
-  /// cache of metadata.external_ref (the metadata field is authoritative)
-  externalRef          String?
-  firstSeenAt          DateTime  @default(now())
-  lastSyncedAt         DateTime?
-  syncHash             String?
-  /// set, never deleted (invariant 3): a transaction absent from Qomon
-  deletedInQomonAt     DateTime?
+  status               ContributionStatus @default(ACTIVE)
+  /// the row this one replaced, when a correction created it
+  supersedesId         String?
+  /// one guarded action's cascade shares a correlation id
+  correlationId        String?
+  note                 String?
+  createdByUserId      String?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
+  payment              Payment   @relation(fields: [paymentId], references: [id])
   contact              Contact              @relation(fields: [contactId], references: [id])
+  createdBy            User?                @relation(fields: [createdByUserId], references: [id])
+  supersedes           Contribution?        @relation("ContributionSupersedes", fields: [supersedesId], references: [id])
+  supersededBy         Contribution[]       @relation("ContributionSupersedes")
   metadata             ContributionMetadata?
   allocations          ReceiptAllocation[]
   rtdInclusions        RtdInclusion[]
   reconciliationMatches ReconciliationMatch[]
 
+  @@index([paymentId])
   @@index([contactId])
   @@index([acceptedAt])
+  @@index([status])
   @@map("contribution")
 }
 
@@ -646,6 +733,8 @@ model User {
   changeLogEntries ChangeLogEntry[]
   assignedWorkItems WorkItem[]
   sessions          Session[]
+  paymentsCreated       Payment[]
+  contributionsCreated  Contribution[]
 
   @@map("app_user")
 }

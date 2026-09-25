@@ -104,7 +104,7 @@ async function eligibleSpaceContacts(
 ): Promise<{ id: string; name: string; email: string | null }[]> {
   const contributions = await prisma.contribution.findMany({
     where: {
-      deletedInQomonAt: null,
+      status: 'ACTIVE',
       metadata: {
         is: { periodId: space.periodId, ridingNumber: space.ridingNumber, entityKind: space.entityKind },
       },

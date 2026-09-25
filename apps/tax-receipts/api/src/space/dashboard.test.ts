@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import { getSpaceDashboard } from './dashboard.js';
 import { moveSpaceStage } from './space-state.js';
 
@@ -16,9 +16,7 @@ describe('getSpaceDashboard (ticket 1.10)', () => {
 
   async function seedContribution(ridingNumber: number | null, entityKind: 'PARTY' | 'CA', qomonId: bigint) {
     const contact = await prisma.contact.create({ data: { qomonContactId: qomonId, name: 'Dana Donor' } });
-    const contribution = await prisma.contribution.create({
-      data: { contactId: contact.id, qomonTransactionId: qomonId, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') },
-    });
+    const contribution = await createTestContribution(prisma, { contactId: contact.id, qomonTransactionId: qomonId, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
         data: { contributionId: contribution.id, periodId: baseline.periodId, ridingNumber, entityKind, receivedBy: 'GPO' },

@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { ContributionNotFoundError } from '../contributions/metadata-write-through.js';
-import { issueReceipt as issueReceiptFixture, makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
+import { issueReceipt as issueReceiptFixture, makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import {
   AllocationContactMismatchError,
   DuplicateAllocationError,
@@ -25,9 +25,7 @@ describe('allocateToReceipt (ticket 3.2)', () => {
    *  always creates a fresh contact, which collides on `qomonContactId` when
    *  the point of the test is two contributions from the same donor. */
   async function seedSecondContribution(contactId: string, qomonTransactionId: bigint, amountCents: number) {
-    const contribution = await prisma.contribution.create({
-      data: { qomonTransactionId, contactId, amountCents, acceptedAt: new Date('2026-03-05T12:00:00Z') },
-    });
+    const contribution = await createTestContribution(prisma, { qomonTransactionId, contactId, amountCents, acceptedAt: new Date('2026-03-05T12:00:00Z') });
     return { contactId, contributionId: contribution.id };
   }
 

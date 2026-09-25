@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -23,9 +23,7 @@ describe('GET /spaces (ticket 1.10)', () => {
       data: { passwordHash: await hashPassword('admin-pass-phrase') },
     });
     const contact = await prisma.contact.create({ data: { qomonContactId: 1n, name: 'Dana Donor' } });
-    const contribution = await prisma.contribution.create({
-      data: { contactId: contact.id, qomonTransactionId: 1n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') },
-    });
+    const contribution = await createTestContribution(prisma, { contactId: contact.id, qomonTransactionId: 1n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
         data: { contributionId: contribution.id, periodId: baseline.periodId, ridingNumber: 84, entityKind: 'CA', receivedBy: 'GPO' },
@@ -85,14 +83,12 @@ describe('per-space issuance routes (ticket 3.12)', () => {
         ],
       },
     });
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         qomonTransactionId: 1n,
         contactId: contact.id,
         amountCents: 5_000,
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
     contributionId = contribution.id;
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
@@ -233,9 +229,7 @@ describe('donor pre-check send route (ticket 3.9)', () => {
       data: { qomonContactId: 1n, name: 'Dana Donor', email: 'dana@example.org' },
     });
     contactId = contact.id;
-    const contribution = await prisma.contribution.create({
-      data: { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') },
-    });
+    const contribution = await createTestContribution(prisma, { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
         data: { contributionId: contribution.id, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },

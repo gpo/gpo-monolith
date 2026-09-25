@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { issueReceipt, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import { getContributionDetail } from './detail.js';
 
 const prisma = testPrisma();
@@ -17,15 +17,13 @@ describe('getContributionDetail (ticket 1.5)', () => {
     const contact = await prisma.contact.create({
       data: { qomonContactId: 1n, name: 'Dana Donor', email: 'dana@example.org' },
     });
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         contactId: contact.id,
         qomonTransactionId: 1n,
         qomonBundleId: 2n,
         amountCents: 5_000,
         acceptedAt: new Date('2026-03-01T00:00:00Z'),
-      },
-    });
+      });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
         data: {
@@ -79,9 +77,7 @@ describe('getContributionDetail (ticket 1.5)', () => {
     expect(await getContributionDetail(prisma, partyRow.id, [84])).not.toBeNull();
 
     const contact2 = await prisma.contact.create({ data: { qomonContactId: 2n, name: 'Pat Payer' } });
-    const otherRiding = await prisma.contribution.create({
-      data: { contactId: contact2.id, qomonTransactionId: 2n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') },
-    });
+    const otherRiding = await createTestContribution(prisma, { contactId: contact2.id, qomonTransactionId: 2n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
       const after = await ctx.tx.contributionMetadata.create({
         data: { contributionId: otherRiding.id, periodId: baseline.periodId, ridingNumber: 12, entityKind: 'CA', receivedBy: 'GPO' },

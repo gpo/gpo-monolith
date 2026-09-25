@@ -8,7 +8,7 @@ import { storeArtifact } from '../artifacts/store.js';
 import { assertIssuanceEnabled } from '../auth/kill-switch.js';
 import { addressFrom } from '../contacts/address.js';
 import { withChangeLog } from '../changelog/write.js';
-import { ContributionNotFoundError } from '../contributions/metadata-write-through.js';
+import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
 import type { PrismaClient, Receipt, ReceiptDelivery } from '../generated/prisma/index.js';
 import { renderReceiptPdf } from './pdf.js';
 

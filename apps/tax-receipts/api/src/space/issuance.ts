@@ -81,7 +81,7 @@ async function spaceContributionIds(prisma: PrismaClient, space: SpaceKey): Prom
 async function spaceIssuanceLines(prisma: PrismaClient, space: SpaceKey): Promise<SpaceIssuanceLine[]> {
   const contributions = await prisma.contribution.findMany({
     where: {
-      deletedInQomonAt: null,
+      status: 'ACTIVE',
       metadata: {
         is: { periodId: space.periodId, ridingNumber: space.ridingNumber, entityKind: space.entityKind },
       },

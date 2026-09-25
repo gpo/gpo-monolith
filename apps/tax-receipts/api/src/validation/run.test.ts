@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import { runValidationForAllContributions, runValidationForContribution } from './run.js';
 
 const prisma = testPrisma();
@@ -44,16 +44,14 @@ describe('validation engine v1 (ticket 1.7)', () => {
       goodsServices?: boolean;
     };
   }) {
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         contactId: opts.contactId,
         qomonTransactionId: opts.qomonTransactionId,
         amountCents: opts.amountCents ?? 5_000,
         acceptedAt: opts.acceptedAt ?? new Date('2026-03-01T12:00:00Z'),
         paymentMethodKind: opts.paymentMethodKind ?? 'card',
         externalRef: opts.externalRef ?? null,
-      },
-    });
+      });
     if (opts.metadata !== null) {
       await withChangeLog(prisma, { userId: null, reason: 'test fixture' }, async (ctx) => {
         const after = await ctx.tx.contributionMetadata.create({
@@ -76,9 +74,7 @@ describe('validation engine v1 (ticket 1.7)', () => {
 
   it('returns null when the contribution has no metadata yet', async () => {
     const contact = await seedContact(1n);
-    const contribution = await prisma.contribution.create({
-      data: { contactId: contact.id, qomonTransactionId: 1n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') },
-    });
+    const contribution = await createTestContribution(prisma, { contactId: contact.id, qomonTransactionId: 1n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') });
     expect(await runValidationForContribution(prisma, contribution.id)).toBeNull();
   });
 
@@ -198,9 +194,7 @@ describe('validation engine v1 (ticket 1.7)', () => {
   it('runValidationForAllContributions sweeps every mirrored contribution with metadata', async () => {
     const contact = await seedContact(8n);
     await seedContribution({ contactId: contact.id, qomonTransactionId: 8n, paymentMethodKind: 'cash', amountCents: 10_000 });
-    await prisma.contribution.create({
-      data: { contactId: contact.id, qomonTransactionId: 80n, amountCents: 1, acceptedAt: new Date('2026-03-01T00:00:00Z') },
-    }); // no metadata: skipped
+    await createTestContribution(prisma, { contactId: contact.id, qomonTransactionId: 80n, amountCents: 1, acceptedAt: new Date('2026-03-01T00:00:00Z') }); // no metadata: skipped
 
     const result = await runValidationForAllContributions(prisma);
     expect(result.contributionsChecked).toBe(1);

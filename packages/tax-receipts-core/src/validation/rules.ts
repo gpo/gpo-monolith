@@ -216,7 +216,7 @@ export function checkA7SourceCodeRiding(
 export const CASH_LIMIT_CENTS = 2_500;
 
 export function checkA8CashLimit(c: ContributionForValidationRules): ValidationFinding | null {
-  if (c.paymentMethodKind?.toLowerCase() !== 'cash') return null;
+  if (c.paymentMethod !== 'CASH') return null;
   if (c.amountCents > CASH_LIMIT_CENTS) {
     return {
       ruleRef: 'A8',
