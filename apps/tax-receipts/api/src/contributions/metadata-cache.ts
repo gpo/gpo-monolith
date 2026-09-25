@@ -2,12 +2,12 @@ import type { GpoMetadataDescriptive } from '@gpo/tax-receipts-core';
 import type { PrismaClient } from '../generated/prisma/index.js';
 
 /**
- * Shared between the mirror sweep (1.1) and the metadata write-through
- * service (1.2): both cache a {@link GpoMetadataDescriptive} object into the
- * local `ContributionMetadata` row, and both must refuse to touch a
- * contribution's facts once it backs an ISSUED receipt or an RTD filing
- * (data-model §5 diff queue / invariant 6 — that's the Phase 3 correction
- * workflow's job, not a cache write's).
+ * Shared between the Qomon import sweep (1.1), the manual-entry service, and
+ * the metadata edit service (1.2): each writes a {@link GpoMetadataDescriptive}
+ * object onto the local `Contribution` row, and the edit paths must
+ * refuse to touch a contribution once it backs an ISSUED receipt or an RTD
+ * filing (data-model invariant 6 — that's the correction workflow's job, not
+ * a plain edit's).
  */
 
 export async function isReceiptedOrReported(
@@ -24,11 +24,10 @@ export async function isReceiptedOrReported(
   return allocation !== null || inclusion !== null;
 }
 
-/** `checksum: null` marks a locally-derived value never confirmed against
- *  Qomon (the ticket-1.1 intake-default stub); a non-null checksum means the
- *  row reflects exactly what Qomon has (either echoed on read, or just
- *  confirmed on write). */
-export function descriptiveToRow(d: GpoMetadataDescriptive, checksum: string | null) {
+/** The descriptive fields as `Contribution` columns (D12: they are ordinary
+ *  columns since the metadata table was folded in). Spread into a
+ *  `contribution.create` or `contribution.update` `data`. */
+export function descriptiveToColumns(d: GpoMetadataDescriptive) {
   return {
     periodId: d.period_id,
     ridingNumber: d.riding_number,
@@ -40,7 +39,5 @@ export function descriptiveToRow(d: GpoMetadataDescriptive, checksum: string | n
     sourceCode: d.source_code,
     eoContributorId: d.eo_contributor_id,
     exceptionReason: d.exception_reason,
-    checksum,
-    syncedAt: checksum ? new Date() : null,
   };
 }

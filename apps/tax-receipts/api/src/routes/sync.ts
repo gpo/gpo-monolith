@@ -19,8 +19,8 @@ import { runMirrorSweep } from '../sync/mirror-sweep.js';
  *    collides with the party sweep's or another riding's.
  *
  * Transaction ids are assumed globally unique across every Qomon space
- * (party and every riding) — Contribution.qomonTransactionId stays a single
- * unique column on that assumption; it is not re-scoped per space here.
+ * (party and every riding) — QomonTransactionLink.qomonTransactionId stays a
+ * single unique column on that assumption; it is not re-scoped per space here.
  */
 export async function syncRoutes(
   app: FastifyInstance,

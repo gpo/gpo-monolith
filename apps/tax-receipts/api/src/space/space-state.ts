@@ -20,7 +20,7 @@ const toCoreStage = (s: PrismaSpaceStage): CoreSpaceStage => s.replace(/_/g, '-'
 
 export interface SpaceKey {
   periodId: number;
-  /** null = party-level space (data-model §2 ContributionMetadata). */
+  /** null = party-level space (data-model §2 Contribution). */
   ridingNumber: number | null;
   entityKind: EntityKind;
 }

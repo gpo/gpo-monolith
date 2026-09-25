@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
 import type { EntityKind } from '../generated/prisma/index.js';
-import { makeContribution, issueReceipt as fixtureIssueReceipt, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { makeContribution, issueReceipt as fixtureIssueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import { generateS2p2Report } from './s2p2-report.js';
 
 const prisma = testPrisma();
@@ -39,17 +39,14 @@ describe('S2P2 report generator (ticket 4.2)', () => {
     } = {},
   ) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId: baseline.periodId,
           entityKind: overrides.entityKind ?? 'PARTY',
           ridingNumber: overrides.ridingNumber ?? null,
           receivedBy: 'GPO',
           eoContributorId: overrides.eoContributorId ?? null,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
     });
   }
@@ -71,14 +68,12 @@ describe('S2P2 report generator (ticket 4.2)', () => {
     let contributionId: string;
     if (opts.contributionSeed) {
       contactId = opts.contributionSeed.contactId;
-      const contribution = await prisma.contribution.create({
-        data: {
+      const contribution = await createTestContribution(prisma, {
           qomonTransactionId: nextTxId++,
           contactId,
           amountCents,
           acceptedAt: new Date('2026-03-01T12:00:00Z'),
-        },
-      });
+        });
       contributionId = contribution.id;
     } else {
       const made = await makeContribution(prisma, {

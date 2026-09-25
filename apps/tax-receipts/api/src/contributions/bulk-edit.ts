@@ -1,23 +1,19 @@
 import type { GpoMetadataDescriptive } from '@gpo/tax-receipts-core';
-import type { QomonApi } from '@gpo/qomon-client';
-import {
-  writeContributionMetadata,
-  type MetadataWriteThroughDeps,
-} from './metadata-write-through.js';
+import { editContributionMetadata } from './metadata-edit.js';
 import type { PrismaClient } from '../generated/prisma/index.js';
 
 /**
  * Bulk edit (ticket 1.4, screens.md 2 / PRD C2): one reason, one set of
  * field changes, applied to every selected contribution. Each row keeps its
  * OTHER metadata fields as they are — only the fields present in `changes`
- * move — but the write to Qomon is still whole-object per row (D4): this
- * merges server-side (current row + `changes`) precisely so the caller
- * never has to know a row's full metadata just to change one field of it.
+ * move — and each row's edit is a whole-object replace: this merges
+ * server-side (current row + `changes`) precisely so the caller never has to
+ * know a row's full metadata just to change one field of it.
  *
- * Each row goes through 1.2's `writeContributionMetadata` unchanged, so it
- * gets the same write-first protocol, the same block on a receipted/
- * reported contribution, and its own change-log entry (PRD C2's "one
- * change-log entry per row"). One row's failure doesn't stop the rest —
+ * Each row goes through `editContributionMetadata` unchanged, so it gets the
+ * same block on a receipted/reported contribution and its own change-log
+ * entry (PRD C2's "one change-log entry per row"). Nothing is written to
+ * Qomon (D12). One row's failure doesn't stop the rest —
  * "per-row progress" here means the full per-row result set returned after
  * the batch completes, not a live-streaming progress bar (no job queue /
  * SSE infrastructure exists yet to stream it); the web UI renders that set
@@ -53,7 +49,7 @@ const CHANGE_KEYS = [
 ] as const satisfies readonly (keyof BulkMetadataChanges)[];
 
 /** Cap on one batch: keeps a single HTTP request's synchronous processing
- *  time bounded (qomon-client self-throttles to 5 rps by default). */
+ *  time bounded. */
 export const BULK_EDIT_MAX_ROWS = 500;
 
 export interface BulkEditInput {
@@ -128,7 +124,7 @@ function mergeDescriptive(
 }
 
 export async function bulkEditContributionMetadata(
-  deps: { prisma: PrismaClient; qomon: Pick<QomonApi, 'writeTransactionMetadata'> },
+  deps: { prisma: PrismaClient },
   input: BulkEditInput,
 ): Promise<BulkEditResult> {
   if (input.contributionIds.length > BULK_EDIT_MAX_ROWS) {
@@ -143,16 +139,19 @@ export async function bulkEditContributionMetadata(
     try {
       const current = await deps.prisma.contribution.findUnique({
         where: { id: contributionId },
-        include: { metadata: true },
+        include: { payment: true },
       });
       if (!current) throw new Error('contribution not found');
-      if (!current.metadata) {
+      if (current.periodId === null) {
         throw new Error('no metadata yet; intake derivation has not resolved this row');
       }
 
-      const descriptive = mergeDescriptive(current.metadata, current.externalRef, input.changes);
-      const writeDeps: MetadataWriteThroughDeps = { prisma: deps.prisma, qomon: deps.qomon };
-      await writeContributionMetadata(writeDeps, {
+      const descriptive = mergeDescriptive(
+        { ...current, periodId: current.periodId },
+        current.payment.externalRef,
+        input.changes,
+      );
+      await editContributionMetadata(deps, {
         contributionId,
         actorUserId: input.actorUserId,
         reason: input.reason,

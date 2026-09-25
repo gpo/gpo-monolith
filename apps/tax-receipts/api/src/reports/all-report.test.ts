@@ -47,18 +47,15 @@ describe('ALL report generator (ticket 4.1)', () => {
     } = {},
   ) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId: overrides.periodId ?? baseline.periodId,
           entityKind: overrides.entityKind ?? 'PARTY',
           ridingNumber: overrides.ridingNumber ?? null,
           receivedBy: overrides.receivedBy ?? 'GPO',
           goodsServices: overrides.goodsServices ?? false,
           eoContributorId: overrides.eoContributorId ?? null,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
     });
   }
@@ -277,7 +274,7 @@ describe('ALL report generator (ticket 4.1)', () => {
     // No seedMetadata call: intake derivation "hasn't resolved this row yet".
     // The test/db.ts fixture helper writes the receipt/allocation directly
     // (unlike the real issueReceipt service, it doesn't require metadata),
-    // so this row exists with no ContributionMetadata — exactly the case the
+    // so this row exists with no period — exactly the case the
     // generator must refuse to guess through.
     await fixtureIssueReceipt(prisma, {
       contactId,

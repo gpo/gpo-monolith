@@ -42,15 +42,25 @@ export const ContributionLimitBucket = z.enum([
 ]);
 export type ContributionLimitBucket = z.infer<typeof ContributionLimitBucket>;
 
-/** Qomon transaction status, keyed by `kind` not `id` (qomon-api-reference §1.7). */
-export const ContributionStatusKind = z.enum([
-  'valid',
-  'unpaid',
-  'reimbursed',
-  'bank_error',
-  'other',
-]);
-export type ContributionStatusKind = z.infer<typeof ContributionStatusKind>;
+/** Where a payment came from (data-model §2, D12). */
+export const PaymentSource = z.enum(['QOMON_IMPORT', 'MANUAL', 'LEGACY_IMPORT']);
+export type PaymentSource = z.infer<typeof PaymentSource>;
+
+/** How the money arrived. Qomon's payment-method codes map onto this at
+ *  import (`paymentMethodFromQomon`); anything unrecognized is OTHER. */
+export const PaymentMethod = z.enum(['CARD', 'CHEQUE', 'CASH', 'PAD', 'EFT', 'IN_KIND', 'OTHER']);
+export type PaymentMethod = z.infer<typeof PaymentMethod>;
+
+/** Whether the money actually landed. Only RECEIVED counts toward RTD
+ *  disclosure and receipting (open-questions.md O42). Mapped from Qomon's
+ *  transaction status `kind` at import (`paymentStateFromQomonKind`). */
+export const PaymentState = z.enum(['RECEIVED', 'UNPAID', 'REFUNDED', 'BANK_ERROR', 'OTHER']);
+export type PaymentState = z.infer<typeof PaymentState>;
+
+/** Contribution lifecycle (corrections.md "Contribution lifecycle", D12):
+ *  a correction closes a row as SUPERSEDED and opens its replacements. */
+export const ContributionStatus = z.enum(['ACTIVE', 'SUPERSEDED', 'REFUNDED']);
+export type ContributionStatus = z.infer<typeof ContributionStatus>;
 
 export const WorkItemKind = z.enum([
   'VALIDATION',
@@ -116,6 +126,7 @@ export const UserRole = z.enum([
 export type UserRole = z.infer<typeof UserRole>;
 
 export const ChangeLogSubjectType = z.enum([
+  'Payment',
   'Contribution',
   'ContributionMetadata',
   'Contact',

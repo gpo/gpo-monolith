@@ -71,22 +71,27 @@ export interface SpaceIssuanceLine {
 }
 
 async function spaceContributionIds(prisma: PrismaClient, space: SpaceKey): Promise<string[]> {
-  const rows = await prisma.contributionMetadata.findMany({
-    where: { periodId: space.periodId, ridingNumber: space.ridingNumber, entityKind: space.entityKind },
-    select: { contributionId: true },
+  const rows = await prisma.contribution.findMany({
+    where: {
+      status: 'ACTIVE',
+      periodId: space.periodId,
+      ridingNumber: space.ridingNumber,
+      entityKind: space.entityKind,
+    },
+    select: { id: true },
   });
-  return rows.map((r) => r.contributionId);
+  return rows.map((r) => r.id);
 }
 
 async function spaceIssuanceLines(prisma: PrismaClient, space: SpaceKey): Promise<SpaceIssuanceLine[]> {
   const contributions = await prisma.contribution.findMany({
     where: {
-      deletedInQomonAt: null,
-      metadata: {
-        is: { periodId: space.periodId, ridingNumber: space.ridingNumber, entityKind: space.entityKind },
-      },
+      status: 'ACTIVE',
+      periodId: space.periodId,
+      ridingNumber: space.ridingNumber,
+      entityKind: space.entityKind,
     },
-    include: { metadata: true, contact: true, allocations: { include: { receipt: true } } },
+    include: { contact: true, allocations: { include: { receipt: true } } },
   });
 
   const contactIds = [...new Set(contributions.map((c) => c.contactId))];
@@ -98,7 +103,6 @@ async function spaceIssuanceLines(prisma: PrismaClient, space: SpaceKey): Promis
 
   const lines: SpaceIssuanceLine[] = [];
   for (const c of contributions) {
-    if (!c.metadata) continue; // shape problem elsewhere's job to flag; not this space's contribution yet
     const allocationRows: AllocationRow[] = c.allocations.map((a) => ({
       receiptId: a.receiptId,
       contributionId: a.contributionId,
@@ -106,7 +110,7 @@ async function spaceIssuanceLines(prisma: PrismaClient, space: SpaceKey): Promis
       receiptStatus: a.receipt.status,
     }));
     const remaining = remainingEligibleCents(
-      { id: c.id, amountCents: c.amountCents, nonDeductibleCents: c.metadata.nonDeductibleCents },
+      { id: c.id, amountCents: c.amountCents, nonDeductibleCents: c.nonDeductibleCents },
       allocationRows,
     );
     if (remaining <= 0) continue; // already fully receipted

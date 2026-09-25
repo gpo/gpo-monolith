@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { setKillSwitch } from '../auth/kill-switch.js';
 import { withChangeLog } from '../changelog/write.js';
-import { ContributionNotFoundError } from '../contributions/metadata-write-through.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import {
   DuplicateForeignReceiptNumberError,
   ForeignReceiptNumberFormatError,
@@ -29,22 +29,18 @@ describe('recordForeignReceipt (ticket 3.8)', () => {
   }
 
   async function seedContribution(contactId: string, amountCents = 5_000) {
-    return prisma.contribution.create({
-      data: {
+    return createTestContribution(prisma, {
         qomonTransactionId: 1n,
         contactId,
         amountCents,
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
   }
 
   async function seedMetadata(contributionId: string, overrides: Record<string, unknown> = {}) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: { contributionId, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO', ...overrides },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO', ...overrides } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
     });
   }
@@ -113,9 +109,7 @@ describe('recordForeignReceipt (ticket 3.8)', () => {
       { contributionId: first.id, actorUserId: baseline.cfoUserId, reason: 'first', receiptNumber: 'EOSTOCK-1' },
     );
 
-    const second = await prisma.contribution.create({
-      data: { qomonTransactionId: 2n, contactId: contact.id, amountCents: 2_000, acceptedAt: new Date('2026-03-02T12:00:00Z') },
-    });
+    const second = await createTestContribution(prisma, { qomonTransactionId: 2n, contactId: contact.id, amountCents: 2_000, acceptedAt: new Date('2026-03-02T12:00:00Z') });
     await seedMetadata(second.id);
 
     await expect(

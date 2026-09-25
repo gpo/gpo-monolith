@@ -1,7 +1,8 @@
 import {
   computeContributionSyncHash,
-  computeMetadataChecksum,
   deriveIntakeDefaults,
+  paymentMethodFromQomon,
+  paymentStateFromQomonKind,
   type ContributionSyncFields,
   type GpoMetadataDescriptive,
   type IntakeFlag,
@@ -10,7 +11,6 @@ import {
 import {
   QomonNotFoundError,
   qomonToSyncedFields,
-  syncedFieldsChanged,
   type ChangeCursor,
   type ChangedTransaction,
   type ChangeFeedSource,
@@ -20,29 +20,30 @@ import {
   type QomonTransaction,
 } from '@gpo/qomon-client';
 import { withChangeLog } from '../changelog/write.js';
-import { descriptiveToRow, isReceiptedOrReported } from '../contributions/metadata-cache.js';
+import { descriptiveToColumns } from '../contributions/metadata-cache.js';
+import { createPaymentWithContribution } from '../payments/create.js';
 import { runValidationForContribution } from '../validation/run.js';
 import type { Prisma } from '../generated/prisma/index.js';
-import type {
-  ContributionMetadata,
-  ContributionStatusKind,
-  PrismaClient,
-} from '../generated/prisma/index.js';
+import type { PrismaClient } from '../generated/prisma/index.js';
 
 /**
- * Mirror sweep (ticket 1.1, data-model §5): the inbound half of the Qomon
- * sync protocol. Pages the change feed, mirrors new transactions (applying
- * the ticket-1.6-stub intake defaults from `@gpo/tax-receipts-core`), detects
- * drift on already-mirrored ones, and routes anything touching a receipted
- * or RTD-reported contribution into the diff queue instead of silently
- * overwriting it.
+ * Qomon import sweep (ticket 1.1, reworked for D12; data-model §5): the
+ * inbound half of the Qomon protocol. Qomon is an import source, not a
+ * system of record: the sweep pages the change feed and, for each NEW
+ * transaction, creates a Payment (with its QomonTransactionLink) and an
+ * initial Contribution, applying the intake defaults from
+ * `@gpo/tax-receipts-core`. It never writes to Qomon, and it never mutates a
+ * payment or contribution it has already imported: a later Qomon edit only
+ * refreshes the link's `syncHash` and opens a SYNC_INCIDENT work item for a
+ * human to look at (open-questions.md O47 decides the eventual behaviour).
  *
  * Two modes, matching the data-model §5 flowchart:
  *  - `incremental` (default): resumes from the persisted {@link SyncCursor}
  *    row for this feed. Cheap; run frequently (design target: 15 min).
  *  - `full`: ignores the cursor, pulls the whole space, and — only when the
- *    pull was not truncated by `limit` — flags contributions that vanished
- *    from Qomon as sync incidents (invariant 4: never a silent deletion).
+ *    pull was not truncated by `limit` — flags imported transactions that
+ *    vanished from Qomon as sync incidents (invariant 4: never a silent
+ *    deletion, and never a change to the payment or its contributions).
  *    Run nightly.
  *
  * Contact sync is on-demand only (data-model §5): a contact is fetched the
@@ -73,9 +74,14 @@ export interface ContactFetchFailure {
 export interface MirrorSweepResult {
   mode: 'incremental' | 'full';
   pulled: number;
+  /** new transactions imported as a Payment + initial Contribution */
   created: number;
-  refreshed: number;
-  diffQueued: number;
+  /** already-imported contributions whose missing metadata was backfilled
+   *  now that a period resolves */
+  backfilled: number;
+  /** already-imported transactions Qomon has since edited (a sync incident
+   *  was opened; nothing local was changed) */
+  changedInQomon: number;
   unchanged: number;
   syncIncidents: number;
   cursor: ChangeCursor;
@@ -87,10 +93,10 @@ export interface MirrorSweepResult {
   contactFetchFailures: ContactFetchFailure[];
 }
 
-const REASON_NEW_STUB = 'mirror sweep: new transaction, ticket-1.1 intake defaults applied';
-const REASON_NEW_FROM_QOMON = 'mirror sweep: metadata cached from Qomon on first sight';
-const REASON_REFRESH = 'mirror sweep: cache refreshed from Qomon (no receipt/RTD dependency)';
-const REASON_BACKFILL = 'mirror sweep: metadata backfilled now that a period resolves';
+const REASON_NEW_STUB = 'import sweep: new Qomon transaction, intake defaults applied';
+const REASON_NEW_FROM_QOMON = 'import sweep: new Qomon transaction, metadata taken from Qomon on first sight';
+const REASON_NEW_NO_PERIOD = 'import sweep: new Qomon transaction, no period resolves yet';
+const REASON_BACKFILL = 'import sweep: metadata backfilled now that a period resolves';
 
 const KNOWN_STATUS_KINDS: ReadonlySet<string> = new Set([
   'valid',
@@ -116,8 +122,8 @@ export async function runMirrorSweep(
   const statusKindById = new Map(statuses.map((s) => [s.id, s.kind]));
 
   let created = 0;
-  let refreshed = 0;
-  let diffQueued = 0;
+  let backfilled = 0;
+  let changedInQomon = 0;
   let unchanged = 0;
   const contactFetchFailures: ContactFetchFailure[] = [];
 
@@ -125,8 +131,8 @@ export async function runMirrorSweep(
     try {
       const outcome = await ingestChange(prisma, qomon, periods, statusKindById, change);
       if (outcome === 'created') created += 1;
-      else if (outcome === 'refreshed') refreshed += 1;
-      else if (outcome === 'diff-queued') diffQueued += 1;
+      else if (outcome === 'backfilled') backfilled += 1;
+      else if (outcome === 'changed-in-qomon') changedInQomon += 1;
       else unchanged += 1;
     } catch (err) {
       // A dangling contact_id (Qomon 404s the contact a transaction points
@@ -157,8 +163,8 @@ export async function runMirrorSweep(
     mode,
     pulled: batch.changes.length,
     created,
-    refreshed,
-    diffQueued,
+    backfilled,
+    changedInQomon,
     unchanged,
     syncIncidents,
     cursor: batch.cursor,
@@ -167,12 +173,10 @@ export async function runMirrorSweep(
   };
 }
 
-export type IngestOutcome = 'created' | 'refreshed' | 'diff-queued' | 'unchanged';
+export type IngestOutcome = 'created' | 'backfilled' | 'changed-in-qomon' | 'unchanged';
 
-/** Exported for the contribution detail screen's "refresh from Qomon"
- *  action (ticket 1.5): re-fetching one contribution live by id and running
- *  it through the same ingestion path the sweep uses keeps the diff-queue
- *  protection and metadata handling identical between the two callers. */
+/** One transaction through the import path. Exported so a caller (a test, a
+ *  future single-transaction import) can run exactly what the sweep runs. */
 export async function ingestChange(
   prisma: PrismaClient,
   qomon: Pick<QomonApi, 'getContact'>,
@@ -185,101 +189,66 @@ export async function ingestChange(
   const statusKind = resolveStatusKind(transaction.status_id, statusKindById);
   const syncHash = computeContributionSyncHash(buildSyncFields(transaction, statusKind));
 
-  const existing = await prisma.contribution.findUnique({
+  const link = await prisma.qomonTransactionLink.findUnique({
     where: { qomonTransactionId },
-    include: { metadata: true },
+    include: { payment: { include: { contributions: true } } },
   });
 
-  if (!existing) {
-    await ingestNewContribution(prisma, qomon, periods, transaction, bundle, statusKind, syncHash);
+  if (!link) {
+    await ingestNewTransaction(prisma, qomon, periods, transaction, bundle, statusKind, syncHash);
     return 'created';
   }
 
-  const incoming = parseIncomingMetadata(transaction);
-  const metadataMissing = existing.metadata === null;
-  const cachedSynced = existing.metadata ? cachedRowToSyncedFields(existing.metadata) : null;
-  const metadataChanged = cachedSynced
-    ? incoming !== null && syncedFieldsChanged(cachedSynced, incoming)
-    : incoming !== null;
-  const transactionChanged = existing.syncHash !== syncHash;
-
-  // A contribution with no cached metadata is always worth re-checking (a
-  // period may have been configured since the last sweep, ticket 1.6's
-  // backfill path below), even when the Qomon-side facts didn't change.
-  if (!transactionChanged && !metadataChanged && !metadataMissing) {
-    await prisma.contribution.update({
-      where: { id: existing.id },
-      data: { lastSyncedAt: new Date() },
+  // Already imported: never mutate the payment or its contributions (D12).
+  // A Qomon-side edit only moves the link's hash forward and asks a human to
+  // look (O47); everything else is bookkeeping.
+  if (link.syncHash !== syncHash) {
+    await prisma.qomonTransactionLink.update({
+      where: { id: link.id },
+      data: { syncHash, lastSyncedAt: new Date() },
     });
-    return 'unchanged';
+    await openSyncIncidentWorkItem(prisma, link.payment);
+    return 'changed-in-qomon';
   }
 
-  if ((transactionChanged || metadataChanged) && (await isReceiptedOrReported(prisma, existing.id))) {
-    await openDiffWorkItem(prisma, existing);
-    // Facts are deliberately NOT overwritten here: this contribution backs an
-    // ISSUED receipt or an RTD filing, so the change must go through the
-    // correction workflow (corrections.md, Phase 3), not a silent cache
-    // update. Re-detected every sweep until the diff is resolved.
-    await prisma.contribution.update({
-      where: { id: existing.id },
-      data: { lastSyncedAt: new Date() },
-    });
-    return 'diff-queued';
-  }
-
-  await prisma.contribution.update({
-    where: { id: existing.id },
-    data: transactionChanged
-      ? mirrorUpdateData(transaction, statusKind, syncHash)
-      : { lastSyncedAt: new Date() },
-  });
-
-  let metadataTouched = false;
-  if (incoming && metadataChanged) {
-    await withChangeLog(prisma, { userId: null, reason: REASON_REFRESH }, async (ctx) => {
-      const before = existing.metadata;
-      const merged = mergeSyncedWithLocalDefaults(incoming, existing.metadata, existing.externalRef);
-      const row = descriptiveToRow(merged, computeMetadataChecksum(merged));
-      const after = await ctx.tx.contributionMetadata.upsert({
-        where: { contributionId: existing.id },
-        create: { contributionId: existing.id, ...row },
-        update: row,
-      });
-      await ctx.log({
-        subjectType: 'ContributionMetadata',
-        subjectId: existing.id,
-        before,
-        after,
-      });
-    });
-    metadataTouched = true;
-  } else if (metadataMissing) {
-    metadataTouched = await backfillMetadataIfPossible(
+  // The tool's own derivation can still be incomplete: a contribution
+  // imported before any period covered its date has no period. Backfill its
+  // descriptive fields once one resolves (ticket 1.6), deriving from the
+  // contribution's own recorded facts, never re-reading Qomon's copy.
+  let backfilledAny = false;
+  for (const contribution of link.payment.contributions) {
+    if (contribution.status !== 'ACTIVE' || contribution.periodId !== null) continue;
+    const touched = await backfillMetadataIfPossible(
       prisma,
       periods,
-      existing.id,
-      existing.acceptedAt,
-      transaction,
-      existing.contactId,
+      contribution.id,
+      contribution.acceptedAt,
+      link.codeCampaign,
+      link.payment.externalRef,
+      contribution.contactId,
     );
+    if (touched) {
+      backfilledAny = true;
+      // an edit re-runs the full rule registry (validation-rules.md "when
+      // rules run: on edit")
+      await runValidationForContribution(prisma, contribution.id);
+    }
   }
 
-  if (metadataTouched) {
-    // an edit (external, since this is the sweep) re-runs the full rule
-    // registry (validation-rules.md "when rules run: on edit")
-    await runValidationForContribution(prisma, existing.id);
-  }
-
-  return transactionChanged || metadataTouched ? 'refreshed' : 'unchanged';
+  await prisma.qomonTransactionLink.update({
+    where: { id: link.id },
+    data: { lastSyncedAt: new Date() },
+  });
+  return backfilledAny ? 'backfilled' : 'unchanged';
 }
 
-async function ingestNewContribution(
+async function ingestNewTransaction(
   prisma: PrismaClient,
   qomon: Pick<QomonApi, 'getContact'>,
   periods: PeriodRow[],
   transaction: QomonTransaction,
   bundle: ChangedTransaction['bundle'],
-  statusKind: ContributionStatusKind,
+  statusKind: string,
   syncHash: string,
 ): Promise<void> {
   const contactId = await ensureContact(prisma, qomon, transaction.contact_id);
@@ -287,62 +256,58 @@ async function ingestNewContribution(
     transaction.external_transaction_id != null
       ? String(transaction.external_transaction_id)
       : null;
+  const acceptedAt = new Date(transaction.date);
 
-  const contribution = await prisma.contribution.create({
-    data: {
-      qomonTransactionId: BigInt(transaction.id),
-      qomonBundleId: bundle.id != null ? BigInt(bundle.id) : null,
-      contactId,
-      amountCents: transaction.amount,
-      currency: transaction.currency,
-      acceptedAt: new Date(transaction.date),
-      paymentMethodKind: transaction.payment_method_kind ?? null,
-      statusKind,
-      codeCampaign: transaction.code_campaign ?? null,
-      comment: transaction.comment ?? null,
-      externalRef,
-      syncHash,
-      lastSyncedAt: new Date(),
-    },
-  });
-
+  // Descriptive fields are intake input only (data-model §3, D12): Qomon's
+  // `extra_json` is read here, once, when it carries them; otherwise the
+  // tool's own derivation supplies defaults and flags.
   const incoming = parseIncomingMetadata(transaction);
+  let descriptive: GpoMetadataDescriptive | null = null;
+  let flags: readonly IntakeFlag[] = [];
+  let reason = REASON_NEW_FROM_QOMON;
   if (incoming) {
-    await withChangeLog(prisma, { userId: null, reason: REASON_NEW_FROM_QOMON }, async (ctx) => {
-      const merged = mergeSyncedWithLocalDefaults(incoming, null, externalRef);
-      const after = await ctx.tx.contributionMetadata.create({
-        data: { contributionId: contribution.id, ...descriptiveToRow(merged, computeMetadataChecksum(merged)) },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
-    });
+    descriptive = mergeSyncedWithLocalDefaults(incoming, externalRef);
   } else {
     const derived = deriveIntakeDefaults({
-      acceptedAt: contribution.acceptedAt,
+      acceptedAt,
       codeCampaign: transaction.code_campaign ?? null,
       externalRef,
       periods,
     });
-    if (derived.descriptive) {
-      await withChangeLog(prisma, { userId: null, reason: REASON_NEW_STUB }, async (ctx) => {
-        const after = await ctx.tx.contributionMetadata.create({
-          data: {
-            contributionId: contribution.id,
-            ...descriptiveToRow(derived.descriptive!, null),
-          },
-        });
-        await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
-      });
-    }
-    // else: no period resolves yet. The contribution mirrors without
-    // metadata (data-model §6: "never from a Qomon default"); the intake
+    descriptive = derived.descriptive;
+    flags = derived.flags;
+    // else: no period resolves yet. The contribution imports with no
+    // period (data-model §6: "never from a Qomon default"); the intake
     // flag work items below are how it surfaces, and a later sweep
-    // backfills once a period is configured (the `!existing.metadata`
-    // branch in ingestChange).
-    await openIntakeFlagWorkItems(prisma, contribution.id, contactId, derived.flags);
+    // backfills once a period is configured.
+    reason = descriptive ? REASON_NEW_STUB : REASON_NEW_NO_PERIOD;
   }
 
+  const { contribution } = await withChangeLog(prisma, { userId: null, reason }, (ctx) =>
+    createPaymentWithContribution(ctx, {
+      source: 'QOMON_IMPORT',
+      contactId,
+      amountCents: transaction.amount,
+      receivedAt: acceptedAt,
+      method: paymentMethodFromQomon(transaction.payment_method_kind),
+      externalRef,
+      state: paymentStateFromQomonKind(statusKind),
+      note: transaction.comment ?? null,
+      qomonLink: {
+        qomonTransactionId: BigInt(transaction.id),
+        qomonBundleId: bundle.id != null ? BigInt(bundle.id) : null,
+        qomonPaymentMethodKind: transaction.payment_method_kind ?? null,
+        codeCampaign: transaction.code_campaign ?? null,
+        syncHash,
+      },
+      ...(descriptive ? { descriptive } : {}),
+    }),
+  );
+
+  if (!incoming) await openIntakeFlagWorkItems(prisma, contribution.id, contactId, flags);
+
   // "on intake, all rules against the new row" (validation-rules.md). A
-  // no-op when metadata is still missing (runValidationForContribution
+  // no-op when no period has resolved yet (runValidationForContribution
   // returns null in that case).
   await runValidationForContribution(prisma, contribution.id);
 }
@@ -377,24 +342,19 @@ async function backfillMetadataIfPossible(
   periods: PeriodRow[],
   contributionId: string,
   acceptedAt: Date,
-  transaction: QomonTransaction,
+  codeCampaign: string | null,
+  externalRef: string | null,
   contactId: string,
 ): Promise<boolean> {
-  const derived = deriveIntakeDefaults({
-    acceptedAt,
-    codeCampaign: transaction.code_campaign ?? null,
-    externalRef:
-      transaction.external_transaction_id != null
-        ? String(transaction.external_transaction_id)
-        : null,
-    periods,
-  });
+  const derived = deriveIntakeDefaults({ acceptedAt, codeCampaign, externalRef, periods });
   if (!derived.descriptive) return false;
   await withChangeLog(prisma, { userId: null, reason: REASON_BACKFILL }, async (ctx) => {
-    const after = await ctx.tx.contributionMetadata.create({
-      data: { contributionId, ...descriptiveToRow(derived.descriptive!, null) },
+    const before = await ctx.tx.contribution.findUniqueOrThrow({ where: { id: contributionId } });
+    const after = await ctx.tx.contribution.update({
+      where: { id: contributionId },
+      data: descriptiveToColumns(derived.descriptive!),
     });
-    await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+    await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, before, after });
   });
   await openIntakeFlagWorkItems(prisma, contributionId, contactId, derived.flags);
   return true;
@@ -438,7 +398,7 @@ async function ensureContact(
  * address. Deliberately separate from `ensureContact`, which the bulk sweep
  * uses and which fetches a contact only the first time it's seen (ticket
  * 1.1: bounding the sweep's Qomon call volume across potentially thousands
- * of already-known contacts). A single "Refresh from Qomon" click on one
+ * of already-known contacts). A single "Refresh donor from Qomon" click on one
  * contribution has no such volume concern, and "refresh, right now" should
  * actually mean that for the donor's address too — otherwise a corrected
  * address in Qomon can never reach a contact created before the fix.
@@ -449,7 +409,9 @@ export async function refreshContactFromQomon(
   contactId: string,
 ): Promise<void> {
   const contact = await prisma.contact.findUnique({ where: { id: contactId } });
-  if (!contact) return;
+  // a contact with no Qomon link (development and testing only, D12) has
+  // nothing to refresh from
+  if (!contact || contact.qomonContactId === null) return;
   const qomonContactId = Number(contact.qomonContactId);
   const fetched = await qomon.getContact(qomonContactId);
   await prisma.contact.update({
@@ -465,21 +427,24 @@ function contactDisplayName(c: QomonContact, fallbackId: number): string {
   return parts.length > 0 ? parts.join(' ') : `Qomon contact ${fallbackId}`;
 }
 
-async function openDiffWorkItem(
+/** A Qomon-side edit or deletion of an imported transaction (O47): one open
+ *  incident per payment, however many times Qomon changes it before a human
+ *  looks. Never touches the payment or its contributions. */
+async function openSyncIncidentWorkItem(
   prisma: PrismaClient,
-  existing: { id: string; contactId: string },
+  payment: { id: string; contactId: string },
 ): Promise<void> {
   const already = await prisma.workItem.findFirst({
-    where: { kind: 'DIFF', subjectType: 'Contribution', subjectId: existing.id, status: 'OPEN' },
+    where: { kind: 'SYNC_INCIDENT', subjectType: 'Payment', subjectId: payment.id, status: 'OPEN' },
     select: { id: true },
   });
   if (already) return;
   await prisma.workItem.create({
     data: {
-      kind: 'DIFF',
-      subjectType: 'Contribution',
-      subjectId: existing.id,
-      contactId: existing.contactId,
+      kind: 'SYNC_INCIDENT',
+      subjectType: 'Payment',
+      subjectId: payment.id,
+      contactId: payment.contactId,
     },
   });
 }
@@ -488,40 +453,33 @@ async function detectDeletions(
   prisma: PrismaClient,
   seenQomonTransactionIds: Set<bigint>,
 ): Promise<number> {
-  const mirrored = await prisma.contribution.findMany({
+  const mirrored = await prisma.qomonTransactionLink.findMany({
     where: { deletedInQomonAt: null },
-    select: { id: true, qomonTransactionId: true, contactId: true },
+    select: { id: true, qomonTransactionId: true, payment: { select: { id: true, contactId: true } } },
   });
-  const missing = mirrored.filter((c) => !seenQomonTransactionIds.has(c.qomonTransactionId));
+  const missing = mirrored.filter((l) => !seenQomonTransactionIds.has(l.qomonTransactionId));
   if (missing.length === 0) return 0;
 
-  for (const c of missing) {
-    await prisma.contribution.update({
-      where: { id: c.id },
+  for (const l of missing) {
+    await prisma.qomonTransactionLink.update({
+      where: { id: l.id },
       data: { deletedInQomonAt: new Date() },
     });
-    await prisma.workItem.create({
-      data: {
-        kind: 'SYNC_INCIDENT',
-        subjectType: 'Contribution',
-        subjectId: c.id,
-        contactId: c.contactId,
-      },
-    });
+    await openSyncIncidentWorkItem(prisma, l.payment);
   }
   return missing.length;
 }
 
+/** Qomon's status `kind`, normalized for the sync hash: the documented enum
+ *  is valid|unpaid|reimbursed|bank_error|other; the sandbox also returns e.g.
+ *  "cancel" (types.ts) — anything outside it resolves to "other" rather than
+ *  failing the sweep. Mapped to the tool's PaymentState at import. */
 function resolveStatusKind(
   statusId: number | null | undefined,
   byId: Map<number, string>,
-): ContributionStatusKind {
+): string {
   const raw = statusId == null ? undefined : byId.get(statusId);
-  if (raw && KNOWN_STATUS_KINDS.has(raw)) return raw as ContributionStatusKind;
-  // documented enum is valid|unpaid|reimbursed|bank_error|other; the sandbox
-  // also returns e.g. "cancel" (types.ts) — anything outside our narrower
-  // stored enum resolves to "other" rather than failing the sweep.
-  return 'other';
+  return raw && KNOWN_STATUS_KINDS.has(raw) ? raw : 'other';
 }
 
 function buildSyncFields(
@@ -544,62 +502,24 @@ function buildSyncFields(
   };
 }
 
-function mirrorUpdateData(
-  transaction: QomonTransaction,
-  statusKind: ContributionStatusKind,
-  syncHash: string,
-) {
-  return {
-    amountCents: transaction.amount,
-    currency: transaction.currency,
-    acceptedAt: new Date(transaction.date),
-    paymentMethodKind: transaction.payment_method_kind ?? null,
-    statusKind,
-    codeCampaign: transaction.code_campaign ?? null,
-    comment: transaction.comment ?? null,
-    externalRef:
-      transaction.external_transaction_id != null
-        ? String(transaction.external_transaction_id)
-        : null,
-    syncHash,
-    lastSyncedAt: new Date(),
-  };
-}
-
 function parseIncomingMetadata(transaction: QomonTransaction): QomonSyncedFields | null {
   return qomonToSyncedFields(transaction.extra_json);
 }
 
-/** The cached row's six Qomon-synced fields, for drift comparison against a
- *  freshly-parsed incoming QomonSyncedFields (see
- *  @gpo/qomon-client's transaction-extra-fields.ts). */
-function cachedRowToSyncedFields(row: ContributionMetadata): QomonSyncedFields {
-  return {
-    period_id: row.periodId,
-    riding_number: row.ridingNumber,
-    entity_kind: row.entityKind,
-    goods_services: row.goodsServices,
-    processed_date: row.processedDate ? row.processedDate.toISOString().slice(0, 10) : null,
-    source_code: row.sourceCode,
-  };
-}
-
 /** Combines Qomon's six synced fields with this tool's five local-only
  *  fields (see transaction-extra-fields.ts) to produce a full descriptive
- *  object to cache. Local-only fields come from the existing cached row when
- *  there is one, or the same static defaults intake-derivation uses
- *  (intake/defaults.ts) when there isn't — never guessed beyond that. */
+ *  object. The local-only fields take the same static defaults
+ *  intake-derivation uses (intake/defaults.ts) — never guessed beyond that. */
 function mergeSyncedWithLocalDefaults(
   synced: QomonSyncedFields,
-  cachedRow: ContributionMetadata | null,
   externalRef: string | null,
 ): GpoMetadataDescriptive {
   return {
     ...synced,
-    received_by: cachedRow?.receivedBy ?? 'GPO',
-    non_deductible_cents: cachedRow?.nonDeductibleCents ?? 0,
-    eo_contributor_id: cachedRow?.eoContributorId ?? null,
-    exception_reason: cachedRow?.exceptionReason ?? null,
+    received_by: 'GPO',
+    non_deductible_cents: 0,
+    eo_contributor_id: null,
+    exception_reason: null,
     external_ref: externalRef,
   };
 }

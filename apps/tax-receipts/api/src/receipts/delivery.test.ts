@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
 import type { Prisma } from '../generated/prisma/index.js';
 import { issueReceiptsForSpace } from '../space/issuance.js';
-import { issueReceipt as issueReceiptFixture, makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { issueReceipt as issueReceiptFixture, makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import {
   DeliveryMissingPdfError,
   DeliveryReceiptNotFoundError,
@@ -56,25 +56,20 @@ describe('deliverSpaceReceipts (ticket 3.5)', () => {
         ] as Prisma.InputJsonValue,
       },
     });
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         qomonTransactionId: BigInt(nextId++),
         contactId: contact.id,
         amountCents,
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: contribution.id,
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: {
           periodId: SPACE.periodId,
           ridingNumber: SPACE.ridingNumber,
           entityKind: SPACE.entityKind,
           receivedBy: 'GPO',
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
     if (delivery) {
       await prisma.donorCyclePreference.create({

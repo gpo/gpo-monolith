@@ -4,7 +4,7 @@ import path from 'node:path';
 import { standardOntarioEsaHolidays } from '@gpo/tax-receipts-core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import { buildRtdDraft } from './draft.js';
 import { prepareRtdFiling } from './prepare.js';
 
@@ -33,7 +33,7 @@ const prisma = testPrisma();
  * Residual, explicitly out of this ticket's scope: ticket 1.17 (the real
  * CiviCRM historical import, still blocked on C1/C2) must itself write
  * `RtdInclusion` rows for whatever `gpo_report` already filed before
- * cutover, not just `Contribution`/`ContributionMetadata` rows -- only
+ * cutover, not just `Contribution` rows -- only
  * then does "reconciled against imported RtdInclusion rows"
  * (deep-review-2.md finding 3) hold for real 2026 history. The rollout
  * runbook's "gpo_report files everything due through the Jan 3 freeze"
@@ -73,17 +73,14 @@ describe('December-straddle case (ticket 2.7)', () => {
 
   async function seedMetadata(contributionId: string, periodId: number) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId,
           entityKind: 'PARTY',
           ridingNumber: null,
           receivedBy: 'GPO',
           goodsServices: false,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
     });
   }
@@ -97,14 +94,12 @@ describe('December-straddle case (ticket 2.7)', () => {
     firstName?: string;
   }) {
     if (opts.contactId) {
-      const contribution = await prisma.contribution.create({
-        data: {
+      const contribution = await createTestContribution(prisma, {
           qomonTransactionId: nextTxId++,
           contactId: opts.contactId,
           amountCents: opts.amountCents,
           acceptedAt: opts.acceptedAt,
-        },
-      });
+        });
       await seedMetadata(contribution.id, opts.periodId);
       return { contactId: opts.contactId, contributionId: contribution.id };
     }

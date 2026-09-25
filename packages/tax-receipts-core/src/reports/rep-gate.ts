@@ -49,7 +49,7 @@ export interface RepGateSourceRow {
   ridingNumber: number | null;
   periodId: number;
   acceptedAt: Date;
-  /** ContributionMetadata.processedDate — the accounting/deposit date when
+  /** Contribution.processedDate — the accounting/deposit date when
    *  it differs from acceptance (data-model.md §3). Null means no receivable
    *  signal is derivable, not that one was checked and cleared. */
   processedDate: Date | null;

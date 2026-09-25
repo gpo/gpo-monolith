@@ -89,7 +89,6 @@ export async function generateDc1aAmendment(
     where: { id: input.contributionId },
     include: {
       contact: true,
-      metadata: true,
       rtdInclusions: { include: { rtdFiling: true } },
     },
   });
@@ -101,9 +100,9 @@ export async function generateDc1aAmendment(
   if (!contribution || !original) {
     throw new ContributionNotRtdReportedError(input.contributionId);
   }
-  const metadata = contribution.metadata;
-  if (!metadata) {
-    throw new ContributionNotRtdReportedError(input.contributionId); // unreachable: stamping requires metadata
+  const periodId = contribution.periodId;
+  if (periodId === null) {
+    throw new ContributionNotRtdReportedError(input.contributionId); // unreachable: stamping requires a period
   }
 
   let workItem = null;
@@ -125,8 +124,8 @@ export async function generateDc1aAmendment(
     amountCents: original.amountCents,
     aggregateAfterCents: original.aggregateAfterCents,
     contributionYear: contributionYear(contribution.acceptedAt),
-    periodId: metadata.periodId,
-    eoContributorId: metadata.eoContributorId,
+    periodId,
+    eoContributorId: contribution.eoContributorId,
   };
 
   const formText = formatDc1aAmendmentForm({

@@ -22,8 +22,8 @@ import type { PrismaClient } from '../generated/prisma/index.js';
  * One WorkItem row is kept per (contribution, ruleRef) over time rather than
  * accumulating duplicates release over release.
  *
- * Callers: the mirror sweep (1.1, on intake — after metadata is created or
- * backfilled) and the metadata write-through (1.2, on edit). A nightly full
+ * Callers: the Qomon import sweep (1.1, on intake — after metadata is created
+ * or backfilled) and the metadata edit (1.2, on edit). A nightly full
  * pass is `runValidationForAllContributions` below.
  */
 
@@ -41,11 +41,12 @@ export async function runValidationForContribution(
 ): Promise<ValidationRunResult | null> {
   const contribution = await prisma.contribution.findUnique({
     where: { id: contributionId },
-    include: { metadata: true, contact: true },
+    include: { contact: true, payment: true },
   });
-  if (!contribution || !contribution.metadata) return null; // nothing to validate yet (1.1's intake flag covers this)
+  // a superseded or refunded row is history (D12): nothing to validate
+  if (!contribution || contribution.status !== 'ACTIVE' || contribution.periodId === null) return null; // nothing to validate yet (1.1's intake flag covers this)
 
-  const period = await prisma.period.findUnique({ where: { id: contribution.metadata.periodId } });
+  const period = await prisma.period.findUnique({ where: { id: contribution.periodId } });
   const periodRow: PeriodRow | undefined = period
     ? {
         id: period.id,
@@ -63,19 +64,22 @@ export async function runValidationForContribution(
     where: {
       contactId: contribution.contactId,
       id: { not: contribution.id },
+      status: 'ACTIVE',
+      // the other halves of one split payment are not duplicates of each other
+      paymentId: { not: contribution.paymentId },
       acceptedAt: { gte: dupWindowStart, lte: dupWindowEnd },
     },
-    include: { metadata: true },
+    include: { payment: true },
   });
   const duplicateContributionCandidates: DuplicateContributionCandidate[] = duplicateRows
-    .filter((r) => r.metadata !== null)
+    .filter((r) => r.periodId !== null)
     .map((r) => ({
       id: r.id,
       amountCents: r.amountCents,
       acceptedAt: r.acceptedAt,
-      externalRef: r.externalRef,
-      entityKind: r.metadata!.entityKind,
-      ridingNumber: r.metadata!.ridingNumber,
+      externalRef: r.payment.externalRef,
+      entityKind: r.entityKind,
+      ridingNumber: r.ridingNumber,
     }));
 
   const year = contributionYear(contribution.acceptedAt);
@@ -84,21 +88,21 @@ export async function runValidationForContribution(
     where: {
       contactId: contribution.contactId,
       id: { not: contribution.id },
+      status: 'ACTIVE',
       acceptedAt: {
         gte: new Date(Date.UTC(year - 1, 11, 30)),
         lt: new Date(Date.UTC(year + 1, 0, 2)),
       },
     },
-    include: { metadata: true },
   });
   const otherContributionsThisYear: ContributionForLimits[] = yearRows
-    .filter((r) => r.metadata !== null && contributionYear(r.acceptedAt) === year)
+    .filter((r) => r.periodId !== null && contributionYear(r.acceptedAt) === year)
     .map((r) => ({
       id: r.id,
       amountCents: r.amountCents,
-      goodsServices: r.metadata!.goodsServices,
-      entityKind: r.metadata!.entityKind,
-      ridingNumber: r.metadata!.ridingNumber,
+      goodsServices: r.goodsServices,
+      entityKind: r.entityKind,
+      ridingNumber: r.ridingNumber,
       year,
       candidateSelf: false,
       leadership: false,
@@ -106,9 +110,9 @@ export async function runValidationForContribution(
   const limitRows = await prisma.contributionLimit.findMany({ where: { year } });
 
   let riding: RidingRow | undefined;
-  if (contribution.metadata.ridingNumber !== null) {
+  if (contribution.ridingNumber !== null) {
     const row = await prisma.riding.findUnique({
-      where: { ridingNumber: contribution.metadata.ridingNumber },
+      where: { ridingNumber: contribution.ridingNumber },
     });
     riding = row ? { ridingNumber: row.ridingNumber, active: row.active } : undefined;
   }
@@ -129,16 +133,16 @@ export async function runValidationForContribution(
       id: contribution.id,
       amountCents: contribution.amountCents,
       acceptedAt: contribution.acceptedAt,
-      paymentMethodKind: contribution.paymentMethodKind,
-      externalRef: contribution.externalRef,
+      paymentMethod: contribution.payment.method,
+      externalRef: contribution.payment.externalRef,
       metadata: {
-        periodId: contribution.metadata.periodId,
-        ridingNumber: contribution.metadata.ridingNumber,
-        entityKind: contribution.metadata.entityKind,
-        receivedBy: contribution.metadata.receivedBy,
-        goodsServices: contribution.metadata.goodsServices,
-        nonDeductibleCents: contribution.metadata.nonDeductibleCents,
-        sourceCode: contribution.metadata.sourceCode,
+        periodId: contribution.periodId,
+        ridingNumber: contribution.ridingNumber,
+        entityKind: contribution.entityKind,
+        receivedBy: contribution.receivedBy,
+        goodsServices: contribution.goodsServices,
+        nonDeductibleCents: contribution.nonDeductibleCents,
+        sourceCode: contribution.sourceCode,
       },
     },
     contactId: contribution.contactId,
@@ -260,7 +264,7 @@ export async function runValidationForAllContributions(
   prisma: PrismaClient,
 ): Promise<NightlyValidationResult> {
   const ids = await prisma.contribution.findMany({
-    where: { metadata: { isNot: null }, deletedInQomonAt: null },
+    where: { periodId: { not: null }, status: 'ACTIVE' },
     select: { id: true },
   });
 

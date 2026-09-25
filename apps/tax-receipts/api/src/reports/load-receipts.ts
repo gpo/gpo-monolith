@@ -112,12 +112,12 @@ export interface LoadedReceiptRow {
   acceptedAt: Date;
   goodsServices: boolean;
   receivedBy: ReceivedBy;
-  /** ContributionMetadata.eoContributorId. Null in the common case today —
+  /** Contribution.eoContributorId. Null in the common case today —
    *  no ticket populates it yet (data-model.md §3 marks it optional). EO's
    *  spec calls this mandatory for GPO (eo-reporting.md §1); tracked as
    *  open-questions.md O38, not fabricated here. */
   eoContributorId: string | null;
-  /** ContributionMetadata.processedDate — feeds the REP6 receivable flag
+  /** Contribution.processedDate — feeds the REP6 receivable flag
    *  (ticket 4.3). Null when the accounting date never differs from
    *  acceptance. */
   processedDate: Date | null;
@@ -174,7 +174,7 @@ export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScop
     include: {
       addressSnapshot: true,
       contact: true,
-      allocations: { include: { contribution: { include: { metadata: true } } } },
+      allocations: { include: { contribution: true } },
     },
     orderBy: { receiptNumber: 'asc' },
   });
@@ -185,8 +185,7 @@ export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScop
     }
     const allocation = receipt.allocations[0]!;
     const contribution = allocation.contribution;
-    const metadata = contribution.metadata;
-    if (!metadata) {
+    if (contribution.periodId === null) {
       throw new MissingContributionMetadataError(receipt.receiptNumber, contribution.id);
     }
 
@@ -200,10 +199,10 @@ export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScop
       issueDate: receipt.issueDate,
       amountCents: allocation.amountCents,
       acceptedAt: contribution.acceptedAt,
-      goodsServices: metadata.goodsServices,
-      receivedBy: metadata.receivedBy,
-      eoContributorId: metadata.eoContributorId,
-      processedDate: metadata.processedDate,
+      goodsServices: contribution.goodsServices,
+      receivedBy: contribution.receivedBy,
+      eoContributorId: contribution.eoContributorId,
+      processedDate: contribution.processedDate,
       contactId: receipt.contact.id,
       contributorLastName: receipt.contact.lastName ?? receipt.contact.name,
       contributorFirstName: receipt.contact.firstName ?? '',

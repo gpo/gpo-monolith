@@ -38,16 +38,13 @@ describe('entity reports: listing, drift, send-to-CFO (ticket 4.5)', () => {
       contactLastName: 'Donor',
     });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId: baseline.periodId,
           entityKind: 'PARTY',
           receivedBy: 'GPO',
           eoContributorId: opts.eoContributorId ?? null,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
     });
     return fixtureIssueReceipt(prisma, {
       contactId,
@@ -99,11 +96,8 @@ describe('entity reports: listing, drift, send-to-CFO (ticket 4.5)', () => {
     const allocation = await prisma.receiptAllocation.findFirstOrThrow({ where: { receiptId } });
     const contributionId = allocation.contributionId;
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'assign contributor id' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.update({
-        where: { contributionId },
-        data: { eoContributorId: '198176' },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: { eoContributorId: '198176' } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
     });
 
     const list = await listEntityReports(prisma, baseline.periodId);

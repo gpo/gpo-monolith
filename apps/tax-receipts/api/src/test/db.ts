@@ -1,5 +1,5 @@
-import { standardOntarioEsaHolidays } from '@gpo/tax-receipts-core';
-import { PrismaClient } from '../generated/prisma/index.js';
+import { paymentMethodFromQomon, paymentStateFromQomonKind, standardOntarioEsaHolidays } from '@gpo/tax-receipts-core';
+import { PrismaClient, type Prisma, type PaymentMethod, type PaymentState } from '../generated/prisma/index.js';
 import { withChangeLog } from '../changelog/write.js';
 
 let shared: PrismaClient | undefined;
@@ -89,43 +89,149 @@ export async function seedBaseline(prisma: PrismaClient): Promise<Baseline> {
   };
 }
 
+/**
+ * Run a test's direct contribution writes inside a change-logged
+ * transaction. `contribution` is a guarded table (invariant 5, D12), so a
+ * bare `prisma.contribution.create/update` is refused by the database; the
+ * fixtures and the few tests that write one directly go through here.
+ */
+export async function fixtureWrite<T extends { id?: string; contributions?: Array<{ id: string }> }>(
+  prisma: PrismaClient,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return withChangeLog(prisma, { userId: null, reason: 'test fixture' }, async (ctx) => {
+    const result = await fn(ctx.tx);
+    await ctx.log({
+      subjectType: 'Contribution',
+      subjectId: result.contributions?.[0]?.id ?? result.id ?? 'fixture',
+    });
+    return result;
+  });
+}
+
 export interface ContributionFixture {
   contactId: string;
   contributionId: string;
+  paymentId: string;
 }
 
-/** Insert a contact + contribution directly (neither table is guarded by
- *  invariant 5, so no change-log context is needed for fixtures). */
+/** Insert a contact + payment + initial contribution directly (none of the
+ *  tables is guarded by invariant 5, so no change-log context is needed for
+ *  fixtures). A `qomonTransactionId` also creates the payment's Qomon link,
+ *  as an import would; leave it out for a manual-style payment. */
 export async function makeContribution(
   prisma: PrismaClient,
   opts: {
-    qomonContactId: bigint;
-    qomonTransactionId: bigint;
+    qomonContactId?: bigint | null;
+    qomonTransactionId?: bigint | null;
     amountCents: number;
     acceptedAt?: Date;
     contactName?: string;
     contactFirstName?: string;
     contactLastName?: string;
+    /** reuse an existing contact instead of creating one */
+    contactId?: string;
+    method?: PaymentMethod;
+    state?: PaymentState;
+    externalRef?: string | null;
   },
 ): Promise<ContributionFixture> {
-  const contact = await prisma.contact.create({
+  const contactId =
+    opts.contactId ??
+    (
+      await prisma.contact.create({
+        data: {
+          qomonContactId: opts.qomonContactId ?? null,
+          name: opts.contactName ?? 'Dana Donor',
+          firstName: opts.contactFirstName,
+          lastName: opts.contactLastName,
+          email: 'dana@example.org',
+        },
+      })
+    ).id;
+  const acceptedAt = opts.acceptedAt ?? new Date('2026-03-01T12:00:00Z');
+  const payment = await fixtureWrite(prisma, async (tx) => tx.payment.create({
     data: {
-      qomonContactId: opts.qomonContactId,
-      name: opts.contactName ?? 'Dana Donor',
-      firstName: opts.contactFirstName,
-      lastName: opts.contactLastName,
-      email: 'dana@example.org',
-    },
-  });
-  const contribution = await prisma.contribution.create({
-    data: {
-      qomonTransactionId: opts.qomonTransactionId,
-      contactId: contact.id,
+      source: opts.qomonTransactionId != null ? 'QOMON_IMPORT' : 'MANUAL',
+      contactId,
       amountCents: opts.amountCents,
-      acceptedAt: opts.acceptedAt ?? new Date('2026-03-01T12:00:00Z'),
+      receivedAt: acceptedAt,
+      method: opts.method ?? 'CARD',
+      state: opts.state ?? 'RECEIVED',
+      externalRef: opts.externalRef ?? null,
+      ...(opts.qomonTransactionId != null
+        ? { qomonLink: { create: { qomonTransactionId: opts.qomonTransactionId, lastSyncedAt: new Date() } } }
+        : {}),
+      contributions: {
+        create: { contactId, amountCents: opts.amountCents, acceptedAt },
+      },
     },
-  });
-  return { contactId: contact.id, contributionId: contribution.id };
+    include: { contributions: true },
+  }));
+  return { contactId, contributionId: payment.contributions[0]!.id, paymentId: payment.id };
+}
+
+/**
+ * Insert a payment + optional Qomon link + contribution and return the
+ * contribution row. Accepts the fields the pre-D12 Contribution carried, so a
+ * test that used to write `prisma.contribution.create({ data: { ... } })`
+ * reads the same: Qomon-shaped facts land on the payment and its link.
+ */
+export async function createTestContribution(
+  db: PrismaClient,
+  data: {
+    contactId: string;
+    amountCents: number;
+    acceptedAt: Date;
+    qomonTransactionId?: bigint | null;
+    qomonBundleId?: bigint | null;
+    paymentMethodKind?: string | null;
+    statusKind?: string;
+    externalRef?: string | null;
+    comment?: string | null;
+    currency?: string;
+    syncHash?: string | null;
+    deletedInQomonAt?: Date | null;
+    status?: 'ACTIVE' | 'SUPERSEDED' | 'REFUNDED';
+  },
+) {
+  const payment = await fixtureWrite(db, async (tx) => tx.payment.create({
+    data: {
+      source: data.qomonTransactionId != null ? 'QOMON_IMPORT' : 'MANUAL',
+      contactId: data.contactId,
+      amountCents: data.amountCents,
+      currency: data.currency ?? 'cad',
+      receivedAt: data.acceptedAt,
+      method: paymentMethodFromQomon(data.paymentMethodKind),
+      state: paymentStateFromQomonKind(data.statusKind ?? 'valid'),
+      externalRef: data.externalRef ?? null,
+      note: data.comment ?? null,
+      ...(data.qomonTransactionId != null
+        ? {
+            qomonLink: {
+              create: {
+                qomonTransactionId: data.qomonTransactionId,
+                qomonBundleId: data.qomonBundleId ?? null,
+                qomonPaymentMethodKind: data.paymentMethodKind ?? null,
+                syncHash: data.syncHash ?? null,
+                deletedInQomonAt: data.deletedInQomonAt ?? null,
+                lastSyncedAt: new Date(),
+              },
+            },
+          }
+        : {}),
+      contributions: {
+        create: {
+          contactId: data.contactId,
+          amountCents: data.amountCents,
+          acceptedAt: data.acceptedAt,
+          status: data.status ?? 'ACTIVE',
+        },
+      },
+    },
+    include: { contributions: true },
+  }));
+  return payment.contributions[0]!;
 }
 
 /**

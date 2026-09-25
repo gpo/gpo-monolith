@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -38,20 +38,16 @@ describe('receipt routes (ticket 3.1)', () => {
         ],
       },
     });
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         qomonTransactionId: 1n,
         contactId: contact.id,
         amountCents: 5_000,
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
     contributionId = contribution.id;
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: { contributionId, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
     });
 
     storageDir = await mkdtemp(path.join(tmpdir(), 'gpo-receipts-route-test-'));
@@ -209,19 +205,13 @@ describe('receipt allocation route (ticket 3.2)', () => {
         ],
       },
     });
-    const firstContribution = await prisma.contribution.create({
-      data: { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') },
-    });
-    const secondContribution = await prisma.contribution.create({
-      data: { qomonTransactionId: 2n, contactId: contact.id, amountCents: 3_000, acceptedAt: new Date('2026-03-05T12:00:00Z') },
-    });
+    const firstContribution = await createTestContribution(prisma, { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') });
+    const secondContribution = await createTestContribution(prisma, { qomonTransactionId: 2n, contactId: contact.id, amountCents: 3_000, acceptedAt: new Date('2026-03-05T12:00:00Z') });
     secondContributionId = secondContribution.id;
     for (const contributionId of [firstContribution.id, secondContribution.id]) {
       await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-        const after = await ctx.tx.contributionMetadata.create({
-          data: { contributionId, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },
-        });
-        await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' } });
+        await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       });
     }
 
@@ -337,14 +327,10 @@ describe('receipt correction routes: cancel / reissue (ticket 3.10)', () => {
         ],
       },
     });
-    const contribution = await prisma.contribution.create({
-      data: { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') },
-    });
+    const contribution = await createTestContribution(prisma, { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: { contributionId: contribution.id, periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
 
     storageDir = await mkdtemp(path.join(tmpdir(), 'gpo-receipts-correction-test-'));

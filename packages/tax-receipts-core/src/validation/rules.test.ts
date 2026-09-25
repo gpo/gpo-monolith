@@ -61,7 +61,7 @@ function contribution(
     id: 'c1',
     amountCents: 5_000,
     acceptedAt: new Date('2026-03-01T12:00:00Z'),
-    paymentMethodKind: 'card',
+    paymentMethod: 'CARD',
     externalRef: null,
     metadata: {
       periodId: 67,
@@ -259,16 +259,16 @@ describe('A7 source-code riding', () => {
 
 describe('A8 cash limit', () => {
   it('passes a cash contribution at or under $25', () => {
-    expect(checkA8CashLimit(contribution({ paymentMethodKind: 'cash', amountCents: CASH_LIMIT_CENTS }))).toBeNull();
+    expect(checkA8CashLimit(contribution({ paymentMethod: 'CASH', amountCents: CASH_LIMIT_CENTS }))).toBeNull();
   });
 
   it('flags a cash contribution over $25', () => {
-    const c = contribution({ paymentMethodKind: 'cash', amountCents: CASH_LIMIT_CENTS + 1 });
+    const c = contribution({ paymentMethod: 'CASH', amountCents: CASH_LIMIT_CENTS + 1 });
     expect(checkA8CashLimit(c)?.ruleRef).toBe('A8');
   });
 
   it('ignores non-cash payment methods regardless of amount', () => {
-    expect(checkA8CashLimit(contribution({ paymentMethodKind: 'card', amountCents: 1_000_000 }))).toBeNull();
+    expect(checkA8CashLimit(contribution({ paymentMethod: 'CARD', amountCents: 1_000_000 }))).toBeNull();
   });
 });
 
@@ -433,7 +433,7 @@ describe('C5 address snapshot exists (no-op pending Phase 3)', () => {
 describe('runContributionRules', () => {
   it('runs every rule and collects every finding', () => {
     const c = contribution(
-      { paymentMethodKind: 'cash', amountCents: 10_000 },
+      { paymentMethod: 'CASH', amountCents: 10_000 },
       { entityKind: 'PARTY', ridingNumber: 84 }, // A2 violation: PARTY with a riding
     );
     const findings = runContributionRules({

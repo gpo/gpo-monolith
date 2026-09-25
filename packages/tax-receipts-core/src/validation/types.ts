@@ -1,4 +1,4 @@
-import type { EntityKind, ReceivedBy } from '../enums.js';
+import type { EntityKind, PaymentMethod, ReceivedBy } from '../enums.js';
 
 /**
  * Shared shapes for the validation rule registry (ticket 1.7,
@@ -26,7 +26,8 @@ export interface ContributionForValidationRules {
   id: string;
   amountCents: number;
   acceptedAt: Date;
-  paymentMethodKind: string | null;
+  /** the payment's method (D12); null only where no payment is known */
+  paymentMethod: PaymentMethod | null;
   externalRef: string | null;
   metadata: ContributionMetadataForValidation;
 }

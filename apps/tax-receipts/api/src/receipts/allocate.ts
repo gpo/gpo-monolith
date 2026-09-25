@@ -4,7 +4,7 @@ import {
   type AllocationRow,
 } from '@gpo/tax-receipts-core';
 import { withChangeLog } from '../changelog/write.js';
-import { ContributionNotFoundError } from '../contributions/metadata-write-through.js';
+import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
 import type { PrismaClient, ReceiptAllocation } from '../generated/prisma/index.js';
 import { AllocationOverageError, ReceiptIssuanceValidationError } from './issue.js';
 
@@ -111,10 +111,10 @@ export async function allocateToReceipt(
 
   const contribution = await prisma.contribution.findUnique({
     where: { id: input.contributionId },
-    include: { metadata: true, allocations: { include: { receipt: true } } },
+    include: { allocations: { include: { receipt: true } } },
   });
   if (!contribution) throw new ContributionNotFoundError(input.contributionId);
-  if (!contribution.metadata) {
+  if (contribution.periodId === null) {
     throw new ReceiptIssuanceValidationError(
       `contribution ${input.contributionId} has no metadata yet; intake derivation has not resolved this row`,
     );
@@ -136,7 +136,7 @@ export async function allocateToReceipt(
     {
       id: contribution.id,
       amountCents: contribution.amountCents,
-      nonDeductibleCents: contribution.metadata.nonDeductibleCents,
+      nonDeductibleCents: contribution.nonDeductibleCents,
     },
     allocationRows,
   );

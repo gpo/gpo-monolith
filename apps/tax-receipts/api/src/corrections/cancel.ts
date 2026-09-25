@@ -274,7 +274,7 @@ export async function reissueReceipt(
   const contributionIds = receipt.allocations.map((a) => a.contributionId);
   const contributions = await prisma.contribution.findMany({
     where: { id: { in: contributionIds } },
-    include: { metadata: true, allocations: { include: { receipt: true } } },
+    include: { allocations: { include: { receipt: true } } },
   });
 
   const rawAddress = addressFrom(receipt.contact.addresses);
@@ -309,7 +309,7 @@ export async function reissueReceipt(
       receiptStatus: a.receipt.status,
     }));
     const remaining = remainingEligibleCents(
-      { id: c.id, amountCents: c.amountCents, nonDeductibleCents: c.metadata!.nonDeductibleCents },
+      { id: c.id, amountCents: c.amountCents, nonDeductibleCents: c.nonDeductibleCents },
       allocationRows,
     );
     if (remaining <= 0) {
@@ -402,9 +402,9 @@ export async function reissueReceipt(
     issueDate: created.newReceipt.issueDate,
     acceptedAt: primary.acceptedAt,
     eligibleAmountCents: created.totalAmountCents,
-    isGoodsServices: primary.metadata!.goodsServices,
+    isGoodsServices: primary.goodsServices,
     politicalEntityLabel: input.politicalEntityLabel,
-    eoContributorId: primary.metadata!.eoContributorId,
+    eoContributorId: primary.eoContributorId,
     contributorName: receipt.contactNameSnapshot,
     addressLine1,
     addressLine2: null,

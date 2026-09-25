@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
 import type { Prisma } from '../generated/prisma/index.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import {
   SpaceIssuanceBlockedError,
   getSpaceIssuanceGate,
@@ -46,26 +46,21 @@ describe('per-space issuance (ticket 3.12, first slice)', () => {
         ] as Prisma.InputJsonValue,
       },
     });
-    const contribution = await prisma.contribution.create({
-      data: {
+    const contribution = await createTestContribution(prisma, {
         qomonTransactionId: BigInt(nextTransactionId++),
         contactId: contact.id,
         amountCents,
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: contribution.id,
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: {
           periodId: SPACE.periodId,
           ridingNumber: SPACE.ridingNumber,
           entityKind: SPACE.entityKind,
           receivedBy: 'GPO',
           ...overrides,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
     return { contactId: contact.id, contributionId: contribution.id };
   }
@@ -183,25 +178,20 @@ describe('per-space issuance (ticket 3.12, first slice)', () => {
     const noAddress = await prisma.contact.create({
       data: { qomonContactId: BigInt(nextTransactionId), name: 'No Address Ned' },
     });
-    const badContribution = await prisma.contribution.create({
-      data: {
+    const badContribution = await createTestContribution(prisma, {
         qomonTransactionId: BigInt(nextTransactionId++),
         contactId: noAddress.id,
         amountCents: 2_000,
         acceptedAt: new Date('2026-03-01T12:00:00Z'),
-      },
-    });
+      });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: badContribution.id,
+      const after = await ctx.tx.contribution.update({ where: { id: badContribution.id }, data: {
           periodId: SPACE.periodId,
           ridingNumber: SPACE.ridingNumber,
           entityKind: SPACE.entityKind,
           receivedBy: 'GPO',
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: badContribution.id, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: badContribution.id, after });
     });
 
     const result = await issueReceiptsForSpace(

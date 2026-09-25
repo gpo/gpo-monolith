@@ -52,17 +52,14 @@ describe('report-export gate (ticket 4.3)', () => {
       acceptedAt: opts.acceptedAt,
     });
     await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId,
+      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId: opts.periodId,
           entityKind: opts.entityKind,
           ridingNumber: opts.ridingNumber ?? null,
           receivedBy: 'GPO',
           processedDate: opts.processedDate,
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contributionId, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
     });
     return fixtureIssueReceipt(prisma, {
       contactId,

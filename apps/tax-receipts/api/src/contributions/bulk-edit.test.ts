@@ -1,7 +1,6 @@
-import { InMemoryQomon } from '@gpo/qomon-client/fake';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { issueReceipt, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
 import {
   BulkEditEmptyChangesError,
   BulkEditTooLargeError,
@@ -10,44 +9,32 @@ import {
 
 const prisma = testPrisma();
 
-describe('bulkEditContributionMetadata (ticket 1.4)', () => {
+describe('bulkEditContributionMetadata (ticket 1.4, local-only since D12)', () => {
   let baseline: Awaited<ReturnType<typeof seedBaseline>>;
-  let qomon: InMemoryQomon;
 
   beforeEach(async () => {
     await resetDb(prisma);
     baseline = await seedBaseline(prisma);
-    qomon = new InMemoryQomon();
   });
 
   async function seedRow(qomonId: bigint, opts: { ridingNumber?: number | null; nonDeductibleCents?: number } = {}) {
-    qomon.seedContact({ id: Number(qomonId), firstname: 'Dana', surname: 'Donor' });
-    const bundle = qomon.seedBundle({
-      transactions: [{ contact_id: Number(qomonId), amount: 5_000, date: '2026-03-01T00:00:00.000Z', status_id: 1 }],
-    });
     const contact = await prisma.contact.create({ data: { qomonContactId: qomonId, name: 'Dana Donor' } });
-    const contribution = await prisma.contribution.create({
-      data: {
-        contactId: contact.id,
-        qomonTransactionId: BigInt(bundle.transactions[0]!.id),
-        qomonBundleId: BigInt(bundle.id),
-        amountCents: 5_000,
-        acceptedAt: new Date('2026-03-01T00:00:00Z'),
-      },
+    const contribution = await createTestContribution(prisma, {
+      contactId: contact.id,
+      qomonTransactionId: qomonId,
+      amountCents: 5_000,
+      acceptedAt: new Date('2026-03-01T00:00:00Z'),
     });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
-      const after = await ctx.tx.contributionMetadata.create({
-        data: {
-          contributionId: contribution.id,
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: {
           periodId: baseline.periodId,
           ridingNumber: opts.ridingNumber ?? null,
           entityKind: opts.ridingNumber ? 'CA' : 'PARTY',
           receivedBy: 'GPO',
           nonDeductibleCents: opts.nonDeductibleCents ?? 0,
           sourceCode: 'keep-me',
-        },
-      });
-      await ctx.log({ subjectType: 'ContributionMetadata', subjectId: contribution.id, after });
+        } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
     });
     return contribution;
   }
@@ -57,7 +44,7 @@ describe('bulkEditContributionMetadata (ticket 1.4)', () => {
     const b = await seedRow(2n, { ridingNumber: 84 });
 
     const result = await bulkEditContributionMetadata(
-      { prisma, qomon },
+      { prisma },
       {
         contributionIds: [a.id, b.id],
         actorUserId: baseline.adminUserId,
@@ -68,12 +55,12 @@ describe('bulkEditContributionMetadata (ticket 1.4)', () => {
 
     expect(result).toMatchObject({ succeeded: 2, failed: 0 });
     for (const id of [a.id, b.id]) {
-      const row = await prisma.contributionMetadata.findUnique({ where: { contributionId: id } });
+      const row = await prisma.contribution.findUnique({ where: { id: id } });
       expect(row).toMatchObject({ periodId: 67, ridingNumber: 84, sourceCode: 'keep-me' });
     }
 
     const entries = await prisma.changeLogEntry.findMany({
-      where: { subjectType: 'ContributionMetadata', reason: 'reassign period for the by-election window' },
+      where: { subjectType: 'Contribution', reason: 'reassign period for the by-election window' },
     });
     expect(entries).toHaveLength(2); // one change-log entry per row
   });
@@ -81,7 +68,7 @@ describe('bulkEditContributionMetadata (ticket 1.4)', () => {
   it('can set a nullable field to null explicitly (party-level reassignment)', async () => {
     const a = await seedRow(3n, { ridingNumber: 84 });
     await bulkEditContributionMetadata(
-      { prisma, qomon },
+      { prisma },
       {
         contributionIds: [a.id],
         actorUserId: baseline.adminUserId,
@@ -89,19 +76,17 @@ describe('bulkEditContributionMetadata (ticket 1.4)', () => {
         changes: { ridingNumber: null, entityKind: 'PARTY' },
       },
     );
-    const row = await prisma.contributionMetadata.findUnique({ where: { contributionId: a.id } });
+    const row = await prisma.contribution.findUnique({ where: { id: a.id } });
     expect(row?.ridingNumber).toBeNull();
   });
 
   it('reports a per-row failure without stopping the rest of the batch', async () => {
     const a = await seedRow(4n, { ridingNumber: 84 });
     const contact = await prisma.contact.create({ data: { qomonContactId: 40n, name: 'No Metadata' } });
-    const noMetadata = await prisma.contribution.create({
-      data: { contactId: contact.id, qomonTransactionId: 40n, amountCents: 1, acceptedAt: new Date('2026-03-01T00:00:00Z') },
-    });
+    const noMetadata = await createTestContribution(prisma, { contactId: contact.id, qomonTransactionId: 40n, amountCents: 1, acceptedAt: new Date('2026-03-01T00:00:00Z') });
 
     const result = await bulkEditContributionMetadata(
-      { prisma, qomon },
+      { prisma },
       {
         contributionIds: [a.id, noMetadata.id],
         actorUserId: baseline.adminUserId,
@@ -129,7 +114,7 @@ describe('bulkEditContributionMetadata (ticket 1.4)', () => {
     });
 
     const result = await bulkEditContributionMetadata(
-      { prisma, qomon },
+      { prisma },
       {
         contributionIds: [a.id],
         actorUserId: baseline.adminUserId,
@@ -138,7 +123,7 @@ describe('bulkEditContributionMetadata (ticket 1.4)', () => {
       },
     );
     expect(result.failed).toBe(1);
-    const row = await prisma.contributionMetadata.findUnique({ where: { contributionId: a.id } });
+    const row = await prisma.contribution.findUnique({ where: { id: a.id } });
     expect(row?.periodId).toBe(baseline.periodId); // untouched
   });
 
@@ -146,7 +131,7 @@ describe('bulkEditContributionMetadata (ticket 1.4)', () => {
     const a = await seedRow(6n);
     await expect(
       bulkEditContributionMetadata(
-        { prisma, qomon },
+        { prisma },
         { contributionIds: [a.id], actorUserId: baseline.adminUserId, reason: 'x', changes: {} },
       ),
     ).rejects.toBeInstanceOf(BulkEditEmptyChangesError);
@@ -156,9 +141,29 @@ describe('bulkEditContributionMetadata (ticket 1.4)', () => {
     const ids = Array.from({ length: 501 }, (_, i) => `fake-${i}`);
     await expect(
       bulkEditContributionMetadata(
-        { prisma, qomon },
+        { prisma },
         { contributionIds: ids, actorUserId: baseline.adminUserId, reason: 'x', changes: { periodId: 1 } },
       ),
     ).rejects.toBeInstanceOf(BulkEditTooLargeError);
+  });
+
+  it('writes external_ref to the payment (its home since D12), logged against the payment', async () => {
+    const a = await seedRow(7n, { ridingNumber: 84 });
+    const result = await bulkEditContributionMetadata(
+      { prisma },
+      {
+        contributionIds: [a.id],
+        actorUserId: baseline.adminUserId,
+        reason: 'record the processor id',
+        changes: { externalRef: 'ch_3PqK' },
+      },
+    );
+    expect(result.succeeded).toBe(1);
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: a.paymentId } });
+    expect(payment.externalRef).toBe('ch_3PqK');
+    const entries = await prisma.changeLogEntry.findMany({
+      where: { subjectType: 'Payment', subjectId: a.paymentId, reason: 'record the processor id' },
+    });
+    expect(entries).toHaveLength(1);
   });
 });

@@ -117,10 +117,11 @@ function a2RidingEntityWarning(
 }
 
 /**
- * Contribution detail (ticket 1.5, screens.md 3): Qomon facts read-only,
- * metadata editable with a mandatory reason, allocations/receipts, RTD
- * inclusions, WorkItems, and the change-log slice for this contribution.
- * Sync state and a "refresh from Qomon" action.
+ * Contribution detail (ticket 1.5, screens.md 3): the payment behind the
+ * contribution, metadata editable with a mandatory reason, allocations/
+ * receipts, RTD inclusions, WorkItems, and the change-log slice for this
+ * contribution. Import provenance when the payment came from Qomon, and a
+ * "refresh donor from Qomon" action (contacts stay Qomon-owned, D12).
  */
 
 export function money(cents: number): string {
@@ -183,9 +184,9 @@ export function ContributionDetailPage({ id }: { id: string }) {
           sourceCode: detail.metadata.sourceCode,
           eoContributorId: detail.metadata.eoContributorId,
           exceptionReason: detail.metadata.exceptionReason,
-          // external_ref lives on the Contribution row itself (a cache of
-          // metadata.external_ref, data-model §2), not on ContributionMetadata
-          externalRef: detail.externalRef,
+          // external_ref lives on the payment (data-model §2, D12), not on
+          // ContributionMetadata
+          externalRef: detail.payment.externalRef,
         }
       : null);
 
@@ -222,8 +223,11 @@ export function ContributionDetailPage({ id }: { id: string }) {
   const [refreshOutcome, setRefreshOutcome] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
-  const refresh = useMutation({
-    mutationFn: () => api.refreshContribution(id),
+  // Contacts stay Qomon-owned (D12), so a corrected donor address in Qomon
+  // reaches the tool through this on-demand refresh, not through the
+  // contribution itself, which is the tool's own.
+  const refreshDonor = useMutation({
+    mutationFn: () => api.refreshContributionContact(id),
     onSuccess: ({ outcome }) => {
       setRefreshError(null);
       setRefreshOutcome(outcome);
@@ -231,7 +235,7 @@ export function ContributionDetailPage({ id }: { id: string }) {
     },
     onError: (err) => {
       setRefreshOutcome(null);
-      setRefreshError(err instanceof ApiError ? err.message : 'Failed to refresh from Qomon.');
+      setRefreshError(err instanceof ApiError ? err.message : 'Failed to refresh the donor from Qomon.');
     },
   });
 
@@ -285,53 +289,64 @@ export function ContributionDetailPage({ id }: { id: string }) {
       <Card withBorder>
         <Stack gap="xs">
           <Group justify="space-between">
-            <Text fw={600}>Qomon facts</Text>
+            <Text fw={600}>Payment</Text>
             <Group gap="xs">
-              <Text size="xs" c="dimmed">
-                last synced: {detail.lastSyncedAt ? new Date(detail.lastSyncedAt).toLocaleString() : 'never'}
-              </Text>
+              {detail.qomon && (
+                <Text size="xs" c="dimmed">
+                  imported from Qomon transaction {detail.qomon.transactionId}; last seen:{' '}
+                  {detail.qomon.lastSyncedAt ? new Date(detail.qomon.lastSyncedAt).toLocaleString() : 'never'}
+                </Text>
+              )}
               <Button
                 size="xs"
                 variant="light"
                 onClick={() => {
                   setRefreshOutcome(null);
-                  refresh.mutate();
+                  refreshDonor.mutate();
                 }}
-                loading={refresh.isPending}
+                loading={refreshDonor.isPending}
               >
-                Refresh from Qomon
+                Refresh donor from Qomon
               </Button>
             </Group>
           </Group>
           {refreshOutcome && (
             <Text size="xs" c="green">
-              Refreshed — outcome: {refreshOutcome}.
+              Donor refresh — outcome: {refreshOutcome}.
             </Text>
           )}
           {refreshError && <Alert color="red">{refreshError}</Alert>}
-          {detail.deletedInQomonAt && (
+          {detail.status !== 'ACTIVE' && (
+            <Alert color="orange">This contribution is {detail.status}; it is history, not the working record.</Alert>
+          )}
+          {detail.qomon?.deletedInQomonAt && (
             <Alert color="red">
-              Sync incident: absent from Qomon as of {new Date(detail.deletedInQomonAt).toLocaleString()}.
+              Sync incident: absent from Qomon as of {new Date(detail.qomon.deletedInQomonAt).toLocaleString()}.
+              The payment and this contribution are unchanged.
             </Alert>
           )}
           <Group grow>
             <Text>Donor: {detail.contact.name}</Text>
             <Text>Amount: {money(detail.amountCents)}</Text>
             <Text>Accepted: {new Date(detail.acceptedAt).toLocaleDateString()}</Text>
-            <Text>Status: {detail.statusKind}</Text>
+            <Text>Payment state: {detail.payment.state}</Text>
           </Group>
           <Group grow>
-            <Text>Payment method: {detail.paymentMethodKind ?? '—'}</Text>
-            <Text>Code campaign: {detail.codeCampaign ?? '—'}</Text>
-            <Text>External ref: {detail.externalRef ?? '—'}</Text>
+            <Text>Source: {detail.payment.source}</Text>
+            <Text>Payment method: {detail.payment.method}</Text>
+            <Text>Code campaign: {detail.qomon?.codeCampaign ?? '—'}</Text>
+            <Text>External ref: {detail.payment.externalRef ?? '—'}</Text>
           </Group>
+          {detail.payment.payerName && <Text size="sm">Payer: {detail.payment.payerName}</Text>}
           <Text size="sm" c={detail.contact.address ? undefined : 'orange'}>
             Address on file:{' '}
             {detail.contact.address
               ? `${detail.contact.address.line1}, ${detail.contact.address.city} ${detail.contact.address.province} ${detail.contact.address.postalCode}, ${detail.contact.address.country}`
               : 'none — a receipt cannot be issued until this donor has an address in Qomon'}
           </Text>
-          {detail.comment && <Text size="sm">Comment: {detail.comment}</Text>}
+          {(detail.note ?? detail.payment.note) && (
+            <Text size="sm">Note: {detail.note ?? detail.payment.note}</Text>
+          )}
         </Stack>
       </Card>
 

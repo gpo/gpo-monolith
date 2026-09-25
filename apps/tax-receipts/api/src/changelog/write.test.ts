@@ -28,26 +28,24 @@ describe('withChangeLog (ticket 0.4 / G4)', () => {
       prisma,
       { userId: baseline.adminUserId, reason: 'set intake defaults' },
       async (ctx) => {
-        await ctx.tx.contributionMetadata.create({
-          data: {
-            contributionId,
+        await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
             periodId: baseline.periodId,
             entityKind: 'PARTY',
             receivedBy: 'GPO',
-          },
-        });
+          } });
         await ctx.log({
-          subjectType: 'ContributionMetadata',
+          subjectType: 'Contribution',
           subjectId: contributionId,
           after: { entityKind: 'PARTY' },
         });
       },
     );
 
-    const entries = await prisma.changeLogEntry.findMany();
+    // (the fixture's own creation entry has a different reason)
+    const entries = await prisma.changeLogEntry.findMany({ where: { reason: 'set intake defaults' } });
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
-      subjectType: 'ContributionMetadata',
+      subjectType: 'Contribution',
       actorUserId: baseline.adminUserId,
       reason: 'set intake defaults',
     });
@@ -70,16 +68,13 @@ describe('withChangeLog (ticket 0.4 / G4)', () => {
         prisma,
         { userId: baseline.adminUserId, reason: 'partial edit' },
         async (ctx) => {
-          await ctx.tx.contributionMetadata.create({
-            data: {
-              contributionId,
+          await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
               periodId: baseline.periodId,
               entityKind: 'PARTY',
               receivedBy: 'GPO',
-            },
-          });
+            } });
           await ctx.log({
-            subjectType: 'ContributionMetadata',
+            subjectType: 'Contribution',
             subjectId: contributionId,
           });
           throw new Error('boom');
@@ -87,8 +82,10 @@ describe('withChangeLog (ticket 0.4 / G4)', () => {
       ),
     ).rejects.toThrow('boom');
 
-    expect(await prisma.contributionMetadata.count()).toBe(0);
-    expect(await prisma.changeLogEntry.count()).toBe(0);
+    // the aborted edit left neither the row change nor a log entry behind
+    // (the fixture's own creation entry is not part of this edit)
+    expect(await prisma.contribution.count({ where: { periodId: { not: null } } })).toBe(0);
+    expect(await prisma.changeLogEntry.count({ where: { reason: 'partial edit' } })).toBe(0);
   });
 
   it('the DB aborts a guarded mutation that records no ChangeLogEntry', async () => {
@@ -102,17 +99,14 @@ describe('withChangeLog (ticket 0.4 / G4)', () => {
     await expect(
       prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT set_config('app.correlation_id', 'orphan-cid', true)`;
-        await tx.contributionMetadata.create({
-          data: {
-            contributionId,
+        await tx.contribution.update({ where: { id: contributionId }, data: {
             periodId: baseline.periodId,
             entityKind: 'PARTY',
             receivedBy: 'GPO',
-          },
-        });
+          } });
       }),
     ).rejects.toThrow(/invariant 5/);
-    expect(await prisma.contributionMetadata.count()).toBe(0);
+    expect(await prisma.contribution.count({ where: { periodId: { not: null } } })).toBe(0);
   });
 
   it('shares one correlationId across a multi-row cascade', async () => {
@@ -131,22 +125,19 @@ describe('withChangeLog (ticket 0.4 / G4)', () => {
       { userId: baseline.adminUserId, reason: 'bulk period reassignment' },
       async (ctx) => {
         for (const c of [a, b]) {
-          await ctx.tx.contributionMetadata.create({
-            data: {
-              contributionId: c.contributionId,
+          await ctx.tx.contribution.update({ where: { id: c.contributionId }, data: {
               periodId: baseline.periodId,
               entityKind: 'PARTY',
               receivedBy: 'GPO',
-            },
-          });
+            } });
           await ctx.log({
-            subjectType: 'ContributionMetadata',
+            subjectType: 'Contribution',
             subjectId: c.contributionId,
           });
         }
       },
     );
-    const entries = await prisma.changeLogEntry.findMany();
+    const entries = await prisma.changeLogEntry.findMany({ where: { reason: 'bulk period reassignment' } });
     expect(entries).toHaveLength(2);
     expect(new Set(entries.map((e) => e.correlationId)).size).toBe(1);
   });

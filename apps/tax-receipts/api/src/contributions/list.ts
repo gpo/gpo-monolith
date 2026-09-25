@@ -28,13 +28,15 @@ export interface ContributionListFilters {
 
 export interface ContributionListRow {
   id: string;
-  qomonTransactionId: string;
+  /** null for manual and legacy-imported payments */
+  qomonTransactionId: string | null;
+  source: string;
   contactName: string;
   contactEmail: string | null;
   amountCents: number;
   currency: string;
   acceptedAt: string;
-  statusKind: string;
+  paymentState: string;
   periodId: number | null;
   ridingNumber: number | null;
   entityKind: string | null;
@@ -68,14 +70,19 @@ export async function listContributions(
   const limit = Math.min(200, Math.max(1, opts.limit ?? 50));
   const f = opts.filters;
 
-  const metadataWhere: Prisma.ContributionMetadataWhereInput = {};
-  if (f.periodId !== undefined) metadataWhere.periodId = f.periodId;
-  if (f.ridingNumber !== undefined) metadataWhere.ridingNumber = f.ridingNumber;
-  if (f.entityKind) metadataWhere.entityKind = f.entityKind;
-  if (f.receivedBy) metadataWhere.receivedBy = f.receivedBy;
+  // The descriptive fields are columns with defaults, so a row that has no
+  // period yet (awaiting intake derivation) would otherwise match a filter
+  // on its default entity kind or received-by. Any such filter therefore
+  // also requires a period, as the old metadata-row join implicitly did.
+  const descriptiveWhere: Prisma.ContributionWhereInput = {};
+  if (f.periodId !== undefined) descriptiveWhere.periodId = f.periodId;
+  if (f.ridingNumber !== undefined) descriptiveWhere.ridingNumber = f.ridingNumber;
+  if (f.entityKind) descriptiveWhere.entityKind = f.entityKind;
+  if (f.receivedBy) descriptiveWhere.receivedBy = f.receivedBy;
 
-  const and: Prisma.ContributionWhereInput[] = [{ deletedInQomonAt: null }];
-  if (Object.keys(metadataWhere).length > 0) and.push({ metadata: { is: metadataWhere } });
+  // superseded and refunded rows are history, not the working set (D12)
+  const and: Prisma.ContributionWhereInput[] = [{ status: 'ACTIVE' }];
+  if (Object.keys(descriptiveWhere).length > 0) and.push({ periodId: { not: null } }, descriptiveWhere);
   if (f.contactQuery) {
     and.push({
       contact: {
@@ -99,10 +106,9 @@ export async function listContributions(
   }
   if (opts.ridingScope !== null) {
     and.push({
-      OR: [
-        { metadata: { is: { ridingNumber: null } } },
-        { metadata: { is: { ridingNumber: { in: [...opts.ridingScope] } } } },
-      ],
+      // party-level rows (with a period) are visible to everyone; a row with
+      // no period yet is not, matching the old "no metadata, no match"
+      OR: [{ periodId: { not: null }, ridingNumber: null }, { ridingNumber: { in: [...opts.ridingScope] } }],
     });
   }
 
@@ -133,7 +139,7 @@ export async function listContributions(
     where,
     include: {
       contact: true,
-      metadata: true,
+      payment: { include: { qomonLink: true } },
       allocations: { where: { receipt: { status: 'ISSUED' } }, select: { id: true } },
     },
     orderBy: [{ acceptedAt: 'desc' }, { id: 'desc' }],
@@ -161,22 +167,25 @@ export async function listContributions(
 
   const data: ContributionListRow[] = page.map((r) => ({
     id: r.id,
-    qomonTransactionId: r.qomonTransactionId.toString(),
+    qomonTransactionId: r.payment.qomonLink ? r.payment.qomonLink.qomonTransactionId.toString() : null,
+    source: r.payment.source,
     contactName: r.contact.name,
     contactEmail: r.contact.email,
     amountCents: r.amountCents,
-    currency: r.currency,
+    currency: r.payment.currency,
     acceptedAt: r.acceptedAt.toISOString(),
-    statusKind: r.statusKind,
-    periodId: r.metadata?.periodId ?? null,
-    ridingNumber: r.metadata?.ridingNumber ?? null,
-    entityKind: r.metadata?.entityKind ?? null,
-    receivedBy: r.metadata?.receivedBy ?? null,
-    sourceCode: r.metadata?.sourceCode ?? null,
-    nonDeductibleCents: r.metadata?.nonDeductibleCents ?? null,
+    paymentState: r.payment.state,
+    // the descriptive fields read as null until a period resolves, not as
+    // their column defaults
+    periodId: r.periodId,
+    ridingNumber: r.periodId === null ? null : r.ridingNumber,
+    entityKind: r.periodId === null ? null : r.entityKind,
+    receivedBy: r.periodId === null ? null : r.receivedBy,
+    sourceCode: r.periodId === null ? null : r.sourceCode,
+    nonDeductibleCents: r.periodId === null ? null : r.nonDeductibleCents,
     hasReceipt: r.allocations.length > 0,
     openValidationCount: countBySubject.get(r.id) ?? 0,
-    lastSyncedAt: r.lastSyncedAt ? r.lastSyncedAt.toISOString() : null,
+    lastSyncedAt: r.payment.qomonLink?.lastSyncedAt ? r.payment.qomonLink.lastSyncedAt.toISOString() : null,
   }));
 
   return { data, nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null };
