@@ -33,6 +33,7 @@ export type AppAction =
 export type AppSubject =
   | 'all'
   | 'Contribution'
+  | 'Payment'
   | 'ContributionMetadata'
   | 'Receipt'
   | 'WorkItem'
@@ -81,6 +82,7 @@ export function defineAbilitiesFor(user: AbilityUser): AppAbility {
       can('issue', 'Receipt');
       can('correct', 'Receipt');
       can('correct', 'Contribution');
+      can('create', ['Payment', 'Contribution']);
       can('update', 'ContributionMetadata');
       can('file', ['RtdFiling', 'EOForm']);
       can(['create', 'share'], 'EntityReport');
@@ -91,6 +93,7 @@ export function defineAbilitiesFor(user: AbilityUser): AppAbility {
       can('update', ['Contribution', 'ContributionMetadata']);
       can(['create', 'update'], 'WorkItem');
       can('correct', ['Receipt', 'Contribution']);
+      can('create', ['Payment', 'Contribution']);
       break;
 
     case 'rules_authority':

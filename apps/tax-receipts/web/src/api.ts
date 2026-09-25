@@ -58,6 +58,7 @@ export interface Me {
     prepareRtdFilings: boolean;
     sendRtdFilings: boolean;
     fileEOForms: boolean;
+    enterPayments: boolean;
     correctContributions: boolean;
     correctReceipts: boolean;
   };
@@ -142,6 +143,8 @@ export interface ContributionDetail {
     externalRef: string | null;
     payerName: string | null;
     note: string | null;
+    /** what no ACTIVE contribution on this payment covers yet */
+    unattributedCents: number;
   };
   /** import provenance; null for manual and legacy-imported payments */
   qomon: {
@@ -292,6 +295,66 @@ export interface ReprintInput {
   reason: string;
   correctedName?: string;
   politicalEntityLabel: string;
+}
+
+// --- manual entry (D12; api/src/payments) -----------------------------------
+
+export type PaymentMethodKey = 'CARD' | 'CHEQUE' | 'CASH' | 'PAD' | 'EFT' | 'IN_KIND' | 'OTHER';
+
+/** Only the fields the operator chose; the server derives the rest from the date. */
+export interface DescriptiveOverrides {
+  period_id?: number;
+  riding_number?: number | null;
+  entity_kind?: 'PARTY' | 'CA' | 'CAMPAIGN';
+  received_by?: 'GPO' | 'ENTITY';
+  goods_services?: boolean;
+  non_deductible_cents?: number;
+  source_code?: string;
+}
+
+export interface ContributionEntryInput {
+  amountCents: number;
+  contactId?: string;
+  acceptedAt?: string;
+  note?: string | null;
+  descriptive?: DescriptiveOverrides;
+}
+
+export interface NewPaymentInput {
+  reason: string;
+  contactId: string;
+  amountCents: number;
+  receivedAt: string;
+  method: PaymentMethodKey;
+  payerName?: string | null;
+  externalRef?: string | null;
+  note?: string | null;
+  contributions?: ContributionEntryInput[];
+}
+
+export interface IntakeFlag {
+  field: string;
+  reason: string;
+}
+
+export interface IntakePreview {
+  descriptive: { period_id: number; riding_number: number | null; entity_kind: string; received_by: string } | null;
+  flags: IntakeFlag[];
+}
+
+export interface PaymentSummary {
+  id: string;
+  contactId: string;
+  contactName: string;
+  amountCents: number;
+  receivedAt: string;
+  method: string;
+  state: string;
+  source: string;
+  externalRef: string | null;
+  attributedCents: number;
+  unattributedCents: number;
+  contributions: Array<{ id: string; contactName: string; amountCents: number; status: string }>;
 }
 
 export interface IssueReceiptInput {
@@ -724,6 +787,24 @@ export const api = {
       body: JSON.stringify(input),
     }),
   receiptPdfUrl: (receiptId: string) => `${BASE}/receipts/${receiptId}/pdf`,
+  createPayment: (input: NewPaymentInput) =>
+    request<{ paymentId: string; contributions: Array<{ id: string; amountCents: number; periodId: number | null; flags: IntakeFlag[] }> }>(
+      '/payments',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  addContributionToPayment: (paymentId: string, input: ContributionEntryInput & { reason: string }) =>
+    request<{ contributionId: string; remainingCents: number; flags: IntakeFlag[] }>(
+      `/payments/${paymentId}/contributions`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  getPayment: (paymentId: string) => request<PaymentSummary>(`/payments/${paymentId}`),
+  intakePreview: (q: { acceptedAt: string; ridingNumber?: number | null; sourceCode?: string; externalRef?: string }) => {
+    const params = new URLSearchParams({ acceptedAt: q.acceptedAt });
+    if (q.ridingNumber != null) params.set('ridingNumber', String(q.ridingNumber));
+    if (q.sourceCode) params.set('sourceCode', q.sourceCode);
+    if (q.externalRef) params.set('externalRef', q.externalRef);
+    return request<IntakePreview>(`/intake-preview?${params.toString()}`);
+  },
   searchContacts: (query: string) => request<{ data: ContactHit[] }>(`/contacts?query=${encodeURIComponent(query)}`),
   previewCorrection: (body: CorrectionRequest) =>
     request<CorrectionPlan>('/corrections/preview', { method: 'POST', body: JSON.stringify(body) }),

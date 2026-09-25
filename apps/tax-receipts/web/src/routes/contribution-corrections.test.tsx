@@ -30,6 +30,7 @@ const DETAIL = {
     externalRef: null,
     payerName: null,
     note: null,
+    unattributedCents: 0,
   },
   qomon: null,
   metadata: {

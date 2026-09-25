@@ -498,3 +498,35 @@ skip, regression rejected and the row left untouched, regression requires
 and change-logs a reason, a no-op move can still update `stageOwner`).
 `pnpm turbo run lint typecheck test build` green, 20/20 tasks, 81 core
 tests + 63 api tests.
+
+## Manual entry form (D12)
+
+The tool owns payments and contributions, so staff can now record them
+directly: **Contributions → Add payment** (`/payments/new`), and **Attribute the
+rest** on a contribution whose payment is not fully attributed
+(`/payments/:id/attribute`).
+
+| Where | What |
+|---|---|
+| `api/src/payments/manual-entry.ts` | `enterManualPayment` (a payment and one or more contributions, all or nothing), `addContributionToPayment` (attribute what is left of an existing payment), `previewIntake` (what the derivation would settle on). Every contribution's descriptive fields are derived from its date, then overridden by what the operator chose. |
+| `api/src/routes/payments.ts` | `POST /payments`, `POST /payments/:id/contributions`, `GET /payments/:id`, `GET /intake-preview`. Gated on the new `create Payment` / `create Contribution` (party CFO and administrators; sysadmin via `manage all`). A riding-scoped user may enter only their ridings. |
+| `web/src/routes/payment-entry.tsx`, `components/contribution-fields.tsx`, `components/donor-picker.tsx` | The form. One contribution covers the whole payment by default; "Split across more contributions" reveals an amount per contribution and a running total. The period line shows what the derivation will pick before anything is saved. |
+
+### Judgment calls
+
+1. **Dates are sent as 17:00 UTC** (noon EST, 1pm EDT), so a calendar date near a
+   period boundary such as December 31 cannot slip a day in Ontario time.
+2. **Entity and riding are always sent explicitly.** Otherwise a riding parsed
+   from a source code could contradict the default party-level entity; the
+   server now also refuses a party contribution with a riding, and a CA or
+   campaign contribution without one.
+3. **A payment may be left partly unattributed** (the contributions may add up
+   to less than the payment, never more, which the database enforces). The
+   detail page says how much is left and links to attribute it. Changing an
+   existing split is a correction, not an entry.
+4. **A merged-away contact is refused** as a donor or payer.
+5. **The donor must already exist.** Before go-live this is where "create the
+   contact in Qomon first" belongs (invariant 9, O46); nothing creates a contact
+   from the form yet.
+6. **A reason is required**, as for every write (invariant 5).
+

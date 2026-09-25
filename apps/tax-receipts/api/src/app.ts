@@ -65,6 +65,7 @@ import { donorPrecheckRoutes } from './routes/donor-precheck.js';
 import { entityReportRoutes } from './routes/entity-reports.js';
 import { healthRoutes } from './routes/health.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
+import { paymentRoutes } from './routes/payments.js';
 import { receiptRoutes } from './routes/receipts.js';
 import { rtdRoutes } from './routes/rtd.js';
 import { sessionRoutes } from './routes/session.js';
@@ -229,6 +230,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     buildRidingQomon: opts.buildRidingQomon,
   });
   await app.register(contributionRoutes, { qomon: opts.qomon });
+  await app.register(paymentRoutes);
   await app.register(donorPrecheckRoutes);
   await app.register(receiptRoutes, {
     storageDir: opts.artifactStorageDir ?? './storage/artifacts',

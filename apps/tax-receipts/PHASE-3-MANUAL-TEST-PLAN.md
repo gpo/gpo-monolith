@@ -257,6 +257,27 @@ fixture donor, for example one of Space A's.
 - [ ] RTD-reported contribution: any correction queues a DC-1A on the work
       queue's owed-to-EO tab, once, even when its receipt is cancelled as well.
 
+## 5. Manual entry form
+
+Nothing here was clicked through when it was built. Use any donor already in
+the dev database (contacts are not created from the form).
+
+- [ ] Contributions → **Add payment** (party CFO or administrator; absent for a
+      read-only user). Pick a donor by typing two letters of their name.
+- [ ] Enter an amount and a received date. Under the contribution, "Will be
+      filed in ..." names the period for that date; pick a date with no
+      configured period and the form warns you instead.
+- [ ] Save. The next screen links to the new contribution; its Payment card shows
+      source MANUAL and no Qomon transaction.
+- [ ] **Split across more contributions**: give two donors part each; the running
+      total turns green at the full amount and red above it (save is refused).
+- [ ] Choose Recipient = Constituency association: saving without a riding is
+      refused; typing a riding shows its name.
+- [ ] Enter a payment for less than the full amount attributed. Its contribution's
+      page shows "... is not attributed" with **Attribute the rest**, which adds
+      a contribution for another donor, and the notice goes away.
+- [ ] A payment dated December 31 lands in that year's period, not the next.
+
 ## Known non-issues
 
 - No Address Ned's work queue entry shows `C1`, status `EXCEPTION`, with a

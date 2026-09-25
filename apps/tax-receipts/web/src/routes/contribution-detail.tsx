@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -321,6 +322,15 @@ export function ContributionDetailPage({ id }: { id: string }) {
             </Text>
           )}
           {refreshError && <Alert color="red">{refreshError}</Alert>}
+          {detail.payment.unattributedCents > 0 && me.data?.can.enterPayments && (
+            <Alert color="blue" variant="light">
+              {money(detail.payment.unattributedCents)} of this {money(detail.payment.amountCents)} payment is not attributed
+              to any contribution.{' '}
+              <Link to="/payments/$id/attribute" params={{ id: detail.payment.id }}>
+                Attribute the rest
+              </Link>
+            </Alert>
+          )}
           {detail.status !== 'ACTIVE' && (
             <Alert color="orange">This contribution is {detail.status}; it is history, not the working record.</Alert>
           )}

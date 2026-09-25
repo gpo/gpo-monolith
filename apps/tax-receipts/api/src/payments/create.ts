@@ -89,19 +89,45 @@ export async function createPaymentWithContribution(ctx: ChangeLogContext, input
   });
   await ctx.log({ subjectType: 'Payment', subjectId: payment.id, after: payment });
 
-  const contribution = await tx.contribution.create({
+  const contribution = await createContribution(ctx, {
+    paymentId: payment.id,
+    contactId: input.contribution?.contactId ?? input.contactId,
+    amountCents: input.contribution?.amountCents ?? input.amountCents,
+    acceptedAt: input.contribution?.acceptedAt ?? input.receivedAt,
+    note: input.contribution?.note ?? null,
+    createdByUserId: input.createdByUserId ?? null,
+    descriptive: input.descriptive,
+  });
+
+  return { payment, contribution };
+}
+
+export interface NewContributionInput {
+  paymentId: string;
+  contactId: string;
+  amountCents: number;
+  acceptedAt: Date;
+  note?: string | null;
+  createdByUserId?: string | null;
+  descriptive?: GpoMetadataDescriptive;
+}
+
+/** One contribution on an existing payment (an initial one, an extra part of a
+ *  split at entry, or the rest of a payment attributed later). The database
+ *  keeps the ACTIVE contributions on a payment within its amount (invariant 1). */
+export async function createContribution(ctx: ChangeLogContext, input: NewContributionInput) {
+  const contribution = await ctx.tx.contribution.create({
     data: {
-      paymentId: payment.id,
-      contactId: input.contribution?.contactId ?? input.contactId,
-      amountCents: input.contribution?.amountCents ?? input.amountCents,
-      acceptedAt: input.contribution?.acceptedAt ?? input.receivedAt,
-      note: input.contribution?.note ?? null,
+      paymentId: input.paymentId,
+      contactId: input.contactId,
+      amountCents: input.amountCents,
+      acceptedAt: input.acceptedAt,
+      note: input.note ?? null,
       correlationId: ctx.correlationId,
       createdByUserId: input.createdByUserId ?? null,
       ...(input.descriptive ? descriptiveToColumns(input.descriptive) : {}),
     },
   });
   await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after: contribution });
-
-  return { payment, contribution };
+  return contribution;
 }
