@@ -50,6 +50,8 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         prepareRtdFilings: request.ability.can('create', 'RtdFiling'),
         sendRtdFilings: request.ability.can('file', 'RtdFiling'),
         fileEOForms: request.ability.can('file', 'EOForm'),
+        correctContributions: request.ability.can('correct', 'Contribution'),
+        correctReceipts: request.ability.can('correct', 'Receipt'),
       },
     });
   });

@@ -42,6 +42,10 @@ export const ContributionLimitBucket = z.enum([
 ]);
 export type ContributionLimitBucket = z.infer<typeof ContributionLimitBucket>;
 
+/** Why a receipt's PDF was reproduced without cancelling it (corrections.md action 3). */
+export const ReceiptReprintKind = z.enum(['LOST_COPY', 'CORRECTED']);
+export type ReceiptReprintKind = z.infer<typeof ReceiptReprintKind>;
+
 /** Where a payment came from (data-model §2, D12). */
 export const PaymentSource = z.enum(['QOMON_IMPORT', 'MANUAL', 'LEGACY_IMPORT']);
 export type PaymentSource = z.infer<typeof PaymentSource>;

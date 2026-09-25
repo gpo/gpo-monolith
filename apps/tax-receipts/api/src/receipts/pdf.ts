@@ -32,6 +32,11 @@ export interface ReceiptPdfData {
   province: string;
   postalCode: string;
   country: string;
+  /** set on a receipt that replaces a cancelled one; printed on every copy
+   *  (corrections.md principle 4). */
+  replacesReceiptNumber?: string | null;
+  /** stamps every copy "COPY" for a lost-receipt reprint (status L). */
+  isCopy?: boolean;
 }
 
 const TEMPLATE_PATH = path.join(
@@ -86,6 +91,17 @@ function drawRow(position: number, page: PDFPage, font: PDFFont, data: ReceiptPd
     lineHeight: 11,
     font,
   });
+  if (data.replacesReceiptNumber) {
+    page.drawText(`This cancels and replaces receipt #${data.replacesReceiptNumber}`, {
+      x: 40,
+      y: height - 215 - position,
+      size: 8,
+      font,
+    });
+  }
+  if (data.isCopy) {
+    page.drawText('COPY', { x: width / 2 - 20, y: height - 215 - position, size: 14, font });
+  }
 }
 
 /** Render one issued receipt as a single-page PDF (the template's three

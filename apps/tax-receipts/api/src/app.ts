@@ -60,6 +60,7 @@ import prismaPlugin from './plugins/prisma.js';
 import { adminRoutes } from './routes/admin.js';
 import { changeLogRoutes } from './routes/change-log.js';
 import { contributionRoutes } from './routes/contributions.js';
+import { correctionRoutes } from './routes/corrections.js';
 import { donorPrecheckRoutes } from './routes/donor-precheck.js';
 import { entityReportRoutes } from './routes/entity-reports.js';
 import { healthRoutes } from './routes/health.js';
@@ -230,6 +231,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(contributionRoutes, { qomon: opts.qomon });
   await app.register(donorPrecheckRoutes);
   await app.register(receiptRoutes, {
+    storageDir: opts.artifactStorageDir ?? './storage/artifacts',
+  });
+  await app.register(correctionRoutes, {
     storageDir: opts.artifactStorageDir ?? './storage/artifacts',
   });
   await app.register(validationRoutes);

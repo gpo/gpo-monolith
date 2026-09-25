@@ -119,7 +119,7 @@ export async function runValidationForContribution(
 
   const contactCandidates = contribution.contact.email
     ? await prisma.contact.findMany({
-        where: { email: contribution.contact.email, id: { not: contribution.contactId } },
+        where: { email: contribution.contact.email, id: { not: contribution.contactId }, mergedIntoId: null },
         select: { id: true, email: true },
       })
     : [];

@@ -16,6 +16,8 @@ export const ME: Me = {
     prepareRtdFilings: true,
     sendRtdFilings: true,
     fileEOForms: true,
+    correctContributions: true,
+    correctReceipts: true,
   },
 };
 

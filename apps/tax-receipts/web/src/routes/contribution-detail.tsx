@@ -20,7 +20,9 @@ import {
 } from '@mantine/core';
 import { api, ApiError, type ContributionDetail, type MetadataEditInput } from '../api.js';
 import { describeRuleRef } from '../rule-labels.js';
+import { CorrectionPanel } from '../components/correction-panel.js';
 import { PageHeader } from '../components/PageHeader.js';
+import { ReceiptActions } from '../components/receipt-actions.js';
 
 /** Metadata field help text — kept next to the form so it stays in sync with
  * what the fields actually do (packages/tax-receipts-core/src/metadata.ts). */
@@ -168,6 +170,9 @@ export function ContributionDetailPage({ id }: { id: string }) {
   const [receiptDelivery, setReceiptDelivery] = useState<'MAIL' | 'EMAIL'>('MAIL');
   const [politicalEntityLabel, setPoliticalEntityLabel] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState<string | null>(null);
+  // a committed correction retires this row, so the panel that shows what it did
+  // has to outlive the row turning into history
+  const [corrected, setCorrected] = useState(false);
 
   const detail = query.data;
   const activeForm =
@@ -525,6 +530,16 @@ export function ContributionDetailPage({ id }: { id: string }) {
                         View PDF
                       </Text>
                     </Table.Td>
+                    <Table.Td>
+                      {me.data?.can.correctReceipts && (
+                        <ReceiptActions
+                          receipt={a.receipt}
+                          donorName={detail.contact.name}
+                          defaultLabel={defaultPoliticalEntityLabel(detail.metadata?.entityKind ?? '')}
+                          onDone={() => qc.invalidateQueries({ queryKey: ['contribution', id] })}
+                        />
+                      )}
+                    </Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>
@@ -595,6 +610,17 @@ export function ContributionDetailPage({ id }: { id: string }) {
           )}
         </Stack>
       </Card>
+
+      {me.data?.can.correctContributions && (detail.status === 'ACTIVE' || corrected) && (
+        <CorrectionPanel
+          detail={detail}
+          canFile={me.data.can.fileEOForms}
+          onDone={() => {
+            setCorrected(true);
+            return qc.invalidateQueries({ queryKey: ['contribution', id] });
+          }}
+        />
+      )}
 
       <Card withBorder>
         <Text fw={600} mb="xs">

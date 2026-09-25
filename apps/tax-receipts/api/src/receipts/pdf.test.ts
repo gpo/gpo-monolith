@@ -109,4 +109,15 @@ describe('renderReceiptPdf text extraction (ticket 3.4, F4)', () => {
     expect(text).toContain('100 QUEEN ST W, UNIT 4');
     expect(text).toContain('TORONTO ON M5H2N2');
   });
+
+  it('prints "This cancels and replaces receipt #n" on every copy of a replacement receipt (corrections.md principle 4)', async () => {
+    const text = await extractText(await renderReceiptPdf({ ...BASE_DATA, replacesReceiptNumber: 'GPO-00402400' }));
+    expect(text.split('This cancels and replaces receipt #GPO-00402400').length - 1).toBe(3);
+    expect(await extractText(await renderReceiptPdf(BASE_DATA))).not.toContain('cancels and replaces');
+  });
+
+  it('stamps every copy COPY for a lost-receipt reprint', async () => {
+    const text = await extractText(await renderReceiptPdf({ ...BASE_DATA, isCopy: true }));
+    expect(text.split('COPY').length - 1).toBe(3);
+  });
 });

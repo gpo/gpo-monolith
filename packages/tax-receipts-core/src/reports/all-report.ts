@@ -74,9 +74,12 @@ export function politicalEntityTypeLetter(entityKind: EntityKind): 'P' | 'A' | '
  *  cancelled and void receipts "remain in filings at full value with status
  *  C" — EO's spec has no separate void letter, so VOID files identically to
  *  CANCELLED here; rule REP7 is what keeps either out of downstream totals,
- *  not this mapping). */
-export function receiptStatusLetter(status: ReceiptStatus): 'I' | 'C' {
-  return status === 'ISSUED' ? 'I' : 'C';
+ *  not this mapping). An issued receipt flagged lost files as L (EO's spec,
+ *  column D: "I issued, C cancelled/voided, L lost"; open-questions O41); a
+ *  lost receipt that is later cancelled is simply C. */
+export function receiptStatusLetter(status: ReceiptStatus, lost = false): 'I' | 'C' | 'L' {
+  if (status !== 'ISSUED') return 'C';
+  return lost ? 'L' : 'I';
 }
 
 /** Agency_Contribution derivation (data-model.md §2, point 8, verbatim):
@@ -88,6 +91,8 @@ export function isAgencyContribution(receivedBy: ReceivedBy, entityKind: EntityK
 export interface AllReportSourceRow {
   receiptNumber: string;
   status: ReceiptStatus;
+  /** the receipt's lost flag (Receipt.lost); an ISSUED lost receipt files as L. */
+  lost?: boolean;
   entityKind: EntityKind;
   /** the EO period id this receipt was issued into (Receipt.periodId). */
   periodId: number;
@@ -132,7 +137,7 @@ export function buildAllReportRow(
     Party_ID: ALL_REPORT_PARTY_ID,
     Contributor_ID: source.eoContributorId ?? '',
     Receipt_Number: source.receiptNumber,
-    Receipt_Status: receiptStatusLetter(source.status),
+    Receipt_Status: receiptStatusLetter(source.status, source.lost ?? false),
     Agency_Contribution: isAgencyContribution(source.receivedBy, source.entityKind) ? 'Y' : 'N',
     // Constant 'N' (D10, decisions.md): GPO has no concept of bundling a
     // contribution with a general-meeting ticket; EO's own spec calls the

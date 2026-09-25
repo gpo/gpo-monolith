@@ -13,6 +13,7 @@ const pairs: Array<[string, readonly string[], readonly string[]]> = [
   ['ReceiptStatus', core.ReceiptStatus.options, Object.values($Enums.ReceiptStatus)],
   ['ReceiptDelivery', core.ReceiptDelivery.options, Object.values($Enums.ReceiptDelivery)],
   ['ReceiptNumberSource', core.ReceiptNumberSource.options, Object.values($Enums.ReceiptNumberSource)],
+  ['ReceiptReprintKind', core.ReceiptReprintKind.options, Object.values($Enums.ReceiptReprintKind)],
   ['PeriodKind', core.PeriodKind.options, Object.values($Enums.PeriodKind)],
   ['PaymentSource', core.PaymentSource.options, Object.values($Enums.PaymentSource)],
   ['PaymentMethod', core.PaymentMethod.options, Object.values($Enums.PaymentMethod)],
