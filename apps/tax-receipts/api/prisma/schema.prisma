@@ -47,6 +47,27 @@ enum ReceiptDelivery {
   MAIL
 }
 
+/// what an outgoing email carries (ticket 3.6)
+enum EmailPurpose {
+  RECEIPT
+  PRECHECK
+}
+
+/// an outgoing email's lifecycle (ticket 3.6). QUEUED -> SENDING -> SENT is
+/// the dispatcher's; DELIVERED, DELAYED, BOUNCED, COMPLAINED arrive from the
+/// provider's webhook. FAILED is a send the provider refused or that ran out
+/// of retries. BOUNCED and FAILED are undeliverable.
+enum EmailStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  DELAYED
+  BOUNCED
+  COMPLAINED
+  FAILED
+}
+
 /// why a stored receipt PDF was reproduced without cancelling the receipt
 enum ReceiptReprintKind {
   /// a lost receipt reprinted unaltered and stamped COPY (EO status L)
@@ -109,6 +130,9 @@ enum WorkItemKind {
   DIFF
   OWED_TO_EO
   SYNC_INCIDENT
+  /// a receipt email that bounced or failed; the receipt has been moved to
+  /// MAIL and needs to go out in a print batch (ticket 3.6)
+  DELIVERY
 }
 
 enum WorkItemStatus {
@@ -203,36 +227,37 @@ enum ChangeLogSubjectType {
 // ---------------------------------------------------------------------------
 
 model Contact {
-  id               String   @id @default(cuid())
+  id             String    @id @default(cuid())
   /// null only in development and testing (D12): before go-live a contact needs
   /// a Qomon link before a contribution can be attributed to it (invariant 9).
-  qomonContactId   BigInt?  @unique
-  name             String
+  qomonContactId BigInt?   @unique
+  name           String
   /// Qomon's separate firstname/surname (ticket 4.1: the ALL/S2P2 EO reports
   /// need first and last name as distinct columns, which `name` cannot supply
   /// once joined; null when Qomon has no name split, e.g. an org-only contact)
-  firstName        String?
-  lastName         String?
-  email            String?
+  firstName      String?
+  lastName       String?
+  email          String?
   /// full mailing address as last synced from Qomon (JSON blob)
-  addresses        Json     @default("[]")
-  lastSyncedAt     DateTime?
+  addresses      Json      @default("[]")
+  lastSyncedAt   DateTime?
   /// hash over amount/date/contact-relevant fields for cheap drift detection
-  syncHash         String?
+  syncHash       String?
   /// set when a duplicate was merged into another contact (corrections.md
   /// action 10); the record stays, pointing at the survivor
-  mergedIntoId     String?
-  mergedAt         DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  mergedIntoId   String?
+  mergedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  mergedInto       Contact?  @relation("ContactMerge", fields: [mergedIntoId], references: [id])
-  mergedFrom       Contact[] @relation("ContactMerge")
+  mergedInto       Contact?               @relation("ContactMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom       Contact[]              @relation("ContactMerge")
   addressSnapshots AddressSnapshot[]
   payments         Payment[]
   contributions    Contribution[]
   receipts         Receipt[]
   workItems        WorkItem[]
+  emailMessages    EmailMessage[]
   cyclePreferences DonorCyclePreference[]
 
   @@index([mergedIntoId])
@@ -240,23 +265,23 @@ model Contact {
 }
 
 model AddressSnapshot {
-  id          String   @id @default(cuid())
-  contactId   String
-  periodId    Int
+  id         String   @id @default(cuid())
+  contactId  String
+  periodId   Int
   /// address fields captured at the time the snapshot was taken
-  line1       String
-  line2       String?
-  city        String
-  province    String
-  postalCode  String
-  country     String   @default("CA")
+  line1      String
+  line2      String?
+  city       String
+  province   String
+  postalCode String
+  country    String   @default("CA")
   /// where the address came from (e.g. "period-63", "donor-precheck", "qomon")
-  source      String
-  capturedAt  DateTime @default(now())
+  source     String
+  capturedAt DateTime @default(now())
 
-  contact     Contact  @relation(fields: [contactId], references: [id])
-  period      Period   @relation(fields: [periodId], references: [id])
-  receipts    Receipt[]
+  contact  Contact   @relation(fields: [contactId], references: [id])
+  period   Period    @relation(fields: [periodId], references: [id])
+  receipts Receipt[]
 
   @@index([contactId, periodId])
   @@map("address_snapshot")
@@ -285,10 +310,10 @@ model Payment {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  contact         Contact       @relation(fields: [contactId], references: [id])
-  createdBy       User?         @relation(fields: [createdByUserId], references: [id])
-  contributions   Contribution[]
-  qomonLink       QomonTransactionLink?
+  contact       Contact               @relation(fields: [contactId], references: [id])
+  createdBy     User?                 @relation(fields: [createdByUserId], references: [id])
+  contributions Contribution[]
+  qomonLink     QomonTransactionLink?
 
   @@index([contactId])
   @@index([receivedAt])
@@ -300,22 +325,22 @@ model Payment {
 /// created from, and what the sweep last saw. Absent for MANUAL and
 /// LEGACY_IMPORT payments. Never read back as attribution.
 model QomonTransactionLink {
-  id                    String    @id @default(cuid())
-  paymentId             String    @unique
-  qomonTransactionId    BigInt    @unique
-  qomonBundleId         BigInt?
+  id                     String    @id @default(cuid())
+  paymentId              String    @unique
+  qomonTransactionId     BigInt    @unique
+  qomonBundleId          BigInt?
   /// Qomon's raw `payment_method_kind` and `code_campaign` at import
   qomonPaymentMethodKind String?
-  codeCampaign          String?
-  firstSeenAt           DateTime  @default(now())
-  lastSyncedAt          DateTime?
+  codeCampaign           String?
+  firstSeenAt            DateTime  @default(now())
+  lastSyncedAt           DateTime?
   /// hash over the Qomon transaction's facts as last seen, for cheap change
   /// detection (a change opens a sync incident and mutates nothing, O47)
-  syncHash              String?
+  syncHash               String?
   /// set, never deleted (invariant 4): a transaction absent from Qomon
-  deletedInQomonAt      DateTime?
+  deletedInQomonAt       DateTime?
 
-  payment               Payment   @relation(fields: [paymentId], references: [id])
+  payment Payment @relation(fields: [paymentId], references: [id])
 
   @@map("qomon_transaction_link")
 }
@@ -324,48 +349,48 @@ model QomonTransactionLink {
 /// Versioned: once an allocation or RTD inclusion references it, a
 /// correction closes the row as SUPERSEDED and opens its replacements.
 model Contribution {
-  id                   String    @id @default(cuid())
-  paymentId            String
-  contactId            String
-  amountCents          Int
+  id            String             @id @default(cuid())
+  paymentId     String
+  contactId     String
+  amountCents   Int
   /// acceptance date (drives everything EO); defaults from the payment's receivedAt
-  acceptedAt           DateTime
-  status               ContributionStatus @default(ACTIVE)
+  acceptedAt    DateTime
+  status        ContributionStatus @default(ACTIVE)
   /// the row this one replaced, when a correction created it
-  supersedesId         String?
+  supersedesId  String?
   /// one guarded action's cascade shares a correlation id
-  correlationId        String?
-  note                 String?
+  correlationId String?
+  note          String?
 
   // --- descriptive fields (data-model §3; folded in from ContributionMetadata, D12) ---
   /// null until a reporting period resolves (data-model §6: never from a Qomon
   /// default): a row with no period is awaiting intake derivation and belongs
   /// to no processing space.
-  periodId             Int?
+  periodId           Int?
   /// null = party-level (no riding)
-  ridingNumber         Int?
-  entityKind           EntityKind @default(PARTY)
-  receivedBy           ReceivedBy @default(GPO)
-  goodsServices        Boolean    @default(false)
-  nonDeductibleCents   Int        @default(0)
+  ridingNumber       Int?
+  entityKind         EntityKind @default(PARTY)
+  receivedBy         ReceivedBy @default(GPO)
+  goodsServices      Boolean    @default(false)
+  nonDeductibleCents Int        @default(0)
   /// accounting date when it differs from the acceptance date
-  processedDate        DateTime?
-  sourceCode           String     @default("")
-  eoContributorId      String?
-  exceptionReason      String?
+  processedDate      DateTime?
+  sourceCode         String     @default("")
+  eoContributorId    String?
+  exceptionReason    String?
 
-  createdByUserId      String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  payment              Payment   @relation(fields: [paymentId], references: [id])
-  period               Period?              @relation(fields: [periodId], references: [id])
-  contact              Contact              @relation(fields: [contactId], references: [id])
-  createdBy            User?                @relation(fields: [createdByUserId], references: [id])
-  supersedes           Contribution?        @relation("ContributionSupersedes", fields: [supersedesId], references: [id])
-  supersededBy         Contribution[]       @relation("ContributionSupersedes")
-  allocations          ReceiptAllocation[]
-  rtdInclusions        RtdInclusion[]
+  payment               Payment               @relation(fields: [paymentId], references: [id])
+  period                Period?               @relation(fields: [periodId], references: [id])
+  contact               Contact               @relation(fields: [contactId], references: [id])
+  createdBy             User?                 @relation(fields: [createdByUserId], references: [id])
+  supersedes            Contribution?         @relation("ContributionSupersedes", fields: [supersedesId], references: [id])
+  supersededBy          Contribution[]        @relation("ContributionSupersedes")
+  allocations           ReceiptAllocation[]
+  rtdInclusions         RtdInclusion[]
   reconciliationMatches ReconciliationMatch[]
 
   @@index([paymentId])
@@ -388,42 +413,44 @@ model ReceiptSequence {
 }
 
 model Receipt {
-  id                    String        @id @default(cuid())
-  receiptNumber         String        @unique
-  numberSource          ReceiptNumberSource @default(SEQUENCE)
-  status                ReceiptStatus @default(ISSUED)
+  id                  String              @id @default(cuid())
+  receiptNumber       String              @unique
+  numberSource        ReceiptNumberSource @default(SEQUENCE)
+  status              ReceiptStatus       @default(ISSUED)
   /// EO status L; reprints are stamped "Copy"
-  lost                  Boolean       @default(false)
-  replacedById          String?       @unique
+  lost                Boolean             @default(false)
+  replacedById        String?             @unique
   /// a split reissues one cancelled receipt as several, so this is not unique;
   /// replacedById names the primary replacement
-  reissuedFromId        String?
-  ridingNumber          Int?
-  entityKind            EntityKind
-  periodId              Int
-  issueDate             DateTime
-  contactId             String
-  contactNameSnapshot   String
-  addressSnapshotId     String
-  delivery              ReceiptDelivery @default(MAIL)
-  deliveredAt           DateTime?
-  pdfArtifactId         String?
-  createdAt             DateTime      @default(now())
+  reissuedFromId      String?
+  ridingNumber        Int?
+  entityKind          EntityKind
+  periodId            Int
+  issueDate           DateTime
+  contactId           String
+  contactNameSnapshot String
+  addressSnapshotId   String
+  delivery            ReceiptDelivery     @default(MAIL)
+  deliveredAt         DateTime?
+  pdfArtifactId       String?
+  createdAt           DateTime            @default(now())
   // NOTE: no `total` column - a receipt total is always derived from its
   // allocations (invariant 2).
 
-  period                Period            @relation(fields: [periodId], references: [id])
-  contact               Contact           @relation(fields: [contactId], references: [id])
-  addressSnapshot       AddressSnapshot   @relation(fields: [addressSnapshotId], references: [id])
-  replacedBy            Receipt?          @relation("ReceiptReplacement", fields: [replacedById], references: [id])
-  replaces              Receipt?          @relation("ReceiptReplacement")
-  reissuedFrom          Receipt?          @relation("ReceiptReissue", fields: [reissuedFromId], references: [id])
-  reissues              Receipt[]         @relation("ReceiptReissue")
-  pdfArtifact           Artifact?         @relation(fields: [pdfArtifactId], references: [id])
-  allocations           ReceiptAllocation[]
-  entityReportLinks     EntityReportReceipt[]
-  eoForms               EOForm[]
-  reprints              ReceiptReprint[]
+  period            Period                @relation(fields: [periodId], references: [id])
+  contact           Contact               @relation(fields: [contactId], references: [id])
+  addressSnapshot   AddressSnapshot       @relation(fields: [addressSnapshotId], references: [id])
+  replacedBy        Receipt?              @relation("ReceiptReplacement", fields: [replacedById], references: [id])
+  replaces          Receipt?              @relation("ReceiptReplacement")
+  reissuedFrom      Receipt?              @relation("ReceiptReissue", fields: [reissuedFromId], references: [id])
+  reissues          Receipt[]             @relation("ReceiptReissue")
+  pdfArtifact       Artifact?             @relation(fields: [pdfArtifactId], references: [id])
+  allocations       ReceiptAllocation[]
+  entityReportLinks EntityReportReceipt[]
+  eoForms           EOForm[]
+  reprints          ReceiptReprint[]
+  emailMessages     EmailMessage[]
+  printBatchItems   PrintBatchItem[]
 
   @@index([periodId])
   @@index([contactId])
@@ -446,8 +473,8 @@ model ReceiptReprint {
   createdByUserId String?
   createdAt       DateTime           @default(now())
 
-  receipt         Receipt            @relation(fields: [receiptId], references: [id])
-  artifact        Artifact           @relation(fields: [artifactId], references: [id])
+  receipt  Receipt  @relation(fields: [receiptId], references: [id])
+  artifact Artifact @relation(fields: [artifactId], references: [id])
 
   @@index([receiptId])
   @@map("receipt_reprint")
@@ -460,8 +487,8 @@ model ReceiptAllocation {
   amountCents    Int
   createdAt      DateTime @default(now())
 
-  receipt        Receipt      @relation(fields: [receiptId], references: [id])
-  contribution   Contribution @relation(fields: [contributionId], references: [id])
+  receipt      Receipt      @relation(fields: [receiptId], references: [id])
+  contribution Contribution @relation(fields: [contributionId], references: [id])
 
   @@unique([receiptId, contributionId])
   @@index([contributionId])
@@ -482,24 +509,25 @@ model Period {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  contributions    Contribution[]
-  addressSnapshots AddressSnapshot[]
-  receipts         Receipt[]
-  entityReports    EntityReport[]
-  spaceStates      SpaceState[]
+  contributions         Contribution[]
+  addressSnapshots      AddressSnapshot[]
+  receipts              Receipt[]
+  entityReports         EntityReport[]
+  spaceStates           SpaceState[]
   donorCyclePreferences DonorCyclePreference[]
+  printBatches          PrintBatch[]
 
   @@map("period")
 }
 
 model ContributionLimit {
-  id          String   @id @default(cuid())
+  id          String                  @id @default(cuid())
   year        Int
   bucket      ContributionLimitBucket
   amountCents Int
   notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
 
   @@unique([year, bucket])
   @@map("contribution_limit")
@@ -514,8 +542,8 @@ model RtdInclusion {
   aggregateAfterCents Int
   createdAt           DateTime @default(now())
 
-  contribution        Contribution @relation(fields: [contributionId], references: [id])
-  rtdFiling           RtdFiling    @relation(fields: [rtdFilingId], references: [id])
+  contribution Contribution @relation(fields: [contributionId], references: [id])
+  rtdFiling    RtdFiling    @relation(fields: [rtdFilingId], references: [id])
 
   @@index([contributionId])
   @@index([rtdFilingId])
@@ -534,41 +562,41 @@ model RtdFiling {
   artifactId     String?
   amendsFilingId String?
 
-  artifact       Artifact?    @relation(fields: [artifactId], references: [id])
-  amendsFiling   RtdFiling?   @relation("RtdAmendment", fields: [amendsFilingId], references: [id])
-  amendedBy      RtdFiling[]  @relation("RtdAmendment")
-  inclusions     RtdInclusion[]
-  eoForms        EOForm[]
+  artifact     Artifact?      @relation(fields: [artifactId], references: [id])
+  amendsFiling RtdFiling?     @relation("RtdAmendment", fields: [amendsFilingId], references: [id])
+  amendedBy    RtdFiling[]    @relation("RtdAmendment")
+  inclusions   RtdInclusion[]
+  eoForms      EOForm[]
 
   @@map("rtd_filing")
 }
 
 model EntityReport {
-  id           String           @id @default(cuid())
+  id             String           @id @default(cuid())
   /// null on both ridingNumber and entityKind together = the combined,
   /// all-entities file EO also expects alongside the per-entity ones
   /// (eo-reporting.md §2, ticket 4.1); a non-null entityKind (ridingNumber
   /// null only for PARTY) is one entity's own file, e.g. for its CFO.
-  ridingNumber Int?
-  entityKind   EntityKind?
-  periodId     Int
-  kind         EntityReportKind
-  generatedAt  DateTime         @default(now())
-  artifactId   String?
+  ridingNumber   Int?
+  entityKind     EntityKind?
+  periodId       Int
+  kind           EntityReportKind
+  generatedAt    DateTime         @default(now())
+  artifactId     String?
   /// the receipt + contribution set this report included, recorded as a
   /// point-in-time snapshot (data-model §2 "included_set (recorded)")
-  includedSet  Json             @default("{}")
-  sentToCfoAt  DateTime?
+  includedSet    Json             @default("{}")
+  sentToCfoAt    DateTime?
   /// set when this report went into a filed annual return; a later correction to
   /// a receipt it covers then owes the current year's return a note (corrections.md)
-  filedAt      DateTime?
-  supersededById String?        @unique
-  dirty        Boolean          @default(false)
+  filedAt        DateTime?
+  supersededById String?          @unique
+  dirty          Boolean          @default(false)
 
-  period       Period       @relation(fields: [periodId], references: [id])
-  artifact     Artifact?    @relation(fields: [artifactId], references: [id])
-  supersededBy EntityReport? @relation("EntityReportSupersede", fields: [supersededById], references: [id])
-  supersedes   EntityReport? @relation("EntityReportSupersede")
+  period       Period                @relation(fields: [periodId], references: [id])
+  artifact     Artifact?             @relation(fields: [artifactId], references: [id])
+  supersededBy EntityReport?         @relation("EntityReportSupersede", fields: [supersededById], references: [id])
+  supersedes   EntityReport?         @relation("EntityReportSupersede")
   receiptLinks EntityReportReceipt[]
 
   @@index([periodId, ridingNumber, entityKind])
@@ -580,33 +608,33 @@ model EntityReportReceipt {
   entityReportId String
   receiptId      String
 
-  entityReport   EntityReport @relation(fields: [entityReportId], references: [id])
-  receipt        Receipt      @relation(fields: [receiptId], references: [id])
+  entityReport EntityReport @relation(fields: [entityReportId], references: [id])
+  receipt      Receipt      @relation(fields: [receiptId], references: [id])
 
   @@id([entityReportId, receiptId])
   @@map("entity_report_receipt")
 }
 
 model EOForm {
-  id           String     @id @default(cuid())
-  kind         EOFormKind
+  id          String     @id @default(cuid())
+  kind        EOFormKind
   /// "receipt" | "filing"
-  subject      String
-  receiptId    String?
-  rtdFilingId  String?
-  artifactId   String?
-  filedAt      DateTime?
-  createdAt    DateTime   @default(now())
+  subject     String
+  receiptId   String?
+  rtdFilingId String?
+  artifactId  String?
+  filedAt     DateTime?
+  createdAt   DateTime   @default(now())
 
-  receipt      Receipt?   @relation(fields: [receiptId], references: [id])
-  rtdFiling    RtdFiling? @relation(fields: [rtdFilingId], references: [id])
-  artifact     Artifact?  @relation(fields: [artifactId], references: [id])
+  receipt   Receipt?   @relation(fields: [receiptId], references: [id])
+  rtdFiling RtdFiling? @relation(fields: [rtdFilingId], references: [id])
+  artifact  Artifact?  @relation(fields: [artifactId], references: [id])
 
   @@map("eo_form")
 }
 
 model ChangeLogEntry {
-  id            String   @id @default(cuid())
+  id            String               @id @default(cuid())
   subjectType   ChangeLogSubjectType
   subjectId     String
   actorUserId   String?
@@ -614,11 +642,11 @@ model ChangeLogEntry {
   reason        String
   before        Json?
   after         Json?
-  at            DateTime @default(now())
+  at            DateTime             @default(now())
   /// one guarded action's cascade shares a correlation id
   correlationId String
 
-  actor         User?    @relation(fields: [actorUserId], references: [id])
+  actor User? @relation(fields: [actorUserId], references: [id])
 
   @@index([subjectType, subjectId])
   @@index([correlationId])
@@ -636,12 +664,13 @@ model Artifact {
   createdAt DateTime     @default(now())
   // retained >= 6 years; never hard-deleted
 
-  receipts      Receipt[]
-  rtdFilings    RtdFiling[]
-  entityReports EntityReport[]
-  eoForms       EOForm[]
-  workItems     WorkItem[]
+  receipts        Receipt[]
+  rtdFilings      RtdFiling[]
+  entityReports   EntityReport[]
+  eoForms         EOForm[]
+  workItems       WorkItem[]
   receiptReprints ReceiptReprint[]
+  printBatches    PrintBatch[]
 
   @@map("artifact")
 }
@@ -651,7 +680,7 @@ model Artifact {
 // ---------------------------------------------------------------------------
 
 model WorkItem {
-  id             String   @id @default(cuid())
+  id             String               @id @default(cuid())
   kind           WorkItemKind
   subjectType    ChangeLogSubjectType
   subjectId      String
@@ -659,18 +688,18 @@ model WorkItem {
   contactId      String?
   ruleRef        String?
   dueAt          DateTime?
-  status         WorkItemStatus @default(OPEN)
+  status         WorkItemStatus       @default(OPEN)
   assigneeUserId String?
   resolutionNote String?
   formArtifactId String?
   /// multi-contribution findings share a correlation id
   correlationId  String?
-  openedAt       DateTime @default(now())
+  openedAt       DateTime             @default(now())
   closedAt       DateTime?
 
-  contact        Contact?  @relation(fields: [contactId], references: [id])
-  assignee       User?     @relation(fields: [assigneeUserId], references: [id])
-  formArtifact   Artifact? @relation(fields: [formArtifactId], references: [id])
+  contact      Contact?  @relation(fields: [contactId], references: [id])
+  assignee     User?     @relation(fields: [assigneeUserId], references: [id])
+  formArtifact Artifact? @relation(fields: [formArtifactId], references: [id])
 
   @@index([kind, status])
   @@index([subjectType, subjectId])
@@ -679,25 +708,25 @@ model WorkItem {
 }
 
 model DonorCyclePreference {
-  id                 String   @id @default(cuid())
-  contactId          String
-  year               Int
+  id                         String          @id @default(cuid())
+  contactId                  String
+  year                       Int
   /// default MAIL until confirmed
-  delivery           ReceiptDelivery @default(MAIL)
-  precheckSentAt     DateTime?
-  addressConfirmedAt DateTime?
+  delivery                   ReceiptDelivery @default(MAIL)
+  precheckSentAt             DateTime?
+  addressConfirmedAt         DateTime?
   /// bearer token for the donor-facing confirm link (ticket 3.9); cleared
   /// once used, so a stale/replayed link 404s rather than re-confirming
-  confirmationToken          String?   @unique
+  confirmationToken          String?         @unique
   confirmationTokenExpiresAt DateTime?
   /// which space's send this outstanding token belongs to, so confirming it
   /// files the resulting AddressSnapshot under the right period; cleared
   /// alongside the token
   confirmationPeriodId       Int?
-  updatedAt          DateTime @updatedAt
+  updatedAt                  DateTime        @updatedAt
 
-  contact            Contact  @relation(fields: [contactId], references: [id])
-  confirmationPeriod Period?  @relation(fields: [confirmationPeriodId], references: [id])
+  contact            Contact @relation(fields: [contactId], references: [id])
+  confirmationPeriod Period? @relation(fields: [confirmationPeriodId], references: [id])
 
   @@unique([contactId, year])
   @@map("donor_cycle_preference")
@@ -713,24 +742,24 @@ model SpaceState {
   stageOwner   String?
   updatedAt    DateTime   @updatedAt
 
-  period       Period     @relation(fields: [periodId], references: [id])
+  period Period @relation(fields: [periodId], references: [id])
 
   @@unique([periodId, ridingNumber, entityKind])
   @@map("space_state")
 }
 
 model ReconciliationMark {
-  id                 String   @id @default(cuid())
+  id                 String                 @id @default(cuid())
   /// statement identity: processor payout id, bank deposit ref, transfer batch
   externalRef        String
   kind               ReconciliationMarkKind
   statementDate      DateTime
   amountCentsMatched Int
   createdBy          String
-  createdAt          DateTime @default(now())
+  createdAt          DateTime               @default(now())
   note               String?
 
-  matches            ReconciliationMatch[]
+  matches ReconciliationMatch[]
 
   @@index([externalRef])
   @@map("reconciliation_mark")
@@ -744,8 +773,8 @@ model ReconciliationMatch {
   contributionId       String
   createdAt            DateTime @default(now())
 
-  reconciliationMark   ReconciliationMark @relation(fields: [reconciliationMarkId], references: [id])
-  contribution         Contribution       @relation(fields: [contributionId], references: [id])
+  reconciliationMark ReconciliationMark @relation(fields: [reconciliationMarkId], references: [id])
+  contribution       Contribution       @relation(fields: [contributionId], references: [id])
 
   @@unique([reconciliationMarkId, contributionId])
   @@index([contributionId])
@@ -768,11 +797,11 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  changeLogEntries ChangeLogEntry[]
-  assignedWorkItems WorkItem[]
-  sessions          Session[]
-  paymentsCreated       Payment[]
-  contributionsCreated  Contribution[]
+  changeLogEntries     ChangeLogEntry[]
+  assignedWorkItems    WorkItem[]
+  sessions             Session[]
+  paymentsCreated      Payment[]
+  contributionsCreated Contribution[]
 
   @@map("app_user")
 }
@@ -785,12 +814,12 @@ model User {
 /// the CEO's request. Singleton row (id = "singleton"). Checked at every
 /// issuance path (ticket 0.5).
 model IssuanceKillSwitch {
-  id         String   @id @default("singleton")
-  engaged    Boolean  @default(false)
-  engagedAt  DateTime?
-  engagedBy  String?
-  reason     String?
-  updatedAt  DateTime @updatedAt
+  id        String    @id @default("singleton")
+  engaged   Boolean   @default(false)
+  engagedAt DateTime?
+  engagedBy String?
+  reason    String?
+  updatedAt DateTime  @updatedAt
 
   @@map("issuance_kill_switch")
 }
@@ -847,8 +876,106 @@ model Session {
   expiresAt DateTime
   userId    String?
 
-  user      User?    @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
 
   @@index([expiresAt])
   @@map("session")
+}
+
+// ---------------------------------------------------------------------------
+// Delivery (ticket 3.6)
+// ---------------------------------------------------------------------------
+
+/// One outgoing email: the outbox row the dispatcher sends from and the
+/// record of what was sent. The content is stored as sent, so the row is the
+/// audit copy. Never hard-deleted.
+model EmailMessage {
+  id                String       @id @default(cuid())
+  purpose           EmailPurpose
+  /// set for RECEIPT emails
+  receiptId         String?
+  contactId         String
+  toAddress         String
+  subject           String
+  textBody          String
+  htmlBody          String?
+  /// [{ artifactId, filename }], attached in order
+  attachments       Json         @default("[]")
+  status            EmailStatus  @default(QUEUED)
+  statusDetail      String?
+  /// the adapter that sent it (e.g. "resend", "dev")
+  provider          String?
+  providerMessageId String?      @unique
+  attempts          Int          @default(0)
+  nextAttemptAt     DateTime     @default(now())
+  /// set while a dispatcher holds the row (status SENDING)
+  claimedAt         DateTime?
+  queuedByUserId    String?
+  queuedAt          DateTime     @default(now())
+  sentAt            DateTime?
+  lastEventAt       DateTime?
+
+  receipt Receipt?     @relation(fields: [receiptId], references: [id])
+  contact Contact      @relation(fields: [contactId], references: [id])
+  events  EmailEvent[]
+
+  @@index([status, nextAttemptAt])
+  @@index([receiptId])
+  @@map("email_message")
+}
+
+/// A provider webhook event, append-only. `providerEventId` dedupes the
+/// provider's at-least-once redelivery.
+model EmailEvent {
+  id              String   @id @default(cuid())
+  emailMessageId  String
+  providerEventId String   @unique
+  type            String
+  occurredAt      DateTime
+  detail          String?
+  payload         Json
+  receivedAt      DateTime @default(now())
+
+  emailMessage EmailMessage @relation(fields: [emailMessageId], references: [id])
+
+  @@index([emailMessageId])
+  @@map("email_event")
+}
+
+/// One print run for a space: the consolidated PDF (a cover letter and the
+/// receipt for each MAIL receipt) and, once someone confirms it went in the
+/// post, `mailedAt`. Marking it mailed is what sets `Receipt.deliveredAt` for
+/// mail. Never hard-deleted.
+model PrintBatch {
+  id              String     @id @default(cuid())
+  periodId        Int
+  ridingNumber    Int?
+  entityKind      EntityKind
+  artifactId      String
+  createdByUserId String
+  createdAt       DateTime   @default(now())
+  mailedAt        DateTime?
+  mailedByUserId  String?
+
+  period   Period           @relation(fields: [periodId], references: [id])
+  artifact Artifact         @relation(fields: [artifactId], references: [id])
+  items    PrintBatchItem[]
+
+  @@index([periodId, ridingNumber, entityKind])
+  @@map("print_batch")
+}
+
+model PrintBatchItem {
+  id           String @id @default(cuid())
+  printBatchId String
+  receiptId    String
+  /// page order in the batch PDF
+  position     Int
+
+  printBatch PrintBatch @relation(fields: [printBatchId], references: [id])
+  receipt    Receipt    @relation(fields: [receiptId], references: [id])
+
+  @@unique([printBatchId, receiptId])
+  @@index([receiptId])
+  @@map("print_batch_item")
 }

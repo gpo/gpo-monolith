@@ -50,23 +50,62 @@ const PRECHECK_RESULT = {
       precheckSentAt: '2028-01-01T00:00:00Z',
       confirmationToken: 'tok-1',
       confirmationTokenExpiresAt: '2028-01-31T00:00:00Z',
+      emailMessageId: 'em-1',
     },
   ],
   skipped: [{ contactId: 'ct1', contactName: 'Dana Donor', reason: 'no-email-on-file' }],
 };
 
-let calls: Array<{ url: string; body?: string }> = [];
+const NOTHING_ISSUED = {
+  issuedCount: 0,
+  deliveredCount: 0,
+  email: { readyToQueue: 0, queued: 0, sent: 0, delivered: 0 },
+  mail: { readyToPrint: 0, printed: 0, mailed: 0 },
+  printBatches: [],
+  problems: [],
+  stage: 'intake',
+};
+
+const IN_DELIVERY = {
+  issuedCount: 3,
+  deliveredCount: 0,
+  email: { readyToQueue: 1, queued: 0, sent: 0, delivered: 0 },
+  mail: { readyToPrint: 1, printed: 1, mailed: 0 },
+  printBatches: [{ id: 'pb1', receiptCount: 1, createdAt: '2026-12-01T15:00:00Z', mailedAt: null }],
+  problems: [
+    {
+      receiptId: 'r3',
+      receiptNumber: 'GPO-00402512',
+      contactName: 'Betty Bounce',
+      workItemId: 'w9',
+      detail: 'Permanent: General: no such mailbox',
+    },
+  ],
+  stage: 'issued',
+};
+
+let calls: Array<{ url: string; method?: string; body?: string }> = [];
 let previewResponse: unknown = CLEAR_PREVIEW;
+let deliveryResponse: unknown = NOTHING_ISSUED;
 
 beforeEach(() => {
   calls = [];
   previewResponse = CLEAR_PREVIEW;
+  deliveryResponse = NOTHING_ISSUED;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
-      calls.push({ url: String(url), body: init?.body as string | undefined });
+      calls.push({ url: String(url), method: init?.method, body: init?.body as string | undefined });
       if (String(url).includes('/auth/me')) return jsonResponse(ME);
       if (String(url).includes('/issuance-preview')) return jsonResponse(previewResponse);
+      if (String(url).endsWith('/delivery')) return jsonResponse(deliveryResponse);
+      if (String(url).includes('/deliver/email')) {
+        return jsonResponse({ queued: [{ receiptId: 'r2', receiptNumber: 'GPO-00402511', emailMessageId: 'em-2', toAddress: 'sam@example.org' }], movedToMail: [] });
+      }
+      if (String(url).includes('/print-batches/pb1/mailed')) {
+        return jsonResponse({ deliveredCount: 1, skipped: [], closedWorkItemIds: [] });
+      }
+      if (String(url).includes('/print-batches')) return jsonResponse({ printBatch: { id: 'pb2' }, receiptCount: 1 });
       if (String(url).includes('/precheck') && init?.method === 'POST') {
         return jsonResponse(PRECHECK_RESULT);
       }
@@ -147,13 +186,58 @@ test('sends the donor pre-check for the space and shows the sent/skipped summary
   fireEvent.change(screen.getByPlaceholderText('e.g. annual pre-check window opens'), {
     target: { value: 'annual pre-check window opens' },
   });
+  expect(sendButton).toBeDisabled(); // no message yet
+  fireEvent.change(screen.getByLabelText('Email message'), {
+    target: { value: 'Please confirm your address.' },
+  });
   expect(sendButton).not.toBeDisabled();
 
   fireEvent.click(sendButton);
 
   await waitFor(() => expect(calls.some((c) => c.url.includes('/precheck') && c.body)).toBe(true));
   const call = calls.find((c) => c.url.includes('/spaces/67/PARTY/precheck'))!;
-  expect(JSON.parse(call.body!)).toMatchObject({ reason: 'annual pre-check window opens' });
+  expect(JSON.parse(call.body!)).toMatchObject({
+    reason: 'annual pre-check window opens',
+    emailSubject: expect.stringContaining('confirm your address'),
+    emailBody: 'Please confirm your address.',
+  });
 
   expect(await screen.findByText('1 sent, 1 skipped (no email on file).')).toBeInTheDocument();
+});
+
+test('delivers: queues email, creates a print batch, marks a batch mailed, and lists bounces', async () => {
+  previewResponse = { ...CLEAR_PREVIEW, lines: [], totals: { receiptCount: 0, amountCents: 0, emailCount: 0, mailCount: 0 } };
+  deliveryResponse = IN_DELIVERY;
+  renderPage();
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Go to delivery' }));
+  expect(await screen.findByText('0 of 3 receipt(s) delivered.')).toBeInTheDocument();
+  expect(screen.getByText('Betty Bounce')).toBeInTheDocument();
+  expect(screen.getByText('Permanent: General: no such mailbox')).toBeInTheDocument();
+
+  const sendEmails = screen.getByRole('button', { name: 'Send 1 email(s)' });
+  const print = screen.getByRole('button', { name: 'Create print batch (1)' });
+  expect(sendEmails).toBeDisabled(); // no letter or reason yet
+  expect(print).toBeDisabled();
+
+  fireEvent.change(screen.getByLabelText('Letter'), { target: { value: 'Thank you for your support.' } });
+  fireEvent.change(screen.getByPlaceholderText('e.g. 2026 annual receipts'), { target: { value: '2026 receipts' } });
+
+  fireEvent.click(sendEmails);
+  expect(await screen.findByText('1 queued.')).toBeInTheDocument();
+  const emailCall = calls.find((c) => c.url.includes('/spaces/67/PARTY/deliver/email'))!;
+  expect(JSON.parse(emailCall.body!)).toEqual({
+    reason: '2026 receipts',
+    subject: 'Your official contribution receipt',
+    coverLetterBody: 'Thank you for your support.',
+  });
+
+  fireEvent.click(print);
+  await waitFor(() => expect(calls.some((c) => c.url.endsWith('/spaces/67/PARTY/print-batches') && c.body)).toBe(true));
+
+  fireEvent.change(screen.getByLabelText('Date mailed'), { target: { value: '2026-12-01' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Mark mailed' }));
+  await waitFor(() => expect(calls.some((c) => c.url.includes('/print-batches/pb1/mailed'))).toBe(true));
+  const mailedCall = calls.find((c) => c.url.includes('/print-batches/pb1/mailed'))!;
+  expect(JSON.parse(mailedCall.body!)).toEqual({ reason: '2026 receipts', mailedOn: '2026-12-01' });
 });

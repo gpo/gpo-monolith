@@ -71,6 +71,7 @@ export const WorkItemKind = z.enum([
   'DIFF',
   'OWED_TO_EO',
   'SYNC_INCIDENT',
+  'DELIVERY',
 ]);
 export type WorkItemKind = z.infer<typeof WorkItemKind>;
 

@@ -704,3 +704,70 @@ replacements. The preview computes all of it without writing and lists blockers
     still rendered after the database commit, so a crash between them leaves a
     receipt without its PDF (the same window `issueReceipt` has).
 
+
+## Tickets 3.6 and 3.12 (the rest): delivery
+
+Receipts and pre-checks now go out. Email goes through a provider seam with a
+Resend adapter; mail goes through print batches that someone prints, posts, and
+marks mailed. The mailhouse booking (3.7) is not needed for this: a print batch
+is one PDF that any printer can run.
+
+| Where | What |
+|---|---|
+| `api/src/delivery/email-provider.ts` | The seam: `EmailProvider` has `send` and an optional `parseWebhook` that returns provider-neutral events. Nothing above it knows about Resend. |
+| `api/src/delivery/resend-provider.ts` | Resend over plain `fetch`: `POST /emails` with base64 attachments and an `Idempotency-Key`; Svix-style webhook signature check (HMAC-SHA256, 5-minute tolerance, any `v1,` entry). 429, 5xx, and network errors are retryable; other 4xx are final. |
+| `api/src/delivery/dev-provider.ts`, `provider-factory.ts` | `EMAIL_PROVIDER=dev` (the default) sends nothing; `resend` needs `RESEND_API_KEY`. A new provider is one adapter plus a case in the factory. |
+| `api/src/delivery/outbox.ts` | `queueSpaceReceiptEmails`: one `EmailMessage` per EMAIL receipt still undelivered with no live email, receipt PDF attached, cover letter in the body. A donor with no email address is moved to MAIL. |
+| `api/src/delivery/dispatcher.ts` | Sends queued rows (`FOR UPDATE SKIP LOCKED`, so replicas never double-send), throttled, with backoff retries. A send sets `Receipt.deliveredAt`. Started by `server.ts`, not `buildApp`. |
+| `api/src/delivery/events.ts` | Applies webhook events. A permanent bounce, a suppression, or a final send failure moves the receipt and the donor's `DonorCyclePreference` to MAIL and opens a `DELIVERY` work item. |
+| `api/src/delivery/print-batches.ts` | `createPrintBatch` (a window-envelope letter, then the receipt, per MAIL receipt), `markPrintBatchMailed` (sets `deliveredAt` to the mailing date, closes the DELIVERY items). |
+| `api/src/delivery/space-delivery.ts` | The wizard's delivery summary, and the W6 moves: `issued` after a generate, `delivered` once every ISSUED receipt went out. Nothing moved `SpaceState` before this. |
+| `api/src/routes/delivery.ts` | `GET /spaces/:p/:e/delivery`, `POST .../deliver/email`, `POST .../print-batches`, `GET /print-batches/:id/pdf`, `POST /print-batches/:id/mailed`, `POST /webhooks/email` (raw body, signature is the credential), and sysadmin `GET /admin/emails`, `POST /admin/emails/dispatch`, and (dev provider only) `POST /admin/emails/:id/simulate`. |
+| migration `20260927100000_delivery_infrastructure` | `email_message`, `email_event`, `print_batch`, `print_batch_item`, `WorkItemKind.DELIVERY`; all four tables never hard-delete. |
+| `web/src/routes/space-issuance.tsx` | The Deliver step: cover letter, email send, print batches with mark-mailed, and bounced receipts. The pre-check card now takes the email's subject and message. |
+| `web/src/routes/dev-tools.tsx`, `work-queue.tsx` | Email outbox with "Send now" and simulated delivered/bounce; a Delivery tab on the work queue. |
+
+Ticket 3.5's synchronous `deliverSpaceReceipts` and its `/deliver` route are
+gone: the outbox and print batches replace both of its outputs.
+
+### Deviations / judgment calls
+
+1. **Sending is asynchronous.** The deliver step queues and returns. A space
+   can hold thousands of receipts, and at Resend's 10 requests a second that is
+   minutes, well past any request timeout. `EMAIL_RATE_PER_SECOND` defaults to
+   5 to leave headroom.
+2. **`deliveredAt` means sent, not received**: the provider accepted the email,
+   or the batch went in the post. A later bounce clears it. This keeps email
+   and mail meaning the same thing, and the dev provider (no webhooks) still
+   completes a space.
+3. **The bounce flips to MAIL at once**, rather than when someone resolves the
+   work item. The backlog line reads "hard bounce -> WorkItem that flips the
+   donor to MAIL"; flipping first means a bounced receipt cannot be forgotten,
+   and the work item is the follow-up (check the address in Qomon), closed
+   automatically when its batch is marked mailed. A complaint changes nothing:
+   the email arrived. A pre-check bounce is recorded only, since an unconfirmed
+   donor already defaults to mail.
+4. **The kill switch holds receipt email**: queueing and printing refuse, and
+   the dispatcher leaves receipt rows queued. Pre-check email still goes out,
+   since it issues nothing.
+5. **Warming the sending domain is operations, not code.** `EMAIL_DAILY_LIMIT`
+   caps sends in any rolling 24 hours so the volume can ramp up; DNS (SPF, DKIM,
+   DMARC on a subdomain) and the ramp schedule are set up in Resend.
+6. **Wording stays caller-supplied**, as in 3.5: the cover letter, subjects, and
+   pre-check message are typed into the wizard (the subjects are prefilled).
+   There is still no stored template owned by the rules authority.
+7. **Receipt numbers print in order**, not postal-code order. A mailhouse
+   wanting presort discounts would need a different order; that is 3.7's call.
+8. **`withChangeLog` takes an optional timeout.** Prisma's 5-second default
+   is too short for a deliver step or a mark-mailed that touches a whole space.
+
+### Not done
+
+- No cancellation notice or replacement receipt is emailed automatically after
+  a correction (3.10/3.11 still render them only). The outbox can carry them;
+  the correction cascade does not queue them yet.
+- The Qomon activity log (O45) is unchanged: the change log and the
+  `email_event` rows are the record of every send.
+- Nothing here was clicked through; see PHASE-3-MANUAL-TEST-PLAN.md section 6.
+  The Resend adapter is tested against a stubbed `fetch` and signed webhook
+  requests, not against a live Resend account.

@@ -476,6 +476,7 @@ export interface SentDonorPrecheck {
   precheckSentAt: string;
   confirmationToken: string;
   confirmationTokenExpiresAt: string;
+  emailMessageId: string | null;
 }
 
 export interface SkippedDonorPrecheck {
@@ -487,6 +488,51 @@ export interface SkippedDonorPrecheck {
 export interface SendDonorPrechecksResult {
   sent: SentDonorPrecheck[];
   skipped: SkippedDonorPrecheck[];
+}
+
+export interface SpaceDeliverySummary {
+  issuedCount: number;
+  deliveredCount: number;
+  email: { readyToQueue: number; queued: number; sent: number; delivered: number };
+  mail: { readyToPrint: number; printed: number; mailed: number };
+  printBatches: Array<{ id: string; receiptCount: number; createdAt: string; mailedAt: string | null }>;
+  problems: Array<{ receiptId: string; receiptNumber: string; contactName: string; workItemId: string; detail: string | null }>;
+  stage: string;
+}
+
+export interface QueueReceiptEmailsResult {
+  queued: Array<{ receiptId: string; receiptNumber: string; emailMessageId: string; toAddress: string }>;
+  movedToMail: Array<{ receiptId: string; receiptNumber: string; contactName: string }>;
+}
+
+export interface MarkPrintBatchMailedResult {
+  deliveredCount: number;
+  skipped: Array<{ receiptId: string; receiptNumber: string; status: string }>;
+  closedWorkItemIds: string[];
+}
+
+export interface OutboxEmail {
+  id: string;
+  purpose: 'RECEIPT' | 'PRECHECK';
+  status: string;
+  statusDetail: string | null;
+  toAddress: string;
+  contactName: string;
+  receiptNumber: string | null;
+  subject: string;
+  textBody: string;
+  attempts: number;
+  queuedAt: string;
+  sentAt: string | null;
+  providerMessageId: string | null;
+}
+
+export interface DispatchResult {
+  sent: number;
+  retrying: number;
+  failed: number;
+  heldByKillSwitch: boolean;
+  dailyLimitReached: boolean;
 }
 
 export interface DonorPrecheckAddress {
@@ -849,7 +895,7 @@ export const api = {
     periodId: number,
     entityKind: string,
     ridingNumber: number | null,
-    input: { reason: string; expiresInDays?: number },
+    input: { reason: string; expiresInDays?: number; emailSubject?: string; emailBody?: string },
   ) =>
     request<SendDonorPrechecksResult>(
       `/spaces/${periodId}/${entityKind}/precheck${ridingNumber !== null ? `?ridingNumber=${ridingNumber}` : ''}`,
@@ -862,6 +908,37 @@ export const api = {
     }),
   listOutstandingDonorPrechecks: () =>
     request<{ data: OutstandingDonorPrecheck[] }>('/admin/donor-prechecks'),
+  getSpaceDelivery: (periodId: number, entityKind: string, ridingNumber: number | null) =>
+    request<SpaceDeliverySummary>(
+      `/spaces/${periodId}/${entityKind}/delivery${ridingNumber !== null ? `?ridingNumber=${ridingNumber}` : ''}`,
+    ),
+  queueSpaceReceiptEmails: (
+    periodId: number,
+    entityKind: string,
+    ridingNumber: number | null,
+    input: { reason: string; subject: string; coverLetterBody: string },
+  ) =>
+    request<QueueReceiptEmailsResult>(
+      `/spaces/${periodId}/${entityKind}/deliver/email${ridingNumber !== null ? `?ridingNumber=${ridingNumber}` : ''}`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  createPrintBatch: (
+    periodId: number,
+    entityKind: string,
+    ridingNumber: number | null,
+    input: { reason: string; coverLetterBody: string },
+  ) =>
+    request<{ printBatch: { id: string }; receiptCount: number }>(
+      `/spaces/${periodId}/${entityKind}/print-batches${ridingNumber !== null ? `?ridingNumber=${ridingNumber}` : ''}`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  printBatchPdfUrl: (id: string) => `${BASE}/print-batches/${id}/pdf`,
+  markPrintBatchMailed: (id: string, input: { reason: string; mailedOn?: string }) =>
+    request<MarkPrintBatchMailedResult>(`/print-batches/${id}/mailed`, { method: 'POST', body: JSON.stringify(input) }),
+  listOutboxEmails: () => request<{ provider: string; data: OutboxEmail[] }>('/admin/emails'),
+  dispatchEmails: () => request<DispatchResult>('/admin/emails/dispatch', { method: 'POST' }),
+  simulateEmailEvent: (id: string, type: 'delivered' | 'bounced' | 'complained') =>
+    request<{ applied: number }>(`/admin/emails/${id}/simulate`, { method: 'POST', body: JSON.stringify({ type }) }),
   listPeriods: () => request<{ data: PeriodRow[] }>('/admin/periods'),
   savePeriod: (id: number, input: Omit<PeriodRow, 'id'>) =>
     request<{ period: PeriodRow; revalidation: unknown }>(`/admin/periods/${id}`, {

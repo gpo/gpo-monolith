@@ -6,6 +6,9 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import type { PrismaClient } from './generated/prisma/index.js';
+import type { DispatchOptions } from './delivery/dispatcher.js';
+import { DevEmailProvider } from './delivery/dev-provider.js';
+import type { EmailProvider } from './delivery/email-provider.js';
 import { IssuanceDisabledError } from './auth/kill-switch.js';
 import { ChangeLogError } from './changelog/write.js';
 import { BulkEditEmptyChangesError, BulkEditTooLargeError } from './contributions/bulk-edit.js';
@@ -24,12 +27,6 @@ import {
   ReceiptNotFoundError,
   TerminalReceiptError,
 } from './receipts/allocate.js';
-import {
-  DeliveryMissingPdfError,
-  DeliveryReceiptNotFoundError,
-  DeliveryReceiptNotIssuedError,
-  DeliveryReceiptScopeError,
-} from './receipts/delivery.js';
 import {
   DuplicateForeignReceiptNumberError,
   ForeignReceiptNumberFormatError,
@@ -61,6 +58,7 @@ import { adminRoutes } from './routes/admin.js';
 import { changeLogRoutes } from './routes/change-log.js';
 import { contributionRoutes } from './routes/contributions.js';
 import { correctionRoutes } from './routes/corrections.js';
+import { deliveryRoutes } from './routes/delivery.js';
 import { donorPrecheckRoutes } from './routes/donor-precheck.js';
 import { entityReportRoutes } from './routes/entity-reports.js';
 import { healthRoutes } from './routes/health.js';
@@ -92,6 +90,13 @@ export interface BuildAppOptions {
   buildRidingQomon?: (riding: { qomonApiKey: string; qomonApiBase: string | null }) => QomonApi;
   /** where receipt PDF artifacts are written (ticket 3.1); see env.ts. */
   artifactStorageDir?: string;
+  /** sends receipt and pre-check email (ticket 3.6); defaults to the dev
+   *  adapter, which sends nothing */
+  emailProvider?: EmailProvider;
+  /** pacing for the on-demand dispatch route; see env.ts */
+  emailDispatch?: DispatchOptions;
+  /** the web app's origin, for links in donor email */
+  publicWebUrl?: string;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -157,18 +162,6 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
     if (error instanceof SpaceIssuanceBlockedError) {
       return reply.code(409).send({ error: error.message, blockers: error.blockers });
-    }
-    if (error instanceof DeliveryReceiptNotFoundError) {
-      return reply.code(404).send({ error: error.message });
-    }
-    if (error instanceof DeliveryReceiptScopeError) {
-      return reply.code(400).send({ error: error.message });
-    }
-    if (
-      error instanceof DeliveryReceiptNotIssuedError ||
-      error instanceof DeliveryMissingPdfError
-    ) {
-      return reply.code(409).send({ error: error.message });
     }
     if (error instanceof ReportExportBlockedError) {
       return reply.code(409).send({ error: error.message, findings: error.findings });
@@ -242,6 +235,12 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(workItemRoutes);
   await app.register(spaceRoutes, {
     storageDir: opts.artifactStorageDir ?? './storage/artifacts',
+    publicWebUrl: opts.publicWebUrl ?? 'http://localhost:5173',
+  });
+  await app.register(deliveryRoutes, {
+    storageDir: opts.artifactStorageDir ?? './storage/artifacts',
+    emailProvider: opts.emailProvider ?? new DevEmailProvider(),
+    dispatch: opts.emailDispatch,
   });
   await app.register(entityReportRoutes, {
     storageDir: opts.artifactStorageDir ?? './storage/artifacts',

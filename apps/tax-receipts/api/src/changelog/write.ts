@@ -67,10 +67,17 @@ function jsonOrDbNull(value: unknown): Prisma.InputJsonValue | typeof Prisma.DbN
   return toJsonSnapshot(value);
 }
 
+export interface WithChangeLogOptions {
+  /** interactive-transaction timeout; Prisma's default (5s) is too short for
+   *  a batch that touches thousands of rows (ticket 3.6's print batches). */
+  timeoutMs?: number;
+}
+
 export async function withChangeLog<T>(
   prisma: PrismaClient,
   actor: ActorContext,
   fn: (ctx: ChangeLogContext) => Promise<T>,
+  options: WithChangeLogOptions = {},
 ): Promise<T> {
   if (!actor.reason || actor.reason.trim().length === 0) {
     throw new ChangeLogError('a change reason is mandatory (invariant 5)');
@@ -114,5 +121,5 @@ export async function withChangeLog<T>(
       );
     }
     return result;
-  });
+  }, options.timeoutMs ? { timeout: options.timeoutMs, maxWait: options.timeoutMs } : undefined);
 }

@@ -278,14 +278,46 @@ the dev database (contacts are not created from the form).
       a contribution for another donor, and the notice goes away.
 - [ ] A payment dated December 31 lands in that year's period, not the next.
 
+## 6. Delivery (tickets 3.6, 3.12)
+
+Nothing here was clicked through when it was built. Use the dev provider
+(the default) and a space with at least one EMAIL and one MAIL donor after
+issuing (Space A has Raj on EMAIL).
+
+- [ ] Review step: fill the pre-check message and reason, **Send pre-checks**.
+      Admin > Dev tools > Email outbox lists one QUEUED email per donor with an
+      address; **Send now** turns them SENT, and the text holds a
+      `/donor-precheck/...` link that opens the confirm page.
+- [ ] Generate, then the Deliver step shows "0 of N receipt(s) delivered" with
+      the email and mail counts matching the preview's split.
+- [ ] Type a letter and reason, **Send 1 email(s)**. Within about 15 seconds
+      (or after **Send now** in Dev tools) the email counts move to Sent and the
+      outbox row shows the receipt PDF's subject.
+- [ ] In Dev tools, **Bounce** that email. Back in the wizard, the receipt is
+      listed under "could not be delivered", Ready to print went up by one, and
+      the work queue's **Delivery** tab has an item for the donor.
+- [ ] **Create print batch**. Download it: each donor has a letter page with
+      their name and address in the window position, then their receipt.
+      Creating another batch straight away is refused (nothing left to print).
+- [ ] **Mark mailed** with today's date. The batch shows the date, the space
+      reads "Every receipt in this space has been delivered", the Delivery work
+      item is resolved, and the dashboard shows the space at `delivered`.
+- [ ] Engage the kill switch: **Send emails** and **Create print batch** both
+      fail with the kill-switch message.
+- [ ] With a real Resend account (optional): set `EMAIL_PROVIDER=resend`,
+      `RESEND_API_KEY`, `EMAIL_FROM` on a verified domain, and point a Resend
+      webhook at `/webhooks/email` with `RESEND_WEBHOOK_SECRET`. Send to
+      `bounced@resend.dev`; the bounce arrives through the webhook and does
+      what the simulated one did.
+
 ## Known non-issues
 
 - No Address Ned's work queue entry shows `C1`, status `EXCEPTION`, with a
   resolution note naming this fixture script — that's intentional (see
   Space D above), not a stray leftover to clean up.
-- Delivery (email/print, Qomon activity logging — tickets 3.5/3.6) isn't
-  built. Raj's `EMAIL` preference changes what the preview and the issued
-  receipt *say* about delivery; nothing is actually sent.
+- With the default `EMAIL_PROVIDER=dev`, no email leaves the machine. The
+  Dev tools outbox is the inbox, and its Delivered/Bounce buttons stand in for
+  the provider's webhook.
 - A dev database that already has other PARTY-level, riding-84-CA, or
   riding-90-CA contributions (real mirror-sweep data, your own manual
   testing) will add extra lines or blockers to whichever of these spaces
