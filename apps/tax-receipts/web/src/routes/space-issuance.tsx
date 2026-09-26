@@ -14,27 +14,39 @@ import {
   Stepper,
   Table,
   Text,
+  Textarea,
   TextInput,
 } from '@mantine/core';
-import { api, ApiError, type SendDonorPrechecksResult, type SpaceIssuanceResult } from '../api.js';
+import {
+  api,
+  ApiError,
+  type QueueReceiptEmailsResult,
+  type SendDonorPrechecksResult,
+  type SpaceDeliverySummary,
+  type SpaceIssuanceResult,
+} from '../api.js';
 import { describeRuleRef } from '../rule-labels.js';
 import { PageHeader } from '../components/PageHeader.js';
 import { defaultPoliticalEntityLabel, money } from './contribution-detail.js';
 
 /**
- * Per-space issuance wizard (ticket 3.12, screens.md screen 6, first slice):
- * gate check -> pre-issuance preview -> generate. The Review step also
- * carries the donor pre-check send action (ticket 3.9) — a small inline
- * card rather than its own `Stepper.Step`, so as not to overstate how much
- * of "ahead of the window" is real: no real email goes out (ticket 3.6), so
- * a staff member still finds the sent links manually (Admin > Dev tools).
- * Delivery itself (email/print, Qomon activity logging) has no UI step
- * either (ticket 3.5's API exists, 3.6's real send doesn't), so there is
- * still no "deliver" or "done-with-delivery" step — "done" just shows what
- * was issued, the same gap ticket 3.1 already left.
+ * Per-space issuance wizard (tickets 3.12 and 3.6, screens.md screen 6):
+ * Review (gate check, pre-issuance preview, and the donor pre-check send) ->
+ * Generate -> Deliver. Deliver queues the email receipts (sent in the
+ * background by the API's dispatcher), makes print batches for the mail
+ * receipts, and records when a batch went in the post. It lists any email
+ * that bounced: those receipts have already moved to mail and land in the
+ * next print batch.
+ *
+ * Every step is repeatable for stragglers, so the Deliver step is reachable
+ * whenever the space has issued receipts, not only straight after
+ * generating.
  *
  * Reachable from the space dashboard's "Issue" action per row.
  */
+
+const DEFAULT_RECEIPT_SUBJECT = 'Your official contribution receipt';
+const DEFAULT_PRECHECK_SUBJECT = 'Please confirm your address for your contribution receipt';
 
 interface SpaceIssuanceParams {
   periodId: number;
@@ -55,6 +67,13 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
     queryFn: () => api.previewSpaceIssuance(periodId, entityKind, ridingNumber),
   });
 
+  const delivery = useQuery({
+    queryKey: ['space-delivery', periodId, entityKind, ridingNumber],
+    queryFn: () => api.getSpaceDelivery(periodId, entityKind, ridingNumber),
+    // email goes out in the background; keep the counts moving while any is queued
+    refetchInterval: (query) => ((query.state.data?.email.queued ?? 0) > 0 ? 5_000 : false),
+  });
+
   const [active, setActive] = useState(0);
   const [reason, setReason] = useState('');
   const [politicalEntityLabel, setPoliticalEntityLabel] = useState<string | null>(null);
@@ -62,13 +81,20 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
   const [genError, setGenError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<SpaceIssuanceResult | null>(null);
   const [precheckReason, setPrecheckReason] = useState('');
+  const [precheckSubject, setPrecheckSubject] = useState(DEFAULT_PRECHECK_SUBJECT);
+  const [precheckBody, setPrecheckBody] = useState('');
   const [precheckError, setPrecheckError] = useState<string | null>(null);
   const [precheckResult, setPrecheckResult] = useState<SendDonorPrechecksResult | null>(null);
 
   const effectiveLabel = (politicalEntityLabel ?? defaultPoliticalEntityLabel(entityKind)).trim();
 
   const sendPrecheck = useMutation({
-    mutationFn: () => api.sendSpacePrecheck(periodId, entityKind, ridingNumber, { reason: precheckReason }),
+    mutationFn: () =>
+      api.sendSpacePrecheck(periodId, entityKind, ridingNumber, {
+        reason: precheckReason,
+        emailSubject: precheckSubject.trim(),
+        emailBody: precheckBody.trim(),
+      }),
     onSuccess: (result) => {
       setPrecheckError(null);
       setPrecheckResult(result);
@@ -89,7 +115,10 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
       setGenError(null);
       setGenResult(result);
       setActive(2);
-      return qc.invalidateQueries({ queryKey: ['space-issuance-preview', periodId, entityKind, ridingNumber] });
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: ['space-issuance-preview', periodId, entityKind, ridingNumber] }),
+        qc.invalidateQueries({ queryKey: ['space-delivery', periodId, entityKind, ridingNumber] }),
+      ]);
     },
     onError: (err) => {
       setGenError(err instanceof ApiError ? err.message : 'Failed to generate receipts.');
@@ -99,6 +128,7 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
   const canIssue = me.data?.can.issueReceipts ?? false;
   const canSendPrecheck = me.data?.can.sendDonorPrechecks ?? false;
   const canReview = preview.data !== undefined && !preview.data.blocked && preview.data.lines.length > 0;
+  const hasIssued = (delivery.data?.issuedCount ?? 0) > 0;
 
   return (
     <Stack gap="lg">
@@ -236,16 +266,31 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
                 <Stack gap="sm">
                   <Text fw={600}>Donor pre-check</Text>
                   <Text size="sm" c="dimmed">
-                    Sends every donor above a link confirming their address and email-versus-mail
-                    preference, ahead of generating anything (ticket 3.9). No real email goes out yet
-                    (ticket 3.6) — find the sent links under Admin &gt; Dev tools.
+                    Emails every donor above a link to confirm their address and choose email or mail,
+                    ahead of generating anything. Donors who don't confirm get their receipt by mail.
                   </Text>
                   {!canSendPrecheck && (
                     <Alert color="yellow">
                       You don't have permission to send the donor pre-check for this space.
                     </Alert>
                   )}
-                  <Group grow maw={500}>
+                  <Stack gap="xs" maw={560}>
+                    <TextInput
+                      label="Email subject"
+                      value={precheckSubject}
+                      onChange={(e) => setPrecheckSubject(e.currentTarget.value)}
+                      disabled={!canSendPrecheck}
+                    />
+                    <Textarea
+                      label="Email message"
+                      description="The donor's confirmation link is added below this message."
+                      placeholder="e.g. Before we send your receipt, please confirm your mailing address and whether you'd like it by email or by post."
+                      autosize
+                      minRows={3}
+                      value={precheckBody}
+                      onChange={(e) => setPrecheckBody(e.currentTarget.value)}
+                      disabled={!canSendPrecheck}
+                    />
                     <TextInput
                       label="Reason"
                       placeholder="e.g. annual pre-check window opens"
@@ -253,13 +298,18 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
                       onChange={(e) => setPrecheckReason(e.currentTarget.value)}
                       disabled={!canSendPrecheck}
                     />
-                  </Group>
+                  </Stack>
                   <Group>
                     <Button
                       variant="light"
                       onClick={() => sendPrecheck.mutate()}
                       loading={sendPrecheck.isPending}
-                      disabled={!canSendPrecheck || precheckReason.trim().length < 3}
+                      disabled={
+                        !canSendPrecheck ||
+                        precheckReason.trim().length < 3 ||
+                        precheckSubject.trim().length === 0 ||
+                        precheckBody.trim().length === 0
+                      }
                     >
                       Send pre-checks
                     </Button>
@@ -282,6 +332,11 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
                 <Button disabled={!canReview} onClick={() => setActive(1)}>
                   Next: generate
                 </Button>
+                {hasIssued && (
+                  <Button variant="light" onClick={() => setActive(2)}>
+                    Go to delivery
+                  </Button>
+                )}
               </Group>
             </Stack>
           ) : null}
@@ -337,61 +392,342 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
           </Stack>
         </Stepper.Step>
 
-        <Stepper.Step label="Done" description="Results">
-          {genResult && (
-            <Stack gap="md" mt="md">
-              <Alert color={genResult.failed === 0 ? 'green' : 'orange'}>
-                {genResult.succeeded} issued, {genResult.failed} failed.
-              </Alert>
-              <Table striped withTableBorder>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Contribution</Table.Th>
-                    <Table.Th>Result</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {genResult.results.map((r) => (
-                    <Table.Tr key={r.contributionId}>
-                      <Table.Td>
-                        <Link to="/contributions/$id" params={{ id: r.contributionId }}>
-                          <Text span c="blue">
-                            {r.contributionId}
-                          </Text>
-                        </Link>
-                      </Table.Td>
-                      <Table.Td>
-                        {r.ok ? (
-                          <Group gap="xs">
-                            <Badge color="green">{r.receiptNumber}</Badge>
-                            <Text size="sm">{money(r.amountCents ?? 0)}</Text>
-                            {r.receiptId && (
-                              <Text
-                                component="a"
-                                href={api.receiptPdfUrl(r.receiptId)}
-                                target="_blank"
-                                rel="noreferrer"
-                                c="blue"
-                                size="sm"
-                              >
-                                View PDF
-                              </Text>
-                            )}
-                          </Group>
-                        ) : (
-                          <Text c="red" size="sm">
-                            {r.error}
-                          </Text>
-                        )}
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </Stack>
-          )}
+        <Stepper.Step label="Deliver" description="Email, print, and mail">
+          <Stack gap="md" mt="md">
+            {genResult && <GenerateResults result={genResult} />}
+            <DeliverStep
+              periodId={periodId}
+              entityKind={entityKind}
+              ridingNumber={ridingNumber}
+              canDeliver={canIssue}
+              summary={delivery.data}
+              loading={delivery.isLoading}
+              onChanged={() => delivery.refetch()}
+            />
+          </Stack>
         </Stepper.Step>
       </Stepper>
+    </Stack>
+  );
+}
+
+function GenerateResults({ result }: { result: SpaceIssuanceResult }) {
+  return (
+    <Stack gap="xs">
+      <Alert color={result.failed === 0 ? 'green' : 'orange'}>
+        {result.succeeded} issued, {result.failed} failed.
+      </Alert>
+      <Table striped withTableBorder>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Contribution</Table.Th>
+            <Table.Th>Result</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {result.results.map((r) => (
+            <Table.Tr key={r.contributionId}>
+              <Table.Td>
+                <Link to="/contributions/$id" params={{ id: r.contributionId }}>
+                  <Text span c="blue">
+                    {r.contributionId}
+                  </Text>
+                </Link>
+              </Table.Td>
+              <Table.Td>
+                {r.ok ? (
+                  <Group gap="xs">
+                    <Badge color="green">{r.receiptNumber}</Badge>
+                    <Text size="sm">{money(r.amountCents ?? 0)}</Text>
+                    {r.receiptId && (
+                      <Text component="a" href={api.receiptPdfUrl(r.receiptId)} target="_blank" rel="noreferrer" c="blue" size="sm">
+                        View PDF
+                      </Text>
+                    )}
+                  </Group>
+                ) : (
+                  <Text c="red" size="sm">
+                    {r.error}
+                  </Text>
+                )}
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Stack>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+      <Text fw={700}>{value}</Text>
+    </div>
+  );
+}
+
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function DeliverStep(props: {
+  periodId: number;
+  entityKind: string;
+  ridingNumber: number | null;
+  canDeliver: boolean;
+  summary: SpaceDeliverySummary | undefined;
+  loading: boolean;
+  onChanged: () => void;
+}) {
+  const { periodId, entityKind, ridingNumber, canDeliver, summary } = props;
+  const [coverLetterBody, setCoverLetterBody] = useState('');
+  const [subject, setSubject] = useState(DEFAULT_RECEIPT_SUBJECT);
+  const [reason, setReason] = useState('');
+  const [mailedOn, setMailedOn] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [emailResult, setEmailResult] = useState<QueueReceiptEmailsResult | null>(null);
+
+  const onError = (err: unknown) => setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+  const done = () => {
+    setError(null);
+    props.onChanged();
+  };
+
+  const queueEmails = useMutation({
+    mutationFn: () =>
+      api.queueSpaceReceiptEmails(periodId, entityKind, ridingNumber, {
+        reason,
+        subject: subject.trim(),
+        coverLetterBody: coverLetterBody.trim(),
+      }),
+    onSuccess: (result) => {
+      setEmailResult(result);
+      done();
+    },
+    onError,
+  });
+  const printBatch = useMutation({
+    mutationFn: () =>
+      api.createPrintBatch(periodId, entityKind, ridingNumber, { reason, coverLetterBody: coverLetterBody.trim() }),
+    onSuccess: done,
+    onError,
+  });
+  const markMailed = useMutation({
+    mutationFn: (id: string) => api.markPrintBatchMailed(id, { reason, mailedOn: mailedOn[id] ?? todayIso() }),
+    onSuccess: done,
+    onError,
+  });
+
+  if (props.loading) return <Loader />;
+  if (!summary) return <Alert color="red">Failed to load delivery status.</Alert>;
+  if (summary.issuedCount === 0) {
+    return (
+      <Card withBorder>
+        <Text c="dimmed">No receipts have been issued in this space yet.</Text>
+      </Card>
+    );
+  }
+
+  const ready = reason.trim().length >= 3 && coverLetterBody.trim().length > 0;
+
+  return (
+    <Stack gap="md">
+      {summary.deliveredCount === summary.issuedCount ? (
+        <Alert color="green">Every receipt in this space has been delivered ({summary.issuedCount}).</Alert>
+      ) : (
+        <Text size="sm">
+          {summary.deliveredCount} of {summary.issuedCount} receipt(s) delivered.
+        </Text>
+      )}
+      {!canDeliver && (
+        <Alert color="yellow">Only the party CFO (or an authorized designate) may deliver receipts.</Alert>
+      )}
+
+      <Card withBorder>
+        <Stack gap="xs" maw={640}>
+          <Text fw={600}>Cover letter</Text>
+          <Textarea
+            label="Letter"
+            description="Goes in the body of each receipt email and on a page in front of each printed receipt, after the donor's name and receipt number."
+            placeholder="e.g. Thank you for your support of the Green Party of Ontario. Your official receipt for income tax purposes is enclosed."
+            autosize
+            minRows={4}
+            value={coverLetterBody}
+            onChange={(e) => setCoverLetterBody(e.currentTarget.value)}
+            disabled={!canDeliver}
+          />
+          <TextInput
+            label="Reason (required)"
+            placeholder="e.g. 2026 annual receipts"
+            value={reason}
+            onChange={(e) => setReason(e.currentTarget.value)}
+            disabled={!canDeliver}
+          />
+        </Stack>
+      </Card>
+
+      {error && <Alert color="red">{error}</Alert>}
+
+      <SimpleGrid cols={{ base: 1, md: 2 }}>
+        <Card withBorder>
+          <Stack gap="sm">
+            <Text fw={600}>Email</Text>
+            <Group gap="xl">
+              <Stat label="Ready to send" value={summary.email.readyToQueue} />
+              <Stat label="Sending" value={summary.email.queued} />
+              <Stat label="Sent" value={summary.email.sent} />
+              <Stat label="Delivered" value={summary.email.delivered} />
+            </Group>
+            <TextInput
+              label="Subject"
+              value={subject}
+              onChange={(e) => setSubject(e.currentTarget.value)}
+              disabled={!canDeliver}
+            />
+            <Group>
+              <Button
+                onClick={() => queueEmails.mutate()}
+                loading={queueEmails.isPending}
+                disabled={!canDeliver || !ready || subject.trim().length === 0 || summary.email.readyToQueue === 0}
+              >
+                Send {summary.email.readyToQueue} email(s)
+              </Button>
+            </Group>
+            {emailResult && (
+              <Text size="sm">
+                {emailResult.queued.length} queued
+                {emailResult.movedToMail.length > 0 &&
+                  `; ${emailResult.movedToMail.length} moved to mail (no email address on file)`}
+                .
+              </Text>
+            )}
+            <Text size="xs" c="dimmed">
+              Emails go out in the background, each with the receipt PDF attached.
+            </Text>
+          </Stack>
+        </Card>
+
+        <Card withBorder>
+          <Stack gap="sm">
+            <Text fw={600}>Mail</Text>
+            <Group gap="xl">
+              <Stat label="Ready to print" value={summary.mail.readyToPrint} />
+              <Stat label="Printed, not mailed" value={summary.mail.printed} />
+              <Stat label="Mailed" value={summary.mail.mailed} />
+            </Group>
+            <Group>
+              <Button
+                onClick={() => printBatch.mutate()}
+                loading={printBatch.isPending}
+                disabled={!canDeliver || !ready || summary.mail.readyToPrint === 0}
+              >
+                Create print batch ({summary.mail.readyToPrint})
+              </Button>
+            </Group>
+            <Text size="xs" c="dimmed">
+              One PDF: a letter addressed for a window envelope, then the receipt, for each donor. Print it,
+              post it, then mark the batch mailed.
+            </Text>
+          </Stack>
+        </Card>
+      </SimpleGrid>
+
+      {summary.printBatches.length > 0 && (
+        <Card withBorder>
+          <Stack gap="sm">
+            <Text fw={600}>Print batches</Text>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Created</Table.Th>
+                  <Table.Th>Receipts</Table.Th>
+                  <Table.Th>PDF</Table.Th>
+                  <Table.Th>Mailed</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {summary.printBatches.map((b) => (
+                  <Table.Tr key={b.id}>
+                    <Table.Td>{new Date(b.createdAt).toLocaleString()}</Table.Td>
+                    <Table.Td>{b.receiptCount}</Table.Td>
+                    <Table.Td>
+                      <Text component="a" href={api.printBatchPdfUrl(b.id)} target="_blank" rel="noreferrer" c="blue" size="sm">
+                        Download
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      {b.mailedAt ? (
+                        <Badge color="green">{new Date(b.mailedAt).toLocaleDateString()}</Badge>
+                      ) : (
+                        <Group gap="xs">
+                          <TextInput
+                            type="date"
+                            size="xs"
+                            aria-label="Date mailed"
+                            value={mailedOn[b.id] ?? todayIso()}
+                            max={todayIso()}
+                            onChange={(e) => {
+                              const value = e.currentTarget.value;
+                              setMailedOn((m) => ({ ...m, [b.id]: value }));
+                            }}
+                            disabled={!canDeliver}
+                          />
+                          <Button
+                            size="xs"
+                            variant="light"
+                            onClick={() => markMailed.mutate(b.id)}
+                            loading={markMailed.isPending && markMailed.variables === b.id}
+                            disabled={!canDeliver || reason.trim().length < 3}
+                          >
+                            Mark mailed
+                          </Button>
+                        </Group>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Stack>
+        </Card>
+      )}
+
+      {summary.problems.length > 0 && (
+        <Card withBorder>
+          <Stack gap="sm">
+            <Text fw={600} c="orange">
+              {summary.problems.length} email(s) could not be delivered
+            </Text>
+            <Text size="sm" c="dimmed">
+              These receipts have moved to mail and will be in the next print batch. Check the donor's email
+              address in Qomon; each is also in the work queue's Delivery tab.
+            </Text>
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Receipt</Table.Th>
+                  <Table.Th>Donor</Table.Th>
+                  <Table.Th>Reason</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {summary.problems.map((p) => (
+                  <Table.Tr key={p.workItemId}>
+                    <Table.Td>{p.receiptNumber}</Table.Td>
+                    <Table.Td>{p.contactName}</Table.Td>
+                    <Table.Td>{p.detail ?? '—'}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Stack>
+        </Card>
+      )}
     </Stack>
   );
 }

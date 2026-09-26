@@ -3,18 +3,18 @@ import {
   remainingEligibleCents,
   type AllocationRow,
 } from '@gpo/tax-receipts-core';
+import { advanceSpaceStage } from '../delivery/space-delivery.js';
 import { issueReceipt, type IssueReceiptDeps } from '../receipts/issue.js';
 import type { PrismaClient, ReceiptDelivery } from '../generated/prisma/index.js';
 import type { SpaceKey } from './space-state.js';
 
 /**
- * Per-space issuance (ticket 3.12, first slice): screens.md screen 6's gate
- * check + pre-issuance preview + generate, for one space (period, riding,
- * entity kind) at a time. Delivery (email/print, Qomon activity logging,
- * donor pre-check) is out of scope here — those are tickets 3.5/3.6/3.9,
- * still open — so a generated receipt gets its default delivery (the
- * donor's confirmed `DonorCyclePreference`, or MAIL) but nothing is actually
- * sent yet; that is the same gap 3.1 already left (its PDF-only note 5).
+ * Per-space issuance (ticket 3.12): screens.md screen 6's gate check +
+ * pre-issuance preview + generate, for one space (period, riding, entity
+ * kind) at a time. A generated receipt gets its delivery channel (the
+ * donor's confirmed `DonorCyclePreference`, an override, or MAIL); sending
+ * it is the wizard's next step (`delivery/`, ticket 3.6). A successful run
+ * moves the space to `issued` on the W6 ladder.
  *
  * This deliberately reuses `issueReceipt` per contribution rather than
  * duplicating its invariant/kill-switch/change-log logic: a space is just
@@ -248,5 +248,6 @@ export async function issueReceiptsForSpace(
     }
   }
   const succeeded = results.filter((r) => r.ok).length;
+  if (succeeded > 0) await advanceSpaceStage(deps.prisma, space, 'issued');
   return { results, succeeded, failed: results.length - succeeded };
 }

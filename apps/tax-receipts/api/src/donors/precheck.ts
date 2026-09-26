@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { contributionYear, remainingEligibleCents, type AllocationRow } from '@gpo/tax-receipts-core';
 import { withChangeLog } from '../changelog/write.js';
+import { renderLinkEmail } from '../delivery/letters.js';
 import type { PrismaClient, ReceiptDelivery } from '../generated/prisma/index.js';
 import type { SpaceKey } from '../space/space-state.js';
 
@@ -17,10 +18,9 @@ import type { SpaceKey } from '../space/space-state.js';
  *
  *  - `sendDonorPrechecksForSpace` (staff-triggered, screens.md screen 6's
  *    "pre-check send step ahead of the window") stamps `precheckSentAt` and
- *    issues a bearer confirmation token per donor. It does not email
- *    anything — no provider/warmed subdomain exists yet (O24, same gap
- *    ticket 3.6 carries for receipt delivery itself), so this prepares what
- *    a send would need and stops there. A donor with no email on file is
+ *    issues a bearer confirmation token per donor. Since ticket 3.6 it also
+ *    queues the email carrying the link, when the caller supplies the
+ *    wording (`email`); the dispatcher sends it. A donor with no email on file is
  *    skipped, not failed, since a space usually has both kinds and one
  *    donor's rejected 3.5 would already have taken the same address-agnostic
  *    stance.
@@ -66,6 +66,15 @@ export interface SendDonorPrechecksInput extends SpaceKey {
   /** confirmation link lifetime; defaults to 30 days, long enough to span
    *  workflows.md W4's wait/confirm window ahead of a normal issuance run. */
   expiresInDays?: number;
+  /** when present, each donor's link is queued as an email (ticket 3.6);
+   *  when absent, only the tokens are issued (the pre-3.6 behaviour). The
+   *  body is the rules authority's wording; the link is appended to it. */
+  email?: {
+    subject: string;
+    body: string;
+    /** the web app's public origin, e.g. https://receipts.gpo.ca */
+    confirmUrlBase: string;
+  };
 }
 
 export interface SentDonorPrecheck {
@@ -75,6 +84,8 @@ export interface SentDonorPrecheck {
   precheckSentAt: Date;
   confirmationToken: string;
   confirmationTokenExpiresAt: Date;
+  /** the queued email, when the send included one */
+  emailMessageId: string | null;
 }
 
 export interface SkippedDonorPrecheck {
@@ -182,7 +193,31 @@ export async function sendDonorPrechecksForSpace(
           },
         });
         await ctx.log({ subjectType: 'DonorCyclePreference', subjectId: after.id, before, after });
-        return after;
+
+        let emailMessageId: string | null = null;
+        if (input.email) {
+          // an earlier pre-check still in the queue carries a token this send
+          // just replaced
+          await ctx.tx.emailMessage.updateMany({
+            where: { purpose: 'PRECHECK', contactId: contact.id, status: 'QUEUED' },
+            data: { status: 'FAILED', statusDetail: 'superseded by a newer pre-check' },
+          });
+          const linkUrl = `${input.email.confirmUrlBase.replace(/\/+$/, '')}/donor-precheck/${confirmationToken}`;
+          const { text, html } = renderLinkEmail({ body: input.email.body, linkUrl });
+          const message = await ctx.tx.emailMessage.create({
+            data: {
+              purpose: 'PRECHECK',
+              contactId: contact.id,
+              toAddress: contact.email!,
+              subject: input.email.subject,
+              textBody: text,
+              htmlBody: html,
+              queuedByUserId: input.actorUserId,
+            },
+          });
+          emailMessageId = message.id;
+        }
+        return { ...after, emailMessageId };
       },
     );
 
@@ -193,6 +228,7 @@ export async function sendDonorPrechecksForSpace(
       precheckSentAt: pref.precheckSentAt!,
       confirmationToken: pref.confirmationToken!,
       confirmationTokenExpiresAt: pref.confirmationTokenExpiresAt!,
+      emailMessageId: pref.emailMessageId,
     });
   }
 
@@ -308,7 +344,7 @@ export interface OutstandingDonorPrecheck {
 
 /**
  * Every unconfirmed, unexpired pre-check outstanding right now — the tool's
- * stand-in inbox until ticket 3.6 gives it a real one. Exists for
+ * development inbox (the dev email provider sends nothing). Exists for
  * `GET /admin/donor-prechecks` (sysadmin-only, dev-tools.tsx's "pre-check
  * outbox"): a token is a bearer credential over a donor's own
  * `DonorCyclePreference`, so this is deliberately not exposed at the same

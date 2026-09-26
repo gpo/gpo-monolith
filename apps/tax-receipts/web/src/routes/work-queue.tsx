@@ -30,6 +30,7 @@ const TABS: Array<{ kind: WorkItemRow['kind']; label: string }> = [
   { kind: 'DIFF', label: 'Diff queue' },
   { kind: 'OWED_TO_EO', label: 'Owed to EO' },
   { kind: 'SYNC_INCIDENT', label: 'Sync incidents' },
+  { kind: 'DELIVERY', label: 'Delivery' },
 ];
 
 function statusColor(status: string): string {
@@ -55,11 +56,18 @@ function WorkItemRowView({ item }: { item: WorkItemRow }) {
   return (
     <Table.Tr>
       <Table.Td>
-        <Link to="/contributions/$id" params={{ id: item.subjectId }}>
-          <Text span c="blue" size="sm">
-            {item.subjectType}
+        {item.subjectType === 'Receipt' ? (
+          // no receipt screen yet (ticket 3.13); the PDF is the receipt
+          <Text component="a" href={api.receiptPdfUrl(item.subjectId)} target="_blank" rel="noreferrer" c="blue" size="sm">
+            Receipt
           </Text>
-        </Link>
+        ) : (
+          <Link to="/contributions/$id" params={{ id: item.subjectId }}>
+            <Text span c="blue" size="sm">
+              {item.subjectType}
+            </Text>
+          </Link>
+        )}
       </Table.Td>
       <Table.Td>{item.contactName ?? '—'}</Table.Td>
       <Table.Td>

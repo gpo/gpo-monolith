@@ -7,13 +7,14 @@ import { resolveWorkItem } from '../work-items/resolve.js';
 
 /**
  * Work queue (ticket 1.8, screens.md 5): list + resolve/except. `WorkItem`
- * is one table for four queues (VALIDATION, DIFF, OWED_TO_EO, SYNC_INCIDENT);
+ * is one table for five queues (VALIDATION, DIFF, OWED_TO_EO, SYNC_INCIDENT,
+ * DELIVERY);
  * the `kind` filter is what the screen's tabs key off.
  */
 export async function workItemRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
-  const WorkItemKind = z.enum(['VALIDATION', 'DIFF', 'OWED_TO_EO', 'SYNC_INCIDENT']);
+  const WorkItemKind = z.enum(['VALIDATION', 'DIFF', 'OWED_TO_EO', 'SYNC_INCIDENT', 'DELIVERY']);
   const WorkItemStatus = z.enum(['OPEN', 'RESOLVED', 'EXCEPTION']);
 
   r.route({
