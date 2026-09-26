@@ -27,11 +27,18 @@ async function main(): Promise<void> {
     artifactStorageDir: env.ARTIFACT_STORAGE_DIR,
     emailProvider,
     emailDispatch,
+    emailLiveSendingAllowed: env.EMAIL_LIVE_SENDING_ALLOWED,
     publicWebUrl: env.PUBLIC_WEB_URL,
   });
 
   const dispatcher = startEmailDispatcher(
-    { prisma, storageDir: env.ARTIFACT_STORAGE_DIR, provider: emailProvider, log: app.log },
+    {
+      prisma,
+      storageDir: env.ARTIFACT_STORAGE_DIR,
+      provider: emailProvider,
+      liveSendingAllowed: env.EMAIL_LIVE_SENDING_ALLOWED,
+      log: app.log,
+    },
     { ...emailDispatch, intervalMs: env.EMAIL_DISPATCH_INTERVAL_MS },
   );
   app.addHook('onClose', () => dispatcher.stop());

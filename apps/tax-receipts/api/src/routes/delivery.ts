@@ -14,6 +14,7 @@ import {
 import { applyEmailEvents } from '../delivery/events.js';
 import { queueSpaceReceiptEmails } from '../delivery/outbox.js';
 import { createPrintBatch, markPrintBatchMailed } from '../delivery/print-batches.js';
+import { getEmailDeliverySettings, setLiveSending } from '../delivery/send-mode.js';
 import { getSpaceDeliverySummary } from '../delivery/space-delivery.js';
 import type { SessionUser } from '../plugins/auth.js';
 
@@ -24,10 +25,16 @@ import type { SessionUser } from '../plugins/auth.js';
  * Sending is asynchronous: "Send emails" queues and returns, and the
  * dispatcher started by server.ts sends. `POST /admin/emails/dispatch` runs
  * one pass on demand (development, or to drain the queue without waiting).
+ * Whether a send is real or simulated is `delivery/send-mode.ts`'s call.
  */
 export async function deliveryRoutes(
   app: FastifyInstance,
-  opts: { storageDir: string; emailProvider: EmailProvider; dispatch?: DispatchOptions },
+  opts: {
+    storageDir: string;
+    emailProvider: EmailProvider;
+    dispatch?: DispatchOptions;
+    liveSendingAllowed: boolean;
+  },
 ): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -225,36 +232,138 @@ export async function deliveryRoutes(
     return null;
   }
 
+  // The email log is sysadmin-only: bodies carry donor details, and a
+  // pre-check body carries a live confirmation link (a bearer credential).
+
+  const EmailStatus = z.enum(['QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'DELAYED', 'BOUNCED', 'COMPLAINED', 'FAILED']);
+  const EmailPurpose = z.enum(['RECEIPT', 'PRECHECK']);
+
   r.route({
     method: 'GET',
     url: '/admin/emails',
-    schema: { querystring: z.object({ limit: z.coerce.number().int().min(1).max(500).optional() }) },
+    schema: {
+      querystring: z.object({
+        status: EmailStatus.optional(),
+        purpose: EmailPurpose.optional(),
+        simulated: z.enum(['true', 'false']).optional(),
+        /** matches the address, the donor's name, or the receipt number */
+        q: z.string().trim().min(1).optional(),
+        cursor: z.string().optional(),
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+      }),
+    },
     handler: async (request, reply) => {
       const denied = requireSysadmin(request);
       if (denied) return reply.code(denied.code).send({ error: denied.error });
+      const { status, purpose, simulated, q, cursor } = request.query;
+      const limit = request.query.limit ?? 50;
       const rows = await app.prisma.emailMessage.findMany({
+        where: {
+          status,
+          purpose,
+          ...(simulated ? { simulated: simulated === 'true' } : {}),
+          ...(q
+            ? {
+                OR: [
+                  { toAddress: { contains: q, mode: 'insensitive' } },
+                  { contact: { name: { contains: q, mode: 'insensitive' } } },
+                  { receipt: { receiptNumber: { contains: q, mode: 'insensitive' } } },
+                ],
+              }
+            : {}),
+        },
         orderBy: [{ queuedAt: 'desc' }, { id: 'desc' }],
-        take: request.query.limit ?? 100,
+        take: limit + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
         include: { receipt: { select: { receiptNumber: true } }, contact: { select: { name: true } } },
       });
+      const page = rows.slice(0, limit);
       return reply.send({
-        provider: provider.name,
-        data: rows.map((m) => ({
+        data: page.map((m) => ({
           id: m.id,
           purpose: m.purpose,
           status: m.status,
           statusDetail: m.statusDetail,
+          simulated: m.simulated,
           toAddress: m.toAddress,
           contactName: m.contact.name,
+          receiptId: m.receiptId,
           receiptNumber: m.receipt?.receiptNumber ?? null,
           subject: m.subject,
-          textBody: m.textBody,
           attempts: m.attempts,
           queuedAt: m.queuedAt,
           sentAt: m.sentAt,
+          lastEventAt: m.lastEventAt,
+          provider: m.provider,
           providerMessageId: m.providerMessageId,
         })),
+        nextCursor: rows.length > limit ? page[page.length - 1]!.id : null,
       });
+    },
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/admin/emails/:id',
+    schema: { params: z.object({ id: z.string() }) },
+    handler: async (request, reply) => {
+      const denied = requireSysadmin(request);
+      if (denied) return reply.code(denied.code).send({ error: denied.error });
+      const m = await app.prisma.emailMessage.findUnique({
+        where: { id: request.params.id },
+        include: {
+          receipt: { select: { receiptNumber: true } },
+          contact: { select: { name: true } },
+          events: { orderBy: { occurredAt: 'asc' } },
+        },
+      });
+      if (!m) return reply.code(404).send({ error: 'not found' });
+      return reply.send({
+        id: m.id,
+        purpose: m.purpose,
+        status: m.status,
+        statusDetail: m.statusDetail,
+        simulated: m.simulated,
+        toAddress: m.toAddress,
+        contactId: m.contactId,
+        contactName: m.contact.name,
+        receiptId: m.receiptId,
+        receiptNumber: m.receipt?.receiptNumber ?? null,
+        subject: m.subject,
+        textBody: m.textBody,
+        attachments: m.attachments,
+        attempts: m.attempts,
+        queuedAt: m.queuedAt,
+        sentAt: m.sentAt,
+        provider: m.provider,
+        providerMessageId: m.providerMessageId,
+        events: m.events.map((e) => ({ id: e.id, type: e.type, occurredAt: e.occurredAt, detail: e.detail })),
+      });
+    },
+  });
+
+  const sendModeDeps = { prisma: app.prisma, provider, liveSendingAllowed: opts.liveSendingAllowed };
+
+  r.get('/admin/email-settings', async (request, reply) => {
+    const denied = requireSysadmin(request);
+    if (denied) return reply.code(denied.code).send({ error: denied.error });
+    return reply.send(await getEmailDeliverySettings(sendModeDeps));
+  });
+
+  r.route({
+    method: 'PUT',
+    url: '/admin/email-settings',
+    schema: { body: z.object({ liveSendingEnabled: z.boolean(), reason: z.string().min(3) }) },
+    handler: async (request, reply) => {
+      const denied = requireSysadmin(request);
+      if (denied) return reply.code(denied.code).send({ error: denied.error });
+      const user = request.user as SessionUser;
+      const settings = await setLiveSending(
+        sendModeDeps,
+        { userId: user.id, reason: request.body.reason },
+        request.body.liveSendingEnabled,
+      );
+      return reply.send(settings);
     },
   });
 
@@ -262,44 +371,44 @@ export async function deliveryRoutes(
     const denied = requireSysadmin(request);
     if (denied) return reply.code(denied.code).send({ error: denied.error });
     const result = await dispatchPendingEmails(
-      { prisma: app.prisma, storageDir: opts.storageDir, provider },
+      { prisma: app.prisma, storageDir: opts.storageDir, provider, liveSendingAllowed: opts.liveSendingAllowed },
       opts.dispatch,
     );
     return reply.send(result);
   });
 
-  // Development only: plays a provider event through the same handling code
-  // a real webhook reaches. Never registered with a real provider, where a
+  // Plays a provider event (delivered, bounced, ...) through the same code a
+  // real webhook reaches, for a simulated email only: nothing real was sent,
+  // so no real event will ever come. Refused for a really-sent email, where a
   // fake bounce would move a real donor to mail.
-  if (provider.name === 'dev') {
-    const SimulateType = z.enum(['delivered', 'delayed', 'bounced', 'complained', 'failed']);
-    r.route({
-      method: 'POST',
-      url: '/admin/emails/:id/simulate',
-      schema: {
-        params: z.object({ id: z.string() }),
-        body: z.object({ type: SimulateType, detail: z.string().optional() }),
-      },
-      handler: async (request, reply) => {
-        const denied = requireSysadmin(request);
-        if (denied) return reply.code(denied.code).send({ error: denied.error });
-        const message = await app.prisma.emailMessage.findUnique({ where: { id: request.params.id } });
-        if (!message?.providerMessageId) {
-          return reply.code(409).send({ error: 'that email has not been sent yet' });
-        }
-        const type: EmailDeliveryEventType = request.body.type;
-        const result = await applyEmailEvents(app.prisma, [
-          {
-            providerEventId: `dev_${crypto.randomUUID()}`,
-            providerMessageId: message.providerMessageId,
-            type,
-            occurredAt: new Date(),
-            detail: request.body.detail ?? (type === 'bounced' ? 'Permanent: simulated bounce' : undefined),
-            payload: { simulated: true, type },
-          },
-        ]);
-        return reply.send(result);
-      },
-    });
-  }
+  const SimulateType = z.enum(['delivered', 'delayed', 'bounced', 'complained', 'failed']);
+  r.route({
+    method: 'POST',
+    url: '/admin/emails/:id/simulate',
+    schema: {
+      params: z.object({ id: z.string() }),
+      body: z.object({ type: SimulateType, detail: z.string().optional() }),
+    },
+    handler: async (request, reply) => {
+      const denied = requireSysadmin(request);
+      if (denied) return reply.code(denied.code).send({ error: denied.error });
+      const message = await app.prisma.emailMessage.findUnique({ where: { id: request.params.id } });
+      if (!message) return reply.code(404).send({ error: 'not found' });
+      if (!message.simulated) {
+        return reply.code(409).send({ error: 'only a simulated email can be played a simulated event' });
+      }
+      const type: EmailDeliveryEventType = request.body.type;
+      const result = await applyEmailEvents(app.prisma, [
+        {
+          providerEventId: `simulated_${crypto.randomUUID()}`,
+          providerMessageId: message.providerMessageId!,
+          type,
+          occurredAt: new Date(),
+          detail: request.body.detail ?? (type === 'bounced' ? 'Permanent: simulated bounce' : undefined),
+          payload: { simulated: true, type },
+        },
+      ]);
+      return reply.send(result);
+    },
+  });
 }

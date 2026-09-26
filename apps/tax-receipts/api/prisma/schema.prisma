@@ -220,6 +220,7 @@ enum ChangeLogSubjectType {
   ReconciliationMark
   User
   IssuanceKillSwitch
+  EmailDeliverySettings
 }
 
 // ---------------------------------------------------------------------------
@@ -905,6 +906,10 @@ model EmailMessage {
   statusDetail      String?
   /// the adapter that sent it (e.g. "resend", "dev")
   provider          String?
+  /// true when live sending was off (EmailDeliverySettings): the row went
+  /// through every step except the provider call, and nothing left the
+  /// system. `providerMessageId` is then a local "simulated_" id.
+  simulated         Boolean      @default(false)
   providerMessageId String?      @unique
   attempts          Int          @default(0)
   nextAttemptAt     DateTime     @default(now())
@@ -963,6 +968,19 @@ model PrintBatch {
 
   @@index([periodId, ridingNumber, entityKind])
   @@map("print_batch")
+}
+
+/// Live email sending switch (singleton row, ticket 3.6 follow-up). Live
+/// sending needs both this toggle and the EMAIL_LIVE_SENDING_ALLOWED env flag,
+/// so a database copied from production into staging cannot start emailing
+/// donors. Off by default.
+model EmailDeliverySettings {
+  id                 String   @id @default("singleton")
+  liveSendingEnabled Boolean  @default(false)
+  updatedByUserId    String?
+  updatedAt          DateTime @updatedAt
+
+  @@map("email_delivery_settings")
 }
 
 model PrintBatchItem {

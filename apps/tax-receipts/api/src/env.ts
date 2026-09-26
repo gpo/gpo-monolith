@@ -26,6 +26,13 @@ const EnvSchema = z.object({
    *  the outbox rows as the record; `resend` needs RESEND_API_KEY and an
    *  EMAIL_FROM on a domain verified in Resend. */
   EMAIL_PROVIDER: z.enum(['dev', 'resend']).default('dev'),
+  /** the hard stop on real email: only when this is `true` can an admin turn
+   *  live sending on (Admin > Emails). Set it in production only; everywhere
+   *  else sends are simulated end to end. */
+  EMAIL_LIVE_SENDING_ALLOWED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   RESEND_API_KEY: z.string().optional(),
   /** `whsec_...` from the Resend webhook settings; without it the webhook
    *  route refuses every request */
