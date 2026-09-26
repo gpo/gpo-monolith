@@ -26,6 +26,7 @@ import {
 // chain has no node:crypto import, so this subpath is browser-safe.
 import { IMPLEMENTED_RULE_REFS } from '@gpo/tax-receipts-core/validation/rules.js';
 import { api, type RidingImportRow, type RidingRow } from '../api.js';
+import { EmailsSection } from './admin-emails.js';
 import { ChangeLogPage } from './change-log.js';
 import { DevToolsPage } from './dev-tools.js';
 import { RULE_LABELS } from '../rule-labels.js';
@@ -59,6 +60,7 @@ export const ADMIN_SECTIONS = [
   { slug: 'ridings', label: 'Ridings', component: () => <RidingsSection />, devOnly: false },
   { slug: 'users', label: 'Users', component: () => <UsersSection />, devOnly: false },
   { slug: 'kill-switch', label: 'Kill switch', component: () => <KillSwitchSection />, devOnly: false },
+  { slug: 'emails', label: 'Emails', component: () => <EmailsSection />, devOnly: false },
   { slug: 'validation-rules', label: 'Validation rules', component: () => <ValidationRulesSection />, devOnly: false },
   { slug: 'change-log', label: 'Change log', component: () => <ChangeLogPage />, devOnly: false },
   { slug: 'dev-tools', label: 'Dev tools', component: () => <DevToolsPage />, devOnly: true },

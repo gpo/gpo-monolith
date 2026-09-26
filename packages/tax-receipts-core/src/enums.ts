@@ -150,5 +150,6 @@ export const ChangeLogSubjectType = z.enum([
   'ReconciliationMark',
   'User',
   'IssuanceKillSwitch',
+  'EmailDeliverySettings',
 ]);
 export type ChangeLogSubjectType = z.infer<typeof ChangeLogSubjectType>;

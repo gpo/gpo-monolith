@@ -21,8 +21,14 @@ describe('delivery routes (tickets 3.6, 3.12)', () => {
   let storageDir: string;
   const space = () => `/spaces/${baseline.periodId}/PARTY`;
 
-  async function start(emailProvider?: EmailProvider) {
-    app = await buildApp({ prisma, sessionSecret: SECRET, artifactStorageDir: storageDir, emailProvider });
+  async function start(emailProvider?: EmailProvider, emailLiveSendingAllowed?: boolean) {
+    app = await buildApp({
+      prisma,
+      sessionSecret: SECRET,
+      artifactStorageDir: storageDir,
+      emailProvider,
+      emailLiveSendingAllowed,
+    });
     await app.ready();
   }
 
@@ -116,7 +122,7 @@ describe('delivery routes (tickets 3.6, 3.12)', () => {
     });
   });
 
-  it('sends on demand and plays a simulated bounce through to a print batch (dev provider)', async () => {
+  it('simulates on demand and plays a simulated bounce through to a print batch (dev provider)', async () => {
     await start();
     const cfo = await issueAsCfo();
     await app.inject({ method: 'POST', url: `${space()}/deliver/email`, cookies: cfo, payload: emailPayload });
@@ -124,10 +130,13 @@ describe('delivery routes (tickets 3.6, 3.12)', () => {
     const sys = await login('sys@gpo.test', 'sys-pass-phrase');
     expect((await app.inject({ method: 'POST', url: '/admin/emails/dispatch', cookies: cfo })).statusCode).toBe(403);
     const dispatched = await app.inject({ method: 'POST', url: '/admin/emails/dispatch', cookies: sys });
-    expect(dispatched.json()).toMatchObject({ sent: 1 });
+    expect(dispatched.json()).toMatchObject({ mode: 'simulated', sent: 1 });
 
     const outbox = await app.inject({ method: 'GET', url: '/admin/emails', cookies: sys });
-    expect(outbox.json()).toMatchObject({ provider: 'dev', data: [{ status: 'SENT', toAddress: 'emma@example.org' }] });
+    expect(outbox.json()).toMatchObject({
+      data: [{ status: 'SENT', simulated: true, toAddress: 'emma@example.org', receiptNumber: expect.any(String) }],
+      nextCursor: null,
+    });
     const emailId = outbox.json().data[0].id;
 
     const bounced = await app.inject({
@@ -188,9 +197,14 @@ describe('delivery routes (tickets 3.6, 3.12)', () => {
       return { 'svix-id': id, 'svix-timestamp': timestamp, 'svix-signature': `v1,${signature}`, 'content-type': 'application/json' };
     }
 
-    beforeEach(async () => {
-      const fetchImpl = (async () =>
-        new Response(JSON.stringify({ id: 'resend-email-1' }), { status: 200 })) as unknown as typeof fetch;
+    let fetchCalls: number;
+
+    async function startResend(liveSendingAllowed: boolean) {
+      fetchCalls = 0;
+      const fetchImpl = (async () => {
+        fetchCalls += 1;
+        return new Response(JSON.stringify({ id: 'resend-email-1' }), { status: 200 });
+      }) as unknown as typeof fetch;
       await start(
         new ResendEmailProvider({
           apiKey: 're_test',
@@ -198,14 +212,69 @@ describe('delivery routes (tickets 3.6, 3.12)', () => {
           webhookSecret: `whsec_${WEBHOOK_KEY.toString('base64')}`,
           fetch: fetchImpl,
         }),
+        liveSendingAllowed,
       );
-    });
+    }
 
-    it('applies a signed bounce webhook and refuses an unsigned one', async () => {
+    async function goLive(cookies: Record<string, string>) {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/admin/email-settings',
+        cookies,
+        payload: { liveSendingEnabled: true, reason: 'production go-live' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ provider: 'resend', mode: 'live' });
+    }
+
+    it('never calls the provider where the environment does not allow live sending', async () => {
+      await startResend(false);
       const cfo = await issueAsCfo();
       await app.inject({ method: 'POST', url: `${space()}/deliver/email`, cookies: cfo, payload: emailPayload });
       const sys = await login('sys@gpo.test', 'sys-pass-phrase');
+
+      const settings = await app.inject({ method: 'GET', url: '/admin/email-settings', cookies: sys });
+      expect(settings.json()).toMatchObject({
+        provider: 'resend',
+        liveSendingAllowed: false,
+        liveSendingEnabled: false,
+        mode: 'simulated',
+      });
+      const refused = await app.inject({
+        method: 'PUT',
+        url: '/admin/email-settings',
+        cookies: sys,
+        payload: { liveSendingEnabled: true, reason: 'try it' },
+      });
+      expect(refused.statusCode).toBe(409);
+
+      const dispatched = await app.inject({ method: 'POST', url: '/admin/emails/dispatch', cookies: sys });
+      expect(dispatched.json()).toMatchObject({ mode: 'simulated', sent: 1 });
+      expect(fetchCalls).toBe(0);
+    });
+
+    it('lets only a sysadmin see or change the email settings', async () => {
+      await startResend(true);
+      const cfo = await login('cfo@gpo.test', 'cfo-pass-phrase');
+      expect((await app.inject({ method: 'GET', url: '/admin/email-settings', cookies: cfo })).statusCode).toBe(403);
+      const put = await app.inject({
+        method: 'PUT',
+        url: '/admin/email-settings',
+        cookies: cfo,
+        payload: { liveSendingEnabled: true, reason: 'go live' },
+      });
+      expect(put.statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/admin/emails', cookies: cfo })).statusCode).toBe(403);
+    });
+
+    it('applies a signed bounce webhook and refuses an unsigned one', async () => {
+      await startResend(true);
+      const cfo = await issueAsCfo();
+      await app.inject({ method: 'POST', url: `${space()}/deliver/email`, cookies: cfo, payload: emailPayload });
+      const sys = await login('sys@gpo.test', 'sys-pass-phrase');
+      await goLive(sys);
       await app.inject({ method: 'POST', url: '/admin/emails/dispatch', cookies: sys });
+      expect(fetchCalls).toBe(1);
 
       const body = JSON.stringify({
         type: 'email.bounced',
@@ -239,15 +308,43 @@ describe('delivery routes (tickets 3.6, 3.12)', () => {
       });
     });
 
-    it('does not expose the dev-only simulate route', async () => {
+    it('shows one email with its events, and refuses a simulated event on a really-sent email', async () => {
+      await startResend(true);
+      const cfo = await issueAsCfo();
+      await app.inject({ method: 'POST', url: `${space()}/deliver/email`, cookies: cfo, payload: emailPayload });
       const sys = await login('sys@gpo.test', 'sys-pass-phrase');
-      const res = await app.inject({
+      await goLive(sys);
+      await app.inject({ method: 'POST', url: '/admin/emails/dispatch', cookies: sys });
+
+      const body = JSON.stringify({
+        type: 'email.delivered',
+        created_at: new Date().toISOString(),
+        data: { email_id: 'resend-email-1' },
+      });
+      await app.inject({ method: 'POST', url: '/webhooks/email', headers: signed(body), payload: body });
+
+      const list = await app.inject({ method: 'GET', url: '/admin/emails?q=EMMA&status=DELIVERED', cookies: sys });
+      expect(list.json().data).toHaveLength(1);
+      const none = await app.inject({ method: 'GET', url: '/admin/emails?simulated=true', cookies: sys });
+      expect(none.json().data).toHaveLength(0);
+
+      const id = list.json().data[0].id;
+      const detail = await app.inject({ method: 'GET', url: `/admin/emails/${id}`, cookies: sys });
+      expect(detail.json()).toMatchObject({
+        status: 'DELIVERED',
+        simulated: false,
+        provider: 'resend',
+        textBody: expect.stringContaining('Emma Emailer'),
+        events: [{ type: 'delivered' }],
+      });
+
+      const simulate = await app.inject({
         method: 'POST',
-        url: '/admin/emails/anything/simulate',
+        url: `/admin/emails/${id}/simulate`,
         cookies: sys,
         payload: { type: 'bounced' },
       });
-      expect(res.statusCode).toBe(404);
+      expect(simulate.statusCode).toBe(409);
     });
   });
 });
