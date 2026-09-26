@@ -722,10 +722,10 @@ is one PDF that any printer can run.
 | `api/src/delivery/events.ts` | Applies webhook events. A permanent bounce, a suppression, or a final send failure moves the receipt and the donor's `DonorCyclePreference` to MAIL and opens a `DELIVERY` work item. |
 | `api/src/delivery/print-batches.ts` | `createPrintBatch` (a window-envelope letter, then the receipt, per MAIL receipt), `markPrintBatchMailed` (sets `deliveredAt` to the mailing date, closes the DELIVERY items). |
 | `api/src/delivery/space-delivery.ts` | The wizard's delivery summary, and the W6 moves: `issued` after a generate, `delivered` once every ISSUED receipt went out. Nothing moved `SpaceState` before this. |
-| `api/src/routes/delivery.ts` | `GET /spaces/:p/:e/delivery`, `POST .../deliver/email`, `POST .../print-batches`, `GET /print-batches/:id/pdf`, `POST /print-batches/:id/mailed`, `POST /webhooks/email` (raw body, signature is the credential), and sysadmin `GET /admin/emails`, `POST /admin/emails/dispatch`, and (dev provider only) `POST /admin/emails/:id/simulate`. |
+| `api/src/routes/delivery.ts` | `GET /spaces/:p/:e/delivery`, `POST .../deliver/email`, `POST .../print-batches`, `GET /print-batches/:id/pdf`, `POST /print-batches/:id/mailed`, `POST /webhooks/email` (raw body, signature is the credential), and the sysadmin email tools (see the send guard below). |
 | migration `20260927100000_delivery_infrastructure` | `email_message`, `email_event`, `print_batch`, `print_batch_item`, `WorkItemKind.DELIVERY`; all four tables never hard-delete. |
 | `web/src/routes/space-issuance.tsx` | The Deliver step: cover letter, email send, print batches with mark-mailed, and bounced receipts. The pre-check card now takes the email's subject and message. |
-| `web/src/routes/dev-tools.tsx`, `work-queue.tsx` | Email outbox with "Send now" and simulated delivered/bounce; a Delivery tab on the work queue. |
+| `web/src/routes/work-queue.tsx` | A Delivery tab on the work queue. |
 
 Ticket 3.5's synchronous `deliverSpaceReceipts` and its `/deliver` route are
 gone: the outbox and print batches replace both of its outputs.
@@ -771,3 +771,25 @@ gone: the outbox and print batches replace both of its outputs.
 - Nothing here was clicked through; see PHASE-3-MANUAL-TEST-PLAN.md section 6.
   The Resend adapter is tested against a stubbed `fetch` and signed webhook
   requests, not against a live Resend account.
+
+### The email log and the live-sending guard
+
+Nothing leaves the system unless three things hold: the environment allows it
+(`EMAIL_LIVE_SENDING_ALLOWED=true`, production only), a sysadmin has turned on
+**Send real email** under Admin > Emails (`EmailDeliverySettings`, off by
+default, change-logged), and the provider is a real one (the dev adapter never
+counts). Otherwise the dispatcher simulates each send: the row is marked SENT
+with a local `simulated_` id and `simulated` set, and the receipt is marked
+delivered, so staging behaves end to end. The env flag is the hard stop: a
+database copied from production brings its toggle with it, but not the flag.
+
+| Where | What |
+|---|---|
+| `api/src/delivery/send-mode.ts` | `getEmailDeliverySettings`, `setLiveSending` (refuses "on" where the env disallows it or the provider is dev), `resolveEmailSendMode`. |
+| `api/src/delivery/dispatcher.ts` | Resolves the mode once per pass; `liveSendingAllowed` is a required dependency, so no caller can forget it. |
+| `api/src/routes/delivery.ts` | Sysadmin-only: `GET /admin/emails` (filters: status, kind, real or simulated, search by address, donor, or receipt number; cursor pagination), `GET /admin/emails/:id` (body and provider events), `GET`/`PUT /admin/email-settings`, `POST /admin/emails/dispatch`, and `POST /admin/emails/:id/simulate`, now allowed for any simulated email and refused for a real one. |
+| migration `20260927110000_email_send_guard` | `email_delivery_settings`, `email_message.simulated`, `ChangeLogSubjectType.EmailDeliverySettings`. |
+| `web/src/routes/admin-emails.tsx` | Admin > Emails: the switch (locked with an explanation where the env disallows it) and the email log, with a row opening to the body, events, and simulate buttons. Replaces the Dev tools outbox card. |
+
+The log is sysadmin-only because bodies carry donor details and a pre-check
+body carries a live confirmation link.

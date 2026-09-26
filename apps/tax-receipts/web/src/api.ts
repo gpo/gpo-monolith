@@ -511,23 +511,51 @@ export interface MarkPrintBatchMailedResult {
   closedWorkItemIds: string[];
 }
 
-export interface OutboxEmail {
+export interface EmailLogRow {
   id: string;
   purpose: 'RECEIPT' | 'PRECHECK';
   status: string;
   statusDetail: string | null;
+  simulated: boolean;
   toAddress: string;
   contactName: string;
+  receiptId: string | null;
   receiptNumber: string | null;
   subject: string;
-  textBody: string;
   attempts: number;
   queuedAt: string;
   sentAt: string | null;
+  lastEventAt: string | null;
+  provider: string | null;
   providerMessageId: string | null;
 }
 
+export interface EmailDetail extends Omit<EmailLogRow, 'lastEventAt'> {
+  contactId: string;
+  textBody: string;
+  attachments: Array<{ artifactId: string; filename: string }>;
+  events: Array<{ id: string; type: string; occurredAt: string; detail: string | null }>;
+}
+
+export interface EmailLogFilters {
+  status?: string;
+  purpose?: string;
+  simulated?: 'true' | 'false';
+  q?: string;
+  cursor?: string;
+}
+
+export interface EmailDeliverySettings {
+  provider: string;
+  liveSendingAllowed: boolean;
+  liveSendingEnabled: boolean;
+  mode: 'live' | 'simulated';
+  updatedByUserId: string | null;
+  updatedAt: string | null;
+}
+
 export interface DispatchResult {
+  mode: 'live' | 'simulated';
   sent: number;
   retrying: number;
   failed: number;
@@ -935,7 +963,19 @@ export const api = {
   printBatchPdfUrl: (id: string) => `${BASE}/print-batches/${id}/pdf`,
   markPrintBatchMailed: (id: string, input: { reason: string; mailedOn?: string }) =>
     request<MarkPrintBatchMailedResult>(`/print-batches/${id}/mailed`, { method: 'POST', body: JSON.stringify(input) }),
-  listOutboxEmails: () => request<{ provider: string; data: OutboxEmail[] }>('/admin/emails'),
+  listEmails: (filters: EmailLogFilters = {}) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
+    const qs = params.toString();
+    return request<{ data: EmailLogRow[]; nextCursor: string | null }>(`/admin/emails${qs ? `?${qs}` : ''}`);
+  },
+  getEmail: (id: string) => request<EmailDetail>(`/admin/emails/${id}`),
+  getEmailSettings: () => request<EmailDeliverySettings>('/admin/email-settings'),
+  setLiveSending: (liveSendingEnabled: boolean, reason: string) =>
+    request<EmailDeliverySettings>('/admin/email-settings', {
+      method: 'PUT',
+      body: JSON.stringify({ liveSendingEnabled, reason }),
+    }),
   dispatchEmails: () => request<DispatchResult>('/admin/emails/dispatch', { method: 'POST' }),
   simulateEmailEvent: (id: string, type: 'delivered' | 'bounced' | 'complained') =>
     request<{ applied: number }>(`/admin/emails/${id}/simulate`, { method: 'POST', body: JSON.stringify({ type }) }),

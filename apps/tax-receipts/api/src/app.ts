@@ -95,6 +95,9 @@ export interface BuildAppOptions {
   emailProvider?: EmailProvider;
   /** pacing for the on-demand dispatch route; see env.ts */
   emailDispatch?: DispatchOptions;
+  /** EMAIL_LIVE_SENDING_ALLOWED; defaults to false, so nothing is really
+   *  sent unless the environment says so */
+  emailLiveSendingAllowed?: boolean;
   /** the web app's origin, for links in donor email */
   publicWebUrl?: string;
 }
@@ -241,6 +244,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     storageDir: opts.artifactStorageDir ?? './storage/artifacts',
     emailProvider: opts.emailProvider ?? new DevEmailProvider(),
     dispatch: opts.emailDispatch,
+    liveSendingAllowed: opts.emailLiveSendingAllowed ?? false,
   });
   await app.register(entityReportRoutes, {
     storageDir: opts.artifactStorageDir ?? './storage/artifacts',

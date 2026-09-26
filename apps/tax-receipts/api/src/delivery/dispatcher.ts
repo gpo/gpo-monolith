@@ -6,6 +6,7 @@ import type { EmailMessage, PrismaClient } from '../generated/prisma/index.js';
 import { EmailSendError, type EmailProvider } from './email-provider.js';
 import { markEmailUndeliverable } from './events.js';
 import type { EmailAttachmentRef } from './outbox.js';
+import { resolveEmailSendMode, type EmailSendMode } from './send-mode.js';
 import { advanceSpaceIfDelivered } from './space-delivery.js';
 
 /**
@@ -27,12 +28,17 @@ import { advanceSpaceIfDelivered } from './space-delivery.js';
  *   queue; pre-check email still goes, since it issues nothing.
  * - `dailyLimit` caps sends in any rolling 24 hours, for warming up a new
  *   sending domain.
+ * - Unless live sending is on (`send-mode.ts`: the env flag, the admin toggle,
+ *   and a real provider), nothing reaches the provider. The row goes through
+ *   every other step, with a local `simulated_` id and `simulated` set.
  */
 
 export interface DispatchDeps {
   prisma: PrismaClient;
   storageDir: string;
   provider: EmailProvider;
+  /** EMAIL_LIVE_SENDING_ALLOWED; required so every caller decides */
+  liveSendingAllowed: boolean;
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -46,6 +52,8 @@ export interface DispatchOptions {
 }
 
 export interface DispatchResult {
+  mode: EmailSendMode;
+  /** sent, or simulated when `mode` is `simulated` */
   sent: number;
   retrying: number;
   failed: number;
@@ -120,7 +128,15 @@ export async function dispatchPendingEmails(
   const sleep = deps.sleep ?? defaultSleep;
   const maxAttempts = opts.maxAttempts ?? 6;
   const gapMs = 1000 / (opts.ratePerSecond ?? 5);
-  const result: DispatchResult = { sent: 0, retrying: 0, failed: 0, heldByKillSwitch: false, dailyLimitReached: false };
+  const mode = await resolveEmailSendMode(deps);
+  const result: DispatchResult = {
+    mode,
+    sent: 0,
+    retrying: 0,
+    failed: 0,
+    heldByKillSwitch: false,
+    dailyLimitReached: false,
+  };
 
   const staleBefore = new Date(now().getTime() - (opts.staleClaimMinutes ?? 10) * 60_000);
   await prisma.emailMessage.updateMany({
@@ -168,19 +184,25 @@ export async function dispatchPendingEmails(
     const attempts = message.attempts + 1;
     try {
       const attachments = await loadAttachments(deps, message.attachments as unknown as EmailAttachmentRef[]);
-      const sent = await deps.provider.send({
-        to: message.toAddress,
-        subject: message.subject,
-        text: message.textBody,
-        ...(message.htmlBody ? { html: message.htmlBody } : {}),
-        attachments,
-        idempotencyKey: message.id,
-        tags: { purpose: message.purpose.toLowerCase() },
-      });
+      const simulated = mode === 'simulated';
+      const sent = simulated
+        ? { providerMessageId: `simulated_${message.id}` }
+        : await deps.provider.send({
+            to: message.toAddress,
+            subject: message.subject,
+            text: message.textBody,
+            ...(message.htmlBody ? { html: message.htmlBody } : {}),
+            attachments,
+            idempotencyKey: message.id,
+            tags: { purpose: message.purpose.toLowerCase() },
+          });
       const sentAt = now();
 
       if (message.receiptId) {
-        await withChangeLog(prisma, { userId: null, reason: `receipt emailed to ${message.toAddress}` }, async (ctx) => {
+        const reason = simulated
+          ? `receipt email to ${message.toAddress} simulated (live sending off)`
+          : `receipt emailed to ${message.toAddress}`;
+        await withChangeLog(prisma, { userId: null, reason }, async (ctx) => {
           await ctx.tx.emailMessage.update({
             where: { id: message.id },
             data: {
@@ -188,6 +210,7 @@ export async function dispatchPendingEmails(
               statusDetail: null,
               provider: deps.provider.name,
               providerMessageId: sent.providerMessageId,
+              simulated,
               attempts,
               sentAt,
               claimedAt: null,
@@ -206,6 +229,7 @@ export async function dispatchPendingEmails(
               emailMessageId: message.id,
               provider: deps.provider.name,
               providerMessageId: sent.providerMessageId,
+              simulated,
             },
           });
         });
@@ -218,6 +242,7 @@ export async function dispatchPendingEmails(
             statusDetail: null,
             provider: deps.provider.name,
             providerMessageId: sent.providerMessageId,
+            simulated,
             attempts,
             sentAt,
             claimedAt: null,

@@ -13,6 +13,7 @@ import { issueReceiptsForSpace } from '../space/issuance.js';
 import { getOrCreateSpaceState } from '../space/space-state.js';
 import { createTestContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
 import { DevEmailProvider } from './dev-provider.js';
+import { setLiveSending } from './send-mode.js';
 import { dispatchPendingEmails } from './dispatcher.js';
 import { EmailSendError, type EmailProvider, type OutgoingEmail } from './email-provider.js';
 import { applyEmailEvents } from './events.js';
@@ -36,13 +37,13 @@ async function extractText(bytes: Buffer): Promise<string> {
   }
 }
 
-/** Fails the first `failures` sends with the given error, then accepts. */
-class FlakyProvider implements EmailProvider {
-  readonly name = 'flaky';
+/** Records every send; fails the first `failures` with the given error. */
+class TestProvider implements EmailProvider {
+  readonly name = 'test';
   readonly sent: OutgoingEmail[] = [];
   constructor(
-    private failures: number,
-    private readonly error: EmailSendError,
+    private failures = 0,
+    private readonly error = new EmailSendError('unused', true),
   ) {}
   async send(email: OutgoingEmail) {
     if (this.failures > 0) {
@@ -50,7 +51,7 @@ class FlakyProvider implements EmailProvider {
       throw this.error;
     }
     this.sent.push(email);
-    return { providerMessageId: `flaky_${email.idempotencyKey}` };
+    return { providerMessageId: `test_${email.idempotencyKey}` };
   }
 }
 
@@ -68,6 +69,8 @@ describe('receipt delivery (ticket 3.6)', () => {
     baseline = await seedBaseline(prisma);
     storageDir = await mkdtemp(path.join(tmpdir(), 'gpo-delivery-test-'));
     nextId = 1;
+    // live mode, so the provider is really called; the guard has its own tests
+    await prisma.emailDeliverySettings.create({ data: { liveSendingEnabled: true } });
   });
 
   afterEach(async () => {
@@ -158,8 +161,8 @@ describe('receipt delivery (ticket 3.6)', () => {
       const [issued] = (await issueSpace()).results;
       await queue();
 
-      const provider = new DevEmailProvider();
-      const result = await dispatchPendingEmails({ prisma, storageDir, provider, sleep: noSleep });
+      const provider = new TestProvider();
+      const result = await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep });
       expect(result).toMatchObject({ sent: 1, retrying: 0, failed: 0 });
 
       expect(provider.sent).toHaveLength(1);
@@ -168,7 +171,13 @@ describe('receipt delivery (ticket 3.6)', () => {
       expect(sent.attachments[0]!.content.subarray(0, 4).toString()).toBe('%PDF');
 
       const message = await prisma.emailMessage.findFirstOrThrow();
-      expect(message).toMatchObject({ status: 'SENT', provider: 'dev', providerMessageId: `dev_${message.id}`, attempts: 1 });
+      expect(message).toMatchObject({
+        status: 'SENT',
+        provider: 'test',
+        providerMessageId: `test_${message.id}`,
+        simulated: false,
+        attempts: 1,
+      });
       const receipt = await prisma.receipt.findUniqueOrThrow({ where: { id: issued!.receiptId! } });
       expect(receipt.deliveredAt).not.toBeNull();
 
@@ -176,7 +185,7 @@ describe('receipt delivery (ticket 3.6)', () => {
       expect((await getOrCreateSpaceState(prisma, SPACE)).stage).toBe('delivered');
 
       // a second pass has nothing to do
-      expect((await dispatchPendingEmails({ prisma, storageDir, provider, sleep: noSleep })).sent).toBe(0);
+      expect((await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep })).sent).toBe(0);
     });
 
     it('holds receipt email (but not pre-check email) while the kill switch is engaged', async () => {
@@ -188,8 +197,8 @@ describe('receipt delivery (ticket 3.6)', () => {
       });
       await setKillSwitch(prisma, { userId: baseline.cfoUserId, reason: 'EO request' }, true);
 
-      const provider = new DevEmailProvider();
-      const result = await dispatchPendingEmails({ prisma, storageDir, provider, sleep: noSleep });
+      const provider = new TestProvider();
+      const result = await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep });
       expect(result).toMatchObject({ sent: 1, heldByKillSwitch: true });
       expect(provider.sent.map((e) => e.subject)).toEqual(['s']);
       expect(await prisma.emailMessage.count({ where: { purpose: 'RECEIPT', status: 'QUEUED' } })).toBe(1);
@@ -199,20 +208,20 @@ describe('receipt delivery (ticket 3.6)', () => {
       await seedDonor('Emma Emailer', 'EMAIL');
       await issueSpace();
       await queue();
-      const provider = new FlakyProvider(1, new EmailSendError('resend 429: slow down', true));
+      const provider = new TestProvider(1, new EmailSendError('resend 429: slow down', true));
       let now = new Date();
 
-      const first = await dispatchPendingEmails({ prisma, storageDir, provider, sleep: noSleep, now: () => now });
+      const first = await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep, now: () => now });
       expect(first).toMatchObject({ sent: 0, retrying: 1 });
       const waiting = await prisma.emailMessage.findFirstOrThrow();
       expect(waiting).toMatchObject({ status: 'QUEUED', attempts: 1, statusDetail: 'resend 429: slow down' });
       expect(waiting.nextAttemptAt.getTime()).toBeGreaterThan(now.getTime());
 
       // not due yet
-      expect((await dispatchPendingEmails({ prisma, storageDir, provider, sleep: noSleep, now: () => now })).sent).toBe(0);
+      expect((await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep, now: () => now })).sent).toBe(0);
 
       now = new Date(waiting.nextAttemptAt.getTime() + 1);
-      const second = await dispatchPendingEmails({ prisma, storageDir, provider, sleep: noSleep, now: () => now });
+      const second = await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep, now: () => now });
       expect(second.sent).toBe(1);
       expect(provider.sent[0]!.idempotencyKey).toBe(waiting.id);
     });
@@ -223,10 +232,10 @@ describe('receipt delivery (ticket 3.6)', () => {
       await issueSpace();
       await queue();
 
-      const provider = new DevEmailProvider();
-      const result = await dispatchPendingEmails({ prisma, storageDir, provider, sleep: noSleep }, { dailyLimit: 1 });
+      const provider = new TestProvider();
+      const result = await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep }, { dailyLimit: 1 });
       expect(result).toMatchObject({ sent: 1, dailyLimitReached: true });
-      const next = await dispatchPendingEmails({ prisma, storageDir, provider, sleep: noSleep }, { dailyLimit: 1 });
+      const next = await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep }, { dailyLimit: 1 });
       expect(next.sent).toBe(0);
     });
 
@@ -239,8 +248,8 @@ describe('receipt delivery (ticket 3.6)', () => {
         { receiptId: issued!.receiptId!, actorUserId: baseline.cfoUserId, reason: 'wrong donor' },
       );
 
-      const provider = new DevEmailProvider();
-      const result = await dispatchPendingEmails({ prisma, storageDir, provider, sleep: noSleep });
+      const provider = new TestProvider();
+      const result = await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep });
       expect(result.failed).toBe(1);
       expect(provider.sent).toHaveLength(0);
       expect(await prisma.workItem.count({ where: { kind: 'DELIVERY' } })).toBe(0);
@@ -252,7 +261,7 @@ describe('receipt delivery (ticket 3.6)', () => {
       const contactId = await seedDonor('Emma Emailer', 'EMAIL');
       const [issued] = (await issueSpace()).results;
       await queue();
-      await dispatchPendingEmails({ prisma, storageDir, provider: new DevEmailProvider(), sleep: noSleep });
+      await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider: new TestProvider(), sleep: noSleep });
       const message = await prisma.emailMessage.findFirstOrThrow();
       return { contactId, receiptId: issued!.receiptId!, message };
     }
@@ -323,9 +332,9 @@ describe('receipt delivery (ticket 3.6)', () => {
       const contactId = await seedDonor('Emma Emailer', 'EMAIL');
       const [issued] = (await issueSpace()).results;
       await queue();
-      const provider = new FlakyProvider(1, new EmailSendError('resend 422: invalid to address', false));
+      const provider = new TestProvider(1, new EmailSendError('resend 422: invalid to address', false));
 
-      const result = await dispatchPendingEmails({ prisma, storageDir, provider, sleep: noSleep });
+      const result = await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep });
       expect(result.failed).toBe(1);
       expect((await prisma.emailMessage.findFirstOrThrow()).status).toBe('FAILED');
       expect((await prisma.receipt.findUniqueOrThrow({ where: { id: issued!.receiptId! } })).delivery).toBe('MAIL');
@@ -374,7 +383,7 @@ describe('receipt delivery (ticket 3.6)', () => {
         await seedDonor('Emma Emailer', 'EMAIL');
         const issued = await issueSpace();
         await queue();
-        await dispatchPendingEmails({ prisma, storageDir, provider: new DevEmailProvider(), sleep: noSleep });
+        await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider: new TestProvider(), sleep: noSleep });
         const m = await prisma.emailMessage.findFirstOrThrow();
         return { receiptId: m.receiptId!, message: m, issued };
       })();
@@ -453,6 +462,83 @@ describe('receipt delivery (ticket 3.6)', () => {
       expect(messages[0]!.id).toBe(first.sent[0]!.emailMessageId);
       expect(messages[1]!.textBody).toContain(`https://receipts.example.org/donor-precheck/${token}`);
       expect(messages[1]!).toMatchObject({ purpose: 'PRECHECK', receiptId: null, toAddress: 'emma@example.org' });
+    });
+  });
+
+  describe('live-sending guard', () => {
+    it('simulates every send unless the environment allows live sending', async () => {
+      await seedDonor('Emma Emailer', 'EMAIL');
+      const [issued] = (await issueSpace()).results;
+      await queue();
+
+      const provider = new TestProvider();
+      const result = await dispatchPendingEmails({
+        prisma,
+        storageDir,
+        provider,
+        liveSendingAllowed: false,
+        sleep: noSleep,
+      });
+      expect(result).toMatchObject({ mode: 'simulated', sent: 1 });
+      expect(provider.sent).toHaveLength(0);
+
+      const message = await prisma.emailMessage.findFirstOrThrow();
+      expect(message).toMatchObject({
+        status: 'SENT',
+        simulated: true,
+        provider: 'test',
+        providerMessageId: `simulated_${message.id}`,
+      });
+      // the rest of the flow carries on as if it had been sent
+      expect((await prisma.receipt.findUniqueOrThrow({ where: { id: issued!.receiptId! } })).deliveredAt).not.toBeNull();
+      expect((await getOrCreateSpaceState(prisma, SPACE)).stage).toBe('delivered');
+    });
+
+    it('simulates when the admin toggle is off, even where live sending is allowed', async () => {
+      await prisma.emailDeliverySettings.update({ where: { id: 'singleton' }, data: { liveSendingEnabled: false } });
+      await seedDonor('Emma Emailer', 'EMAIL');
+      await issueSpace();
+      await queue();
+
+      const provider = new TestProvider();
+      const result = await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: true, provider, sleep: noSleep });
+      expect(result.mode).toBe('simulated');
+      expect(provider.sent).toHaveLength(0);
+    });
+
+    it('never counts the dev provider as live', async () => {
+      await seedDonor('Emma Emailer', 'EMAIL');
+      await issueSpace();
+      await queue();
+      const result = await dispatchPendingEmails({
+        prisma,
+        storageDir,
+        liveSendingAllowed: true,
+        provider: new DevEmailProvider(),
+        sleep: noSleep,
+      });
+      expect(result.mode).toBe('simulated');
+      expect((await prisma.emailMessage.findFirstOrThrow()).simulated).toBe(true);
+    });
+
+    it('refuses to turn live sending on where the environment does not allow it, and logs a change', async () => {
+      const deps = { prisma, provider: new TestProvider(), liveSendingAllowed: false };
+      await expect(
+        setLiveSending(deps, { userId: baseline.cfoUserId, reason: 'try it' }, true),
+      ).rejects.toThrow(/not allowed in this environment/);
+      await expect(
+        setLiveSending({ ...deps, provider: new DevEmailProvider(), liveSendingAllowed: true }, { userId: baseline.cfoUserId, reason: 'try it' }, true),
+      ).rejects.toThrow(/dev email provider/);
+
+      const off = await setLiveSending(deps, { userId: baseline.cfoUserId, reason: 'staging stays off' }, false);
+      expect(off).toMatchObject({ liveSendingEnabled: false, liveSendingAllowed: false, mode: 'simulated' });
+      const on = await setLiveSending(
+        { ...deps, liveSendingAllowed: true },
+        { userId: baseline.cfoUserId, reason: 'go live' },
+        true,
+      );
+      expect(on).toMatchObject({ liveSendingEnabled: true, mode: 'live', provider: 'test' });
+      expect(await prisma.changeLogEntry.count({ where: { subjectType: 'EmailDeliverySettings' } })).toBe(2);
     });
   });
 });
