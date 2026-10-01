@@ -1,0 +1,19 @@
+# Build context is the repo root; BuildKit uses this file (named after the
+# Dockerfile) instead of a root .dockerignore. Keep the context to the
+# workspace manifests, apps/tax-receipts, and packages.
+**/node_modules
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+**/.claude
+**/.DS_Store
+apps/tax-receipts/api/src/generated
+apps/tax-receipts/api/storage
+.git
+docs
+gpoAutoTests
+google-workspace
+scripts

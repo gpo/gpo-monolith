@@ -64,6 +64,19 @@ CI is `.github/workflows/tax-receipts-ci.yml`: lint, typecheck, tests
 (against a Postgres service container), and builds, on every PR touching
 `apps/tax-receipts/**` or `packages/**`.
 
+## Deploying
+
+`apps/tax-receipts/Dockerfile` builds three images from the repo root: `api`
+(the Fastify server), `api-tools` (runs `prisma migrate deploy`, and the
+evaluation seed on request), and `web` (nginx serving the SPA and proxying
+`/api/*` to the api, the same contract as the Vite dev proxy).
+`apps/tax-receipts/docker-compose.staging.yml` runs the whole stack, and
+`apps/tax-receipts/DEPLOY.md` is the hand-off for operations: topology,
+environment variables, rollout order, and the single-instance constraint
+(PDFs on local disk, in-process email dispatcher). The api's `build` copies
+the generated Prisma client into `dist/`, so `node dist/server.js` runs on
+its own.
+
 ## Data model and invariants
 
 The Prisma schema (`apps/tax-receipts/api/prisma/schema.prisma`) is the 20
