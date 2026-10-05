@@ -27,7 +27,7 @@ describe('payment entry routes (D12 manual entry)', () => {
       data: {
         email: 'scoped@gpo.test',
         name: 'Scoped admin',
-        role: 'administrator',
+        roleKey: 'administrator',
         passwordHash: await hashPassword('scoped-pass-phrase'),
         allRidings: false,
         ridingGrants: [5],

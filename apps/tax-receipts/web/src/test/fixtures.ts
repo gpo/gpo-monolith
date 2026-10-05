@@ -4,7 +4,9 @@ export const ME: Me = {
   id: 'u1',
   name: 'Terry Tester',
   email: 'terry@example.org',
-  role: 'ADMIN',
+  role: 'sysadmin',
+  roleName: 'System administrator',
+  permissions: ['system.manage'],
   allRidings: true,
   ridingGrants: [],
   can: {
@@ -19,6 +21,7 @@ export const ME: Me = {
     enterPayments: true,
     correctContributions: true,
     correctReceipts: true,
+    administerUsers: true,
   },
 };
 

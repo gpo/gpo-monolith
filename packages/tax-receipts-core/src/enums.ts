@@ -112,24 +112,6 @@ export const SpaceStage = z.enum([
 ]);
 export type SpaceStage = z.infer<typeof SpaceStage>;
 
-/**
- * Application roles (stakeholders.md "What this implies for the tool").
- * CASL policies key off role plus per-riding grants (data-model §2 User).
- */
-export const UserRole = z.enum([
-  'sysadmin', // technology (Ian): full config + user admin
-  'party_cfo', // Mike Bumby: the only role that may issue receipts (s. 25.1(6))
-  'administrator', // Ariel: day-to-day contribution + receipt work
-  'rules_authority', // Craig: eligibility calls, moves, non-deductible, cover letter
-  'bookkeeper', // Judy: reconciliation, S2P2, auditor liaison
-  'filer', // Lori/Caren: submit reports and forms to EO
-  'process_owner', // Nicolle: oversight, "who has done what"
-  'organizer', // Matt/AK/Stephanie: CFO liaison
-  'cfo', // external CA/campaign CFO: sees only their entity (future)
-  'readonly',
-]);
-export type UserRole = z.infer<typeof UserRole>;
-
 export const ChangeLogSubjectType = z.enum([
   'Payment',
   'Contribution',
@@ -151,5 +133,6 @@ export const ChangeLogSubjectType = z.enum([
   'User',
   'IssuanceKillSwitch',
   'EmailDeliverySettings',
+  'Role',
 ]);
 export type ChangeLogSubjectType = z.infer<typeof ChangeLogSubjectType>;

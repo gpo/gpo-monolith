@@ -21,7 +21,7 @@ describe('admin routes (ticket 1.12)', () => {
       data: {
         email: 'sysadmin@gpo.test',
         name: 'Sys Admin',
-        role: 'sysadmin',
+        roleKey: 'sysadmin',
         passwordHash: await hashPassword('sysadmin-pass-phrase'),
         allRidings: true,
       },

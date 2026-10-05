@@ -22,7 +22,7 @@ describe('POST /internal/validation/run (ticket 1.7 manual trigger)', () => {
       data: {
         email: 'sysadmin@gpo.test',
         name: 'Sys Admin',
-        role: 'sysadmin',
+        roleKey: 'sysadmin',
         passwordHash: await hashPassword('sysadmin-pass-phrase'),
         allRidings: true,
       },

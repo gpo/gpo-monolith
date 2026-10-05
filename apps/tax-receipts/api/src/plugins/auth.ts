@@ -6,6 +6,7 @@ import fp from 'fastify-plugin';
 import { Strategy as LocalStrategy } from 'passport-local';
 import type { PrismaClient } from '../generated/prisma/index.js';
 import { verifyPassword } from '../auth/password.js';
+import { withRolePermissions } from '../auth/roles.js';
 import { PrismaSessionStore } from '../auth/session-store.js';
 import {
   defineAbilitiesFor,
@@ -24,11 +25,14 @@ export interface SessionUser extends AbilityUser {
   name: string;
   email: string;
   active: boolean;
+  /** the role's key, e.g. "party_cfo" */
+  role: string;
+  roleName: string;
 }
 
 const ANONYMOUS: AbilityUser = {
   id: 'anonymous',
-  role: 'readonly',
+  permissions: [],
   isCfoDesignate: false,
   allRidings: false,
   ridingGrants: [],
@@ -64,7 +68,7 @@ async function authPlugin(
       { usernameField: 'email', passwordField: 'password' },
       (email, password, done) => {
         prisma.user
-          .findUnique({ where: { email: email.toLowerCase() } })
+          .findUnique({ where: { email: email.toLowerCase() }, include: withRolePermissions })
           .then(async (user) => {
             if (!user || !user.active) return done(null, false);
             const ok = await verifyPassword(password, user.passwordHash);
@@ -78,7 +82,9 @@ async function authPlugin(
 
   passport.registerUserSerializer(async (user: SessionUser) => user.id);
   passport.registerUserDeserializer(async (id: string) => {
-    const user = await prisma.user.findUnique({ where: { id } });
+    // Reloaded on every request, role permissions included, so a role edit
+    // or reassignment takes effect on the user's next request.
+    const user = await prisma.user.findUnique({ where: { id }, include: withRolePermissions });
     if (!user || !user.active) return null;
     return toSessionUser(user);
   });
@@ -105,7 +111,7 @@ function toSessionUser(user: {
   id: string;
   name: string;
   email: string;
-  role: SessionUser['role'];
+  role: { key: string; name: string; permissions: Array<{ permission: string }> };
   active: boolean;
   isCfoDesignate: boolean;
   allRidings: boolean;
@@ -115,7 +121,9 @@ function toSessionUser(user: {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: user.role.key,
+    roleName: user.role.name,
+    permissions: user.role.permissions.map((p) => p.permission),
     active: user.active,
     isCfoDesignate: user.isCfoDesignate,
     allRidings: user.allRidings,

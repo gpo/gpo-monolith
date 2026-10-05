@@ -1,5 +1,6 @@
 import { paymentMethodFromQomon, paymentStateFromQomonKind, standardOntarioEsaHolidays } from '@gpo/tax-receipts-core';
 import { PrismaClient, type Prisma, type PaymentMethod, type PaymentState } from '../generated/prisma/index.js';
+import { ensureBuiltInRoles } from '../auth/roles.js';
 import { withChangeLog } from '../changelog/write.js';
 
 let shared: PrismaClient | undefined;
@@ -9,7 +10,8 @@ export function testPrisma(): PrismaClient {
   return shared;
 }
 
-/** Wipe every table (TRUNCATE bypasses the row-level delete guards by design). */
+/** Wipe every table (TRUNCATE bypasses the row-level delete guards by design),
+ *  then put back the built-in roles every user row needs. */
 export async function resetDb(prisma: PrismaClient): Promise<void> {
   const rows = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables
@@ -20,6 +22,7 @@ export async function resetDb(prisma: PrismaClient): Promise<void> {
       `TRUNCATE ${list} RESTART IDENTITY CASCADE`,
     );
   }
+  await ensureBuiltInRoles(prisma);
 }
 
 export interface Baseline {
@@ -56,7 +59,7 @@ export async function seedBaseline(prisma: PrismaClient): Promise<Baseline> {
     data: {
       email: 'cfo@gpo.test',
       name: 'CFO',
-      role: 'party_cfo',
+      roleKey: 'party_cfo',
       passwordHash: 'x',
       allRidings: true,
     },
@@ -65,7 +68,7 @@ export async function seedBaseline(prisma: PrismaClient): Promise<Baseline> {
     data: {
       email: 'admin@gpo.test',
       name: 'Admin',
-      role: 'administrator',
+      roleKey: 'administrator',
       passwordHash: 'x',
       allRidings: true,
     },
@@ -74,7 +77,7 @@ export async function seedBaseline(prisma: PrismaClient): Promise<Baseline> {
     data: {
       email: 'designate@gpo.test',
       name: 'Designate',
-      role: 'filer',
+      roleKey: 'filer',
       passwordHash: 'x',
       isCfoDesignate: true,
       allRidings: true,

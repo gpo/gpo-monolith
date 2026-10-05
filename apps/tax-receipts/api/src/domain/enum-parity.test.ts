@@ -28,7 +28,6 @@ const pairs: Array<[string, readonly string[], readonly string[]]> = [
   ['EOFormKind', core.EOFormKind.options, Object.values($Enums.EOFormKind)],
   ['ArtifactKind', core.ArtifactKind.options, Object.values($Enums.ArtifactKind)],
   ['ReconciliationMarkKind', core.ReconciliationMarkKind.options, Object.values($Enums.ReconciliationMarkKind)],
-  ['UserRole', core.UserRole.options, Object.values($Enums.UserRole)],
   ['ChangeLogSubjectType', core.ChangeLogSubjectType.options, Object.values($Enums.ChangeLogSubjectType)],
 ];
 

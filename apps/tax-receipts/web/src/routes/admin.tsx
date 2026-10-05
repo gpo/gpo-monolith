@@ -27,15 +27,17 @@ import {
 import { IMPLEMENTED_RULE_REFS } from '@gpo/tax-receipts-core/validation/rules.js';
 import { api, type RidingImportRow, type RidingRow } from '../api.js';
 import { EmailsSection } from './admin-emails.js';
+import { RolesSection } from './admin-roles.js';
 import { ChangeLogPage } from './change-log.js';
 import { DevToolsPage } from './dev-tools.js';
 import { RULE_LABELS } from '../rule-labels.js';
 
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
- * ContributionLimit buckets, users/roles, the RTD holiday calendar,
- * per-riding Qomon spaces, and the kill switch. All writes are sysadmin-only
- * server-side; a 403 here just means "ask a sysadmin."
+ * ContributionLimit buckets, users, roles, the RTD holiday calendar,
+ * per-riding Qomon spaces, and the kill switch. Writes are permission-gated
+ * server-side (settings: `settings.administer`; users and roles:
+ * `users.administer`); a 403 here just means "ask a sysadmin."
  *
  * The "Validation rules" section is a read-only reference (no writes, no
  * fetch) — see ValidationRulesSection's own doc comment below.
@@ -59,6 +61,7 @@ export const ADMIN_SECTIONS = [
   { slug: 'rtd-holidays', label: 'RTD holidays', component: () => <HolidaysSection />, devOnly: false },
   { slug: 'ridings', label: 'Ridings', component: () => <RidingsSection />, devOnly: false },
   { slug: 'users', label: 'Users', component: () => <UsersSection />, devOnly: false },
+  { slug: 'roles', label: 'Roles', component: () => <RolesSection />, devOnly: false },
   { slug: 'kill-switch', label: 'Kill switch', component: () => <KillSwitchSection />, devOnly: false },
   { slug: 'emails', label: 'Emails', component: () => <EmailsSection />, devOnly: false },
   { slug: 'validation-rules', label: 'Validation rules', component: () => <ValidationRulesSection />, devOnly: false },
@@ -572,6 +575,8 @@ function RidingsSection() {
 function UsersSection() {
   const qc = useQueryClient();
   const users = useQuery({ queryKey: ['admin-users'], queryFn: api.listUsers });
+  const roles = useQuery({ queryKey: ['admin-roles'], queryFn: api.listRoles });
+  const roleOptions = (roles.data?.data ?? []).map((r) => ({ value: r.key, label: r.name }));
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'readonly' });
   const create = useMutation({
     mutationFn: () => api.createUser(form),
@@ -583,6 +588,15 @@ function UsersSection() {
   const toggleActive = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) => api.updateUser(id, { active }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+  });
+  const changeRole = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: string }) => api.updateUser(id, { role }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['admin-users'] }),
+        qc.invalidateQueries({ queryKey: ['admin-roles'] }),
+        qc.invalidateQueries({ queryKey: ['me'] }),
+      ]),
   });
 
   return (
@@ -607,7 +621,15 @@ function UsersSection() {
                 <Table.Tr key={u.id}>
                   <Table.Td>{u.name}</Table.Td>
                   <Table.Td>{u.email}</Table.Td>
-                  <Table.Td>{u.role}</Table.Td>
+                  <Table.Td>
+                    <NativeSelect
+                      size="xs"
+                      aria-label={`Role for ${u.name}`}
+                      data={roleOptions.length ? roleOptions : [{ value: u.role, label: u.roleName }]}
+                      value={u.role}
+                      onChange={(e) => changeRole.mutate({ id: u.id, role: e.currentTarget.value })}
+                    />
+                  </Table.Td>
                   <Table.Td>{u.isCfoDesignate ? 'yes' : '—'}</Table.Td>
                   <Table.Td>
                     <Checkbox
@@ -638,7 +660,7 @@ function UsersSection() {
           />
           <NativeSelect
             label="Role"
-            data={['sysadmin', 'party_cfo', 'administrator', 'rules_authority', 'bookkeeper', 'filer', 'process_owner', 'organizer', 'cfo', 'readonly']}
+            data={roleOptions}
             value={form.role}
             onChange={(e) => setForm({ ...form, role: e.currentTarget.value })}
           />
@@ -652,6 +674,9 @@ function UsersSection() {
             Create user
           </Button>
         </Group>
+        {(create.error ?? changeRole.error ?? toggleActive.error) && (
+          <Alert color="red">{(create.error ?? changeRole.error ?? toggleActive.error)?.message}</Alert>
+        )}
       </Stack>
     </Card>
   );

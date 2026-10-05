@@ -179,7 +179,7 @@ describe('per-space issuance routes (ticket 3.12)', () => {
       data: {
         email: 'scoped@gpo.test',
         name: 'Scoped Reader',
-        role: 'readonly',
+        roleKey: 'readonly',
         passwordHash: await hashPassword('scoped-pass-phrase'),
         allRidings: false,
         ridingGrants: [1],
@@ -215,7 +215,7 @@ describe('donor pre-check send route (ticket 3.9)', () => {
       data: {
         email: 'bookkeeper@gpo.test',
         name: 'Bookkeeper',
-        role: 'bookkeeper',
+        roleKey: 'bookkeeper',
         passwordHash: await hashPassword('bookkeeper-pass-phrase'),
         allRidings: true,
       },

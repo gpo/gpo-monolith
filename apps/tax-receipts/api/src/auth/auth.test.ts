@@ -4,10 +4,15 @@ import { buildApp } from '../app.js';
 import { defineAbilitiesFor } from './abilities.js';
 import { assertIssuanceEnabled, IssuanceDisabledError, setKillSwitch } from './kill-switch.js';
 import { hashPassword } from './password.js';
+import { BUILT_IN_ROLES } from './permissions.js';
 import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
+
+function permissionsOf(roleKey: string) {
+  return BUILT_IN_ROLES.find((r) => r.key === roleKey)!.permissions;
+}
 
 describe('auth + authorization (ticket 0.5)', () => {
   let app: FastifyInstance;
@@ -69,7 +74,7 @@ describe('auth + authorization (ticket 0.5)', () => {
     expect(
       defineAbilitiesFor({
         id: 'u',
-        role: 'party_cfo',
+        permissions: permissionsOf('party_cfo'),
         isCfoDesignate: false,
         allRidings: true,
         ridingGrants: [],
@@ -79,7 +84,7 @@ describe('auth + authorization (ticket 0.5)', () => {
     expect(
       defineAbilitiesFor({
         id: 'u',
-        role: 'administrator',
+        permissions: permissionsOf('administrator'),
         isCfoDesignate: false,
         allRidings: true,
         ridingGrants: [],
@@ -89,7 +94,7 @@ describe('auth + authorization (ticket 0.5)', () => {
     expect(
       defineAbilitiesFor({
         id: 'u',
-        role: 'filer',
+        permissions: permissionsOf('filer'),
         isCfoDesignate: true,
         allRidings: true,
         ridingGrants: [],

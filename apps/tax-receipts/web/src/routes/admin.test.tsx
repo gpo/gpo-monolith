@@ -19,6 +19,7 @@ beforeEach(() => {
       if (String(url).includes('/admin/contribution-limits')) return jsonResponse({ data: [] });
       if (String(url).includes('/admin/business-day-calendars')) return jsonResponse({ data: [] });
       if (String(url).includes('/admin/users')) return jsonResponse({ data: [] });
+      if (String(url).includes('/admin/roles')) return jsonResponse({ data: [] });
       if (String(url).includes('/admin/kill-switch')) {
         if (init?.method === 'POST') return jsonResponse({ engaged: true, reason: 'CEO request' });
         return jsonResponse({ engaged: false, reason: null });

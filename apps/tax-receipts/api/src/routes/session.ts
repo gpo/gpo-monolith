@@ -35,6 +35,8 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
       name: user.name,
       email: user.email,
       role: user.role,
+      roleName: user.roleName,
+      permissions: user.permissions,
       isCfoDesignate: user.isCfoDesignate,
       allRidings: user.allRidings,
       ridingGrants: user.ridingGrants,
@@ -53,6 +55,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         enterPayments: request.ability.can('create', 'Payment'),
         correctContributions: request.ability.can('correct', 'Contribution'),
         correctReceipts: request.ability.can('correct', 'Receipt'),
+        administerUsers: request.ability.can('administer', 'User'),
       },
     });
   });

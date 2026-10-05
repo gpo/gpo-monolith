@@ -3,11 +3,13 @@ import {
   createMongoAbility,
   type MongoAbility,
 } from '@casl/ability';
-import type { UserRole } from '@gpo/tax-receipts-core';
+import { isPermissionKey, PERMISSIONS } from './permissions.js';
 
 /**
- * CASL policies keyed on role + per-riding grants (data-model §2 User,
- * ticket 0.5). Authorization lives at the query layer: the same ability that
+ * CASL policies keyed on the user's role permissions + per-riding grants
+ * (data-model §2 User, ticket 0.5). A role is a row in `role` with a list of
+ * permission keys (`role_permission`); each key's CASL rules live in the
+ * catalogue in `auth/permissions.ts`. Authorization lives at the query layer: the same ability that
  * answers `can(...)` also produces Prisma `where` fragments (see
  * `ridingScopeWhere`).
  *
@@ -51,7 +53,8 @@ export type AppAbility = MongoAbility<[AppAction, AppSubject]>;
 
 export interface AbilityUser {
   id: string;
-  role: UserRole;
+  /** permission keys held through the user's role */
+  permissions: readonly string[];
   isCfoDesignate: boolean;
   allRidings: boolean;
   ridingGrants: number[];
@@ -72,64 +75,9 @@ export function defineAbilitiesFor(user: AbilityUser): AppAbility {
     'ContributionLimit',
   ]);
 
-  switch (user.role) {
-    case 'sysadmin':
-      can('manage', 'all');
-      break;
-
-    case 'party_cfo':
-      can('read', 'all');
-      can('issue', 'Receipt');
-      can('correct', 'Receipt');
-      can('correct', 'Contribution');
-      can('create', ['Payment', 'Contribution']);
-      can('update', 'ContributionMetadata');
-      can('file', ['RtdFiling', 'EOForm']);
-      can(['create', 'share'], 'EntityReport');
-      can('administer', 'IssuanceKillSwitch');
-      break;
-
-    case 'administrator':
-      can('update', ['Contribution', 'ContributionMetadata']);
-      can(['create', 'update'], 'WorkItem');
-      can('correct', ['Receipt', 'Contribution']);
-      can('create', ['Payment', 'Contribution']);
-      break;
-
-    case 'rules_authority':
-      can('update', ['Contribution', 'ContributionMetadata']);
-      can('update', 'WorkItem');
-      can('correct', 'Contribution');
-      break;
-
-    case 'bookkeeper':
-      can('read', 'all');
-      can(['create', 'update', 'reconcile'], 'ReconciliationMark');
-      can('create', 'EntityReport');
-      can('update', 'WorkItem');
-      break;
-
-    case 'filer':
-      can('read', 'all');
-      can(['create', 'file'], ['RtdFiling', 'EOForm']);
-      can(['create', 'share'], 'EntityReport');
-      can('update', 'WorkItem');
-      break;
-
-    case 'process_owner':
-      can('read', 'all');
-      break;
-
-    case 'organizer':
-      can('share', 'EntityReport');
-      break;
-
-    case 'cfo':
-      // external CFO: read only, scoped to their granted riding(s)
-      break;
-
-    case 'readonly':
-      break;
+  for (const key of user.permissions) {
+    // a key the catalogue no longer has grants nothing
+    if (isPermissionKey(key)) PERMISSIONS[key].grant(can);
   }
 
   // A DC-1 designate may issue and correct receipts on the CFO's authority

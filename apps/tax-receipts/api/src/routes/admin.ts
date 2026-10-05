@@ -1,9 +1,12 @@
-import { PeriodKind, ContributionLimitBucket, UserRole } from '@gpo/tax-receipts-core';
+import { PeriodKind, ContributionLimitBucket } from '@gpo/tax-receipts-core';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { AppAbility } from '../auth/abilities.js';
 import { hashPassword } from '../auth/password.js';
+import { LOCKED_ROLE_KEYS, PERMISSION_KEYS, PERMISSIONS } from '../auth/permissions.js';
+import { roleKeyFromName } from '../auth/roles.js';
+import { withChangeLog } from '../changelog/write.js';
 import { listOutstandingDonorPrechecks } from '../donors/precheck.js';
 import type { SessionUser } from '../plugins/auth.js';
 import { runValidationForAllContributions } from '../validation/run.js';
@@ -11,10 +14,10 @@ import { runValidationForAllContributions } from '../validation/run.js';
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
  * ContributionLimit buckets, users/roles, the RTD holiday calendar, and
- * per-riding Qomon spaces. All writes are sysadmin-only (`administer`, the
- * action `auth/abilities.ts` already names for "users, periods, limits, kill
- * switch" — sysadmin's documented role, `enums.ts`: "full config + user
- * admin"); reads need only authentication, matching every other list route.
+ * per-riding Qomon spaces. Settings writes need `administer Period`
+ * (`settings.administer`); user and role writes need `administer User`
+ * (`users.administer`); see auth/permissions.ts. Reads need only
+ * authentication, matching every other list route.
  * The one exception is a riding's `qomonApiKey`: never round-tripped back
  * out of a GET, sysadmin-only or not (see `redactRiding` below).
  *
@@ -33,6 +36,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!user) return { ok: false as const, code: 401, error: 'authentication required' };
     if (!ability.can('administer', 'Period')) {
       return { ok: false as const, code: 403, error: 'sysadmin only' };
+    }
+    return { ok: true as const, user };
+  }
+
+  /** Users and roles have their own permission (`users.administer`), so a
+   *  role can be given user administration without the annual settings. */
+  function requireUserAdmin(user: SessionUser | undefined, ability: AppAbility) {
+    if (!user) return { ok: false as const, code: 401, error: 'authentication required' };
+    if (!ability.can('administer', 'User')) {
+      return { ok: false as const, code: 403, error: 'you do not have permission to manage users and roles' };
     }
     return { ok: true as const, user };
   }
@@ -310,29 +323,53 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Users & roles ---------------------------------------------------
+  // EO evaluation rows 4 and 7 to 10. A role is a row in `role` holding
+  // permission keys from the catalogue in auth/permissions.ts; a user holds
+  // one role. Role writes are change-logged (subject type Role).
+
+  function userRow(u: {
+    id: string;
+    name: string;
+    email: string;
+    roleKey: string;
+    role: { name: string };
+    active: boolean;
+    isCfoDesignate: boolean;
+    allRidings: boolean;
+    ridingGrants: number[];
+  }) {
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.roleKey,
+      roleName: u.role.name,
+      active: u.active,
+      isCfoDesignate: u.isCfoDesignate,
+      allRidings: u.allRidings,
+      ridingGrants: u.ridingGrants,
+    };
+  }
+
+  async function roleExists(key: string): Promise<boolean> {
+    return (await app.prisma.role.count({ where: { key } })) > 0;
+  }
 
   r.get('/admin/users', async (request, reply) => {
     if (!request.user) return reply.code(401).send({ error: 'authentication required' });
-    const users = await app.prisma.user.findMany({ orderBy: { name: 'asc' } });
-    return reply.send({
-      data: users.map((u) => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        role: u.role,
-        active: u.active,
-        isCfoDesignate: u.isCfoDesignate,
-        allRidings: u.allRidings,
-        ridingGrants: u.ridingGrants,
-      })),
+    const users = await app.prisma.user.findMany({
+      orderBy: { name: 'asc' },
+      include: { role: { select: { name: true } } },
     });
+    return reply.send({ data: users.map(userRow) });
   });
 
   const CreateUserBody = z.object({
     name: z.string().min(1),
     email: z.string().email(),
     password: z.string().min(12),
-    role: UserRole,
+    /** a role key */
+    role: z.string().min(1),
     allRidings: z.boolean().default(false),
     ridingGrants: z.array(z.number().int().min(1).max(124)).default([]),
     isCfoDesignate: z.boolean().default(false),
@@ -343,18 +380,21 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     url: '/admin/users',
     schema: { body: CreateUserBody },
     handler: async (request, reply) => {
-      const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
+      const auth = requireUserAdmin(request.user as SessionUser | undefined, request.ability);
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
-      const { password, ...rest } = request.body;
+      const { password, role, ...rest } = request.body;
+      if (!(await roleExists(role))) return reply.code(400).send({ error: `unknown role: ${role}` });
       const user = await app.prisma.user.create({
-        data: { ...rest, passwordHash: await hashPassword(password) },
+        data: { ...rest, roleKey: role, passwordHash: await hashPassword(password) },
+        include: { role: { select: { name: true } } },
       });
-      return reply.code(201).send({ id: user.id, name: user.name, email: user.email, role: user.role });
+      return reply.code(201).send(userRow(user));
     },
   });
 
   const UpdateUserBody = z.object({
-    role: UserRole.optional(),
+    /** a role key */
+    role: z.string().min(1).optional(),
     active: z.boolean().optional(),
     allRidings: z.boolean().optional(),
     ridingGrants: z.array(z.number().int().min(1).max(124)).optional(),
@@ -366,19 +406,171 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     url: '/admin/users/:id',
     schema: { params: z.object({ id: z.string() }), body: UpdateUserBody },
     handler: async (request, reply) => {
-      const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
+      const auth = requireUserAdmin(request.user as SessionUser | undefined, request.ability);
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
-      const user = await app.prisma.user.update({ where: { id: request.params.id }, data: request.body });
-      return reply.send({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        active: user.active,
-        isCfoDesignate: user.isCfoDesignate,
-        allRidings: user.allRidings,
-        ridingGrants: user.ridingGrants,
+      const { role, ...rest } = request.body;
+      if (role !== undefined && !(await roleExists(role))) {
+        return reply.code(400).send({ error: `unknown role: ${role}` });
+      }
+      const user = await app.prisma.user.update({
+        where: { id: request.params.id },
+        data: { ...rest, ...(role !== undefined ? { roleKey: role } : {}) },
+        include: { role: { select: { name: true } } },
       });
+      return reply.send(userRow(user));
+    },
+  });
+
+  r.get('/admin/permissions', async (request, reply) => {
+    if (!request.user) return reply.code(401).send({ error: 'authentication required' });
+    return reply.send({
+      data: PERMISSION_KEYS.map((key) => {
+        const { group, label, description } = PERMISSIONS[key];
+        return { key, group, label, description };
+      }),
+    });
+  });
+
+  const roleInclude = {
+    permissions: { select: { permission: true } },
+    _count: { select: { users: true } },
+  } as const;
+
+  type RoleWithPermissions = {
+    key: string;
+    name: string;
+    description: string;
+    builtIn: boolean;
+    permissions: Array<{ permission: string }>;
+    _count: { users: number };
+  };
+
+  function roleRow(role: RoleWithPermissions) {
+    return {
+      key: role.key,
+      name: role.name,
+      description: role.description,
+      builtIn: role.builtIn,
+      locked: LOCKED_ROLE_KEYS.has(role.key),
+      permissions: role.permissions.map((p) => p.permission).sort(),
+      userCount: role._count.users,
+    };
+  }
+
+  /** What the change log records for a role: its definition, not counts. */
+  function roleSnapshot(role: RoleWithPermissions) {
+    const { userCount: _u, locked: _l, ...rest } = roleRow(role);
+    return rest;
+  }
+
+  r.get('/admin/roles', async (request, reply) => {
+    if (!request.user) return reply.code(401).send({ error: 'authentication required' });
+    const roles = await app.prisma.role.findMany({
+      orderBy: [{ builtIn: 'desc' }, { name: 'asc' }],
+      include: roleInclude,
+    });
+    return reply.send({ data: roles.map(roleRow) });
+  });
+
+  const PermissionKeys = z
+    .array(z.enum(PERMISSION_KEYS))
+    .transform((keys) => [...new Set(keys)]);
+  const Reason = z.string().trim().min(3);
+
+  const CreateRoleBody = z.object({
+    name: z.string().trim().min(1).max(80),
+    description: z.string().trim().max(500).default(''),
+    permissions: PermissionKeys,
+    reason: Reason,
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/admin/roles',
+    schema: { body: CreateRoleBody },
+    handler: async (request, reply) => {
+      const auth = requireUserAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const { name, description, permissions, reason } = request.body;
+      const key = roleKeyFromName(name);
+      if (!key) return reply.code(400).send({ error: 'the role name needs at least one letter or digit' });
+      if (await roleExists(key)) {
+        return reply.code(409).send({ error: `a role with the key "${key}" already exists; choose another name` });
+      }
+      const role = await withChangeLog(app.prisma, { userId: auth.user.id, reason }, async (ctx) => {
+        const created = await ctx.tx.role.create({
+          data: { key, name, description, permissions: { create: permissions.map((permission) => ({ permission })) } },
+          include: roleInclude,
+        });
+        await ctx.log({ subjectType: 'Role', subjectId: key, after: roleSnapshot(created) });
+        return created;
+      });
+      return reply.code(201).send(roleRow(role));
+    },
+  });
+
+  const UpdateRoleBody = z.object({
+    name: z.string().trim().min(1).max(80).optional(),
+    description: z.string().trim().max(500).optional(),
+    permissions: PermissionKeys.optional(),
+    reason: Reason,
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/admin/roles/:key',
+    schema: { params: z.object({ key: z.string() }), body: UpdateRoleBody },
+    handler: async (request, reply) => {
+      const auth = requireUserAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const { key } = request.params;
+      const { permissions, reason, ...fields } = request.body;
+      if (LOCKED_ROLE_KEYS.has(key)) {
+        return reply.code(409).send({ error: 'the system administrator role cannot be changed' });
+      }
+      const before = await app.prisma.role.findUnique({ where: { key }, include: roleInclude });
+      if (!before) return reply.code(404).send({ error: 'role not found' });
+      const role = await withChangeLog(app.prisma, { userId: auth.user.id, reason }, async (ctx) => {
+        if (permissions) {
+          await ctx.tx.rolePermission.deleteMany({ where: { roleKey: key } });
+          await ctx.tx.rolePermission.createMany({
+            data: permissions.map((permission) => ({ roleKey: key, permission })),
+          });
+        }
+        const updated = await ctx.tx.role.update({ where: { key }, data: fields, include: roleInclude });
+        await ctx.log({
+          subjectType: 'Role',
+          subjectId: key,
+          before: roleSnapshot(before),
+          after: roleSnapshot(updated),
+        });
+        return updated;
+      });
+      return reply.send(roleRow(role));
+    },
+  });
+
+  r.route({
+    method: 'DELETE',
+    url: '/admin/roles/:key',
+    schema: { params: z.object({ key: z.string() }), body: z.object({ reason: Reason }) },
+    handler: async (request, reply) => {
+      const auth = requireUserAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const { key } = request.params;
+      const role = await app.prisma.role.findUnique({ where: { key }, include: roleInclude });
+      if (!role) return reply.code(404).send({ error: 'role not found' });
+      if (role.builtIn) return reply.code(409).send({ error: 'built-in roles cannot be deleted' });
+      if (role._count.users > 0) {
+        return reply.code(409).send({
+          error: `${role._count.users} user(s) still hold this role; assign them another role first`,
+        });
+      }
+      await withChangeLog(app.prisma, { userId: auth.user.id, reason: request.body.reason }, async (ctx) => {
+        await ctx.tx.role.delete({ where: { key } });
+        await ctx.log({ subjectType: 'Role', subjectId: key, before: roleSnapshot(role) });
+      });
+      return reply.code(204).send();
     },
   });
 
