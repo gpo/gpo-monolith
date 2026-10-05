@@ -185,19 +185,6 @@ enum SpaceStage {
   sent_to_cfo
 }
 
-enum UserRole {
-  sysadmin
-  party_cfo
-  administrator
-  rules_authority
-  bookkeeper
-  filer
-  process_owner
-  organizer
-  cfo
-  readonly
-}
-
 enum ChangeLogSubjectType {
   Payment
   Contribution
@@ -221,6 +208,7 @@ enum ChangeLogSubjectType {
   User
   IssuanceKillSwitch
   EmailDeliverySettings
+  Role
 }
 
 // ---------------------------------------------------------------------------
@@ -787,7 +775,9 @@ model User {
   name           String
   email          String   @unique
   passwordHash   String
-  role           UserRole @default(readonly)
+  /// the user's one role (EO evaluation row 9); see Role
+  roleKey        String   @default("readonly")
+  role           Role     @relation(fields: [roleKey], references: [key])
   active         Boolean  @default(true)
   /// authorized RTD-submission designate (Form DC-1)
   isCfoDesignate Boolean  @default(false)
@@ -804,7 +794,39 @@ model User {
   paymentsCreated      Payment[]
   contributionsCreated Contribution[]
 
+  @@index([roleKey])
   @@map("app_user")
+}
+
+/// An assignable role (EO evaluation rows 7 to 9). The ten built-in roles are
+/// seeded from BUILT_IN_ROLES (auth/permissions.ts); an administrator can
+/// edit them (except the locked sysadmin role) and create more. Changes are
+/// change-logged under subject type Role.
+model Role {
+  /// immutable slug, derived from the name at creation (e.g. "party_cfo")
+  key         String           @id
+  name        String
+  description String           @default("")
+  /// shipped with the tool: can be edited but not deleted
+  builtIn     Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  permissions RolePermission[]
+  users       User[]
+
+  @@map("role")
+}
+
+/// A system function granted to a role. `permission` is a key of the
+/// PERMISSIONS catalogue in auth/permissions.ts; the catalogue maps it to the
+/// CASL rules the routes check.
+model RolePermission {
+  roleKey    String
+  permission String
+  role       Role   @relation(fields: [roleKey], references: [key], onDelete: Cascade)
+
+  @@id([roleKey, permission])
+  @@map("role_permission")
 }
 
 // ---------------------------------------------------------------------------

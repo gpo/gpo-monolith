@@ -36,7 +36,7 @@ describe('correction routes (corrections.md actions 4, 5, 6, 8, 9, 12)', () => {
       data: {
         email: 'scoped@gpo.test',
         name: 'Scoped',
-        role: 'rules_authority',
+        roleKey: 'rules_authority',
         passwordHash: await hashPassword('scoped-pass-phrase'),
         allRidings: false,
         ridingGrants: [5],

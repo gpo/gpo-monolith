@@ -42,6 +42,7 @@ const SUBJECT_TYPES = [
   'ReconciliationMark',
   'User',
   'IssuanceKillSwitch',
+  'Role',
 ];
 
 function jsonCell(value: unknown): string {

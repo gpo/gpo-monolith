@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { standardOntarioEsaHolidays } from '@gpo/tax-receipts-core';
 import { PrismaClient } from '../src/generated/prisma/index.js';
 import { hashPassword } from '../src/auth/password.js';
+import { ensureBuiltInRoles } from '../src/auth/roles.js';
 
 /**
  * Development / evaluation seed. Idempotent. NOT production data: the real
@@ -148,18 +149,15 @@ async function main(): Promise<void> {
     update: {},
   });
 
+  // --- Roles (the built-in set; the role_table migration also seeds them) ---
+  await ensureBuiltInRoles(prisma);
+
   // --- Users (dev password; change on first real deploy) ---
   const devHash = await hashPassword('change-me-please-12345');
   const users: Array<{
     email: string;
     name: string;
-    role:
-      | 'sysadmin'
-      | 'party_cfo'
-      | 'administrator'
-      | 'rules_authority'
-      | 'bookkeeper'
-      | 'filer';
+    role: string;
     isCfoDesignate?: boolean;
     allRidings?: boolean;
   }> = [
@@ -176,12 +174,12 @@ async function main(): Promise<void> {
       create: {
         email: u.email,
         name: u.name,
-        role: u.role,
+        roleKey: u.role,
         passwordHash: devHash,
         isCfoDesignate: u.isCfoDesignate ?? false,
         allRidings: u.allRidings ?? false,
       },
-      update: { role: u.role },
+      update: { roleKey: u.role },
     });
   }
 

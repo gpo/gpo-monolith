@@ -190,7 +190,7 @@ describe('receipt allocation route (ticket 3.2)', () => {
       data: {
         email: 'bookkeeper@gpo.test',
         name: 'Bookkeeper',
-        role: 'bookkeeper',
+        roleKey: 'bookkeeper',
         passwordHash: await hashPassword('bookkeeper-pass-phrase'),
         allRidings: true,
       },
@@ -312,7 +312,7 @@ describe('receipt correction routes: cancel / reissue (ticket 3.10)', () => {
       data: {
         email: 'bookkeeper@gpo.test',
         name: 'Bookkeeper',
-        role: 'bookkeeper',
+        roleKey: 'bookkeeper',
         passwordHash: await hashPassword('bookkeeper-pass-phrase'),
         allRidings: true,
       },

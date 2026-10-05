@@ -46,7 +46,11 @@ export interface Me {
   id: string;
   name: string;
   email: string;
+  /** role key, e.g. "party_cfo" */
   role: string;
+  roleName: string;
+  /** permission keys held through the role (auth/permissions.ts) */
+  permissions: string[];
   allRidings: boolean;
   ridingGrants: number[];
   can: {
@@ -61,6 +65,7 @@ export interface Me {
     enterPayments: boolean;
     correctContributions: boolean;
     correctReceipts: boolean;
+    administerUsers: boolean;
   };
 }
 
@@ -746,11 +751,38 @@ export interface AdminUserRow {
   id: string;
   name: string;
   email: string;
+  /** role key */
   role: string;
+  roleName: string;
   active: boolean;
   isCfoDesignate: boolean;
   allRidings: boolean;
   ridingGrants: number[];
+}
+
+export interface RoleRow {
+  key: string;
+  name: string;
+  description: string;
+  builtIn: boolean;
+  /** the system administrator role: no edits, no delete */
+  locked: boolean;
+  permissions: string[];
+  userCount: number;
+}
+
+export interface PermissionRow {
+  key: string;
+  group: string;
+  label: string;
+  description: string;
+}
+
+export interface RoleInput {
+  name: string;
+  description: string;
+  permissions: string[];
+  reason: string;
 }
 
 export interface RtdFilingSummary {
@@ -1001,6 +1033,14 @@ export const api = {
     request<{ id: string }>('/admin/users', { method: 'POST', body: JSON.stringify(input) }),
   updateUser: (id: string, input: Partial<Pick<AdminUserRow, 'role' | 'active' | 'allRidings' | 'ridingGrants' | 'isCfoDesignate'>>) =>
     request<AdminUserRow>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  listRoles: () => request<{ data: RoleRow[] }>('/admin/roles'),
+  listPermissions: () => request<{ data: PermissionRow[] }>('/admin/permissions'),
+  createRole: (input: RoleInput) =>
+    request<RoleRow>('/admin/roles', { method: 'POST', body: JSON.stringify(input) }),
+  updateRole: (key: string, input: Partial<RoleInput> & { reason: string }) =>
+    request<RoleRow>(`/admin/roles/${key}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  deleteRole: (key: string, reason: string) =>
+    request<void>(`/admin/roles/${key}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
   listChangeLog: (filters: ChangeLogFilters = {}) =>
     request<{ data: ChangeLogRow[]; nextCursor: string | null }>(
       `/change-log${filtersToQuery(filters)}`,

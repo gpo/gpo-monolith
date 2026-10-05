@@ -102,9 +102,21 @@ All mutating code paths go through `withChangeLog` (`src/changelog/write.ts`).
 ## Auth
 
 Passport local + bcrypt, stateful sessions in Postgres. Authorization is
-CASL, keyed on role plus per-riding grants. Only the party CFO or an
-authorized designate may issue receipts, and a statutory kill switch
-(`assertIssuanceEnabled`) gates every issuance path.
+CASL, keyed on the user's role permissions plus per-riding grants. Only the
+party CFO or an authorized designate may issue receipts, and a statutory
+kill switch (`assertIssuanceEnabled`) gates every issuance path.
+
+Roles are data, not code. Each user holds one row in `role`, and a role
+holds permission keys (`role_permission`). Administrators create and edit
+roles under Admin, Roles, and assign them under Admin, Users. The
+permissions themselves are a fixed catalogue in `api/src/auth/permissions.ts`
+that maps each key to the CASL rules the routes check, so a new system
+function means a new catalogue entry. The ten roles the tool ships with
+(`BUILT_IN_ROLES`) are seeded by the `role_table` migration and by
+`ensureBuiltInRoles`. Built-in roles can be edited but not deleted, the
+system administrator role is locked, and every role write is change-logged
+under subject type `Role`. A user's permissions are reloaded on each
+request, so a role edit takes effect on the user's next request.
 
 The web app's root layout (`web/src/router.tsx`) gates every route on
 `GET /auth/me`: while signed out it renders only the login form, and the nav

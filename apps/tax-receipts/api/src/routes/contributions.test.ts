@@ -135,7 +135,7 @@ describe('PATCH /contributions/:id/metadata (ticket 1.2)', () => {
       data: {
         email: 'readonly@gpo.test',
         name: 'Readonly',
-        role: 'readonly',
+        roleKey: 'readonly',
         passwordHash: await hashPassword('readonly-pass-phrase'),
         allRidings: true,
       },

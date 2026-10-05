@@ -44,7 +44,7 @@ describe('delivery routes (tickets 3.6, 3.12)', () => {
       data: {
         email: 'sys@gpo.test',
         name: 'Sys',
-        role: 'sysadmin',
+        roleKey: 'sysadmin',
         passwordHash: await hashPassword('sys-pass-phrase'),
         allRidings: true,
       },
