@@ -6,6 +6,7 @@ import type { AppAbility } from '../auth/abilities.js';
 import { hashPassword } from '../auth/password.js';
 import { LOCKED_ROLE_KEYS, PERMISSION_KEYS, PERMISSIONS } from '../auth/permissions.js';
 import { roleKeyFromName } from '../auth/roles.js';
+import { sessionsOfUser } from '../auth/session-store.js';
 import { withChangeLog } from '../changelog/write.js';
 import { listOutstandingDonorPrechecks } from '../donors/precheck.js';
 import type { SessionUser } from '../plugins/auth.js';
@@ -323,9 +324,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Users & roles ---------------------------------------------------
-  // EO evaluation rows 4 and 7 to 10. A role is a row in `role` holding
+  // EO evaluation rows 4, 5, and 7 to 12. A role is a row in `role` holding
   // permission keys from the catalogue in auth/permissions.ts; a user holds
-  // one role. Role writes are change-logged (subject type Role).
+  // one role. User writes are change-logged under subject type User (never
+  // with the password hash) and role writes under Role.
 
   function userRow(u: {
     id: string;
@@ -364,9 +366,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ data: users.map(userRow) });
   });
 
+  /** Emails are stored lower-cased: login looks them up lower-cased. */
+  const Email = z.string().trim().email().transform((e) => e.toLowerCase());
+
+  async function emailTaken(email: string, exceptId?: string): Promise<boolean> {
+    const holder = await app.prisma.user.findUnique({ where: { email }, select: { id: true } });
+    return holder !== null && holder.id !== exceptId;
+  }
+
   const CreateUserBody = z.object({
-    name: z.string().min(1),
-    email: z.string().email(),
+    name: z.string().trim().min(1),
+    email: Email,
     password: z.string().min(12),
     /** a role key */
     role: z.string().min(1),
@@ -384,23 +394,42 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
       const { password, role, ...rest } = request.body;
       if (!(await roleExists(role))) return reply.code(400).send({ error: `unknown role: ${role}` });
-      const user = await app.prisma.user.create({
-        data: { ...rest, roleKey: role, passwordHash: await hashPassword(password) },
-        include: { role: { select: { name: true } } },
-      });
+      if (await emailTaken(rest.email)) {
+        return reply.code(409).send({ error: `another user already has the email ${rest.email}` });
+      }
+      const passwordHash = await hashPassword(password);
+      const user = await withChangeLog(
+        app.prisma,
+        { userId: auth.user.id, reason: 'user account created' },
+        async (ctx) => {
+          const created = await ctx.tx.user.create({
+            data: { ...rest, roleKey: role, passwordHash },
+            include: { role: { select: { name: true } } },
+          });
+          await ctx.log({ subjectType: 'User', subjectId: created.id, after: userRow(created) });
+          return created;
+        },
+      );
       return reply.code(201).send(userRow(user));
     },
   });
 
   const UpdateUserBody = z.object({
+    name: z.string().trim().min(1).optional(),
+    email: Email.optional(),
     /** a role key */
     role: z.string().min(1).optional(),
     active: z.boolean().optional(),
     allRidings: z.boolean().optional(),
     ridingGrants: z.array(z.number().int().min(1).max(124)).optional(),
     isCfoDesignate: z.boolean().optional(),
+    /** recorded in the change log; the quick toggles on the Users page
+     *  (active, role) send none and get a generic one */
+    reason: z.string().trim().min(3).optional(),
   });
 
+  // EO evaluation row 5 (modify user info) and row 9 (change a user's
+  // role). Change-logged with before and after.
   r.route({
     method: 'PATCH',
     url: '/admin/users/:id',
@@ -408,16 +437,68 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     handler: async (request, reply) => {
       const auth = requireUserAdmin(request.user as SessionUser | undefined, request.ability);
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
-      const { role, ...rest } = request.body;
+      const { id } = request.params;
+      const { role, reason, ...rest } = request.body;
       if (role !== undefined && !(await roleExists(role))) {
         return reply.code(400).send({ error: `unknown role: ${role}` });
       }
-      const user = await app.prisma.user.update({
-        where: { id: request.params.id },
-        data: { ...rest, ...(role !== undefined ? { roleKey: role } : {}) },
+      const before = await app.prisma.user.findUnique({
+        where: { id },
         include: { role: { select: { name: true } } },
       });
+      if (!before) return reply.code(404).send({ error: 'user not found' });
+      if (rest.email !== undefined && (await emailTaken(rest.email, id))) {
+        return reply.code(409).send({ error: `another user already has the email ${rest.email}` });
+      }
+      const user = await withChangeLog(
+        app.prisma,
+        { userId: auth.user.id, reason: reason ?? 'user account updated' },
+        async (ctx) => {
+          const updated = await ctx.tx.user.update({
+            where: { id },
+            data: { ...rest, ...(role !== undefined ? { roleKey: role } : {}) },
+            include: { role: { select: { name: true } } },
+          });
+          await ctx.log({ subjectType: 'User', subjectId: id, before: userRow(before), after: userRow(updated) });
+          return updated;
+        },
+      );
       return reply.send(userRow(user));
+    },
+  });
+
+  // Admin password reset (EO evaluation row 12): for a user who has
+  // forgotten theirs. Signs out every session the user has, and is
+  // change-logged with the admin as actor and their reason.
+  r.route({
+    method: 'POST',
+    url: '/admin/users/:id/password',
+    schema: {
+      params: z.object({ id: z.string() }),
+      body: z.object({
+        newPassword: z.string().min(12, 'the new password must be at least 12 characters'),
+        reason: z.string().trim().min(3),
+      }),
+    },
+    handler: async (request, reply) => {
+      const auth = requireUserAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const { id } = request.params;
+      if (!(await app.prisma.user.findUnique({ where: { id } }))) {
+        return reply.code(404).send({ error: 'user not found' });
+      }
+      const passwordHash = await hashPassword(request.body.newPassword);
+      const signedOut = await withChangeLog(
+        app.prisma,
+        { userId: auth.user.id, reason: request.body.reason },
+        async (ctx) => {
+          await ctx.tx.user.update({ where: { id }, data: { passwordHash } });
+          const { count } = await ctx.tx.session.deleteMany({ where: sessionsOfUser(id) });
+          await ctx.log({ subjectType: 'User', subjectId: id, after: { passwordReset: true, sessionsSignedOut: count } });
+          return count;
+        },
+      );
+      return reply.send({ ok: true, sessionsSignedOut: signedOut });
     },
   });
 

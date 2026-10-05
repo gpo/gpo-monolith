@@ -857,6 +857,13 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
+  updateProfile: (input: { name?: string; email?: string; currentPassword?: string }) =>
+    request<{ name: string; email: string }>('/auth/profile', { method: 'PATCH', body: JSON.stringify(input) }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: true; otherSessionsSignedOut: number }>('/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   killSwitch: () =>
     request<{ engaged: boolean; reason: string | null }>('/admin/kill-switch'),
   setKillSwitch: (engaged: boolean, reason: string) =>
@@ -1031,8 +1038,18 @@ export const api = {
   listUsers: () => request<{ data: AdminUserRow[] }>('/admin/users'),
   createUser: (input: { name: string; email: string; password: string; role: string }) =>
     request<{ id: string }>('/admin/users', { method: 'POST', body: JSON.stringify(input) }),
-  updateUser: (id: string, input: Partial<Pick<AdminUserRow, 'role' | 'active' | 'allRidings' | 'ridingGrants' | 'isCfoDesignate'>>) =>
+  updateUser: (
+    id: string,
+    input: Partial<
+      Pick<AdminUserRow, 'name' | 'email' | 'role' | 'active' | 'allRidings' | 'ridingGrants' | 'isCfoDesignate'>
+    > & { reason?: string },
+  ) =>
     request<AdminUserRow>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  resetUserPassword: (id: string, newPassword: string, reason: string) =>
+    request<{ ok: true; sessionsSignedOut: number }>(`/admin/users/${id}/password`, {
+      method: 'POST',
+      body: JSON.stringify({ newPassword, reason }),
+    }),
   listRoles: () => request<{ data: RoleRow[] }>('/admin/roles'),
   listPermissions: () => request<{ data: PermissionRow[] }>('/admin/permissions'),
   createRole: (input: RoleInput) =>

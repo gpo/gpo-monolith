@@ -8,8 +8,27 @@ import type { PrismaClient } from '../generated/prisma/index.js';
 
 type SessionData = Record<string, unknown> & {
   cookie?: { expires?: string | Date | null };
-  passport?: { user?: string };
+  /** @fastify/passport stores the serialized user (our user id) directly */
+  passport?: string | { user?: string };
 };
+
+/** The signed-in user's id from a session's data, or null. */
+export function sessionUserId(session: SessionData): string | null {
+  const p = session.passport;
+  if (typeof p === 'string') return p;
+  return p?.user ?? null;
+}
+
+/**
+ * `where` for every stored session belonging to `userId`. Matches the
+ * passport field as well as the `userId` column, because rows written before
+ * `sessionUserId` existed have a null column.
+ */
+export function sessionsOfUser(userId: string) {
+  return {
+    OR: [{ userId }, { data: { path: ['passport'], equals: userId } }],
+  };
+}
 
 type Callback<T = void> = (err?: Error | null, result?: T) => void;
 
@@ -34,7 +53,7 @@ export class PrismaSessionStore {
 
   set(sid: string, session: SessionData, cb: Callback): void {
     const expiresAt = resolveExpiry(session);
-    const userId = session.passport?.user ?? null;
+    const userId = sessionUserId(session);
     const data = session as unknown as object;
     this.prisma.session
       .upsert({
