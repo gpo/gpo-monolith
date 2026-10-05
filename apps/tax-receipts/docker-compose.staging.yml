@@ -1,0 +1,98 @@
+# Full stack for the staging environment (and a production-like local run).
+# A reference topology for DevOps; see DEPLOY.md. Run from this directory:
+#
+#   cp .env.staging.example .env.staging   # then fill it in
+#   docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --build
+#
+# Order on every `up`: db healthy -> migrate (prisma migrate deploy) exits 0
+# -> api healthy -> web. Only `web` publishes a port; put the HTTPS load
+# balancer in front of it.
+#
+# Explicit project `name`: without it Compose names the project after this
+# directory, which is too generic to be safe on a shared host.
+name: tax-receipts-staging
+
+x-api-env: &api-env
+  # `development` only for a local smoke test over plain http: production
+  # sets a Secure session cookie, so login needs HTTPS in front.
+  NODE_ENV: ${NODE_ENV:-production}
+  DATABASE_URL: ${DATABASE_URL:-postgresql://gpo:${POSTGRES_PASSWORD}@db:5432/tax_receipts?schema=public}
+
+services:
+  # Remove this service (and api/migrate's depends_on) when DATABASE_URL
+  # points at a managed Postgres such as Cloud SQL.
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gpo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.staging}
+      POSTGRES_DB: tax_receipts
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U gpo -d tax_receipts']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: apps/tax-receipts/Dockerfile
+      target: api-tools
+    image: tax-receipts-api-tools:${IMAGE_TAG:-staging}
+    environment:
+      <<: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/tax-receipts/Dockerfile
+      target: api
+    image: tax-receipts-api:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env.staging}
+      # nginx (web) and the load balancer sit in front
+      TRUST_PROXY: 'true'
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?set PUBLIC_WEB_URL in .env.staging}
+      QOMON_API_KEY: ${QOMON_API_KEY:-}
+      QOMON_API_BASE: ${QOMON_API_BASE:-https://incoming.qomon.app}
+      # Staging never sends real email: every send is simulated end to end.
+      # Do not override this outside production.
+      EMAIL_LIVE_SENDING_ALLOWED: 'false'
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-dev}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+      EMAIL_FROM: ${EMAIL_FROM:-GPO Tax Receipts <receipts@localhost>}
+    volumes:
+      - artifacts:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/tax-receipts/Dockerfile
+      target: web
+    image: tax-receipts-web:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: http://api:3000
+    ports:
+      - '${WEB_PORT:-8080}:8080'
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  # issued receipt PDFs and print batches; back this up with the database
+  artifacts:
