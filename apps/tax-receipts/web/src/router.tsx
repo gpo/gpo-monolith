@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createRootRoute,
@@ -29,6 +29,8 @@ import {
 } from '@mantine/core';
 import gpoLogo from './assets/gpo-logo-EN-horizontal-green.svg';
 import { api } from './api.js';
+import { ChangePasswordModal } from './components/change-password-modal.js';
+import { ProfileModal } from './components/profile-modal.js';
 import { ADMIN_SECTIONS, AdminLayout, visibleAdminSections } from './routes/admin.js';
 import { AttributePaymentPage, NewPaymentPage } from './routes/payment-entry.js';
 import { ContributionDetailPage } from './routes/contribution-detail.js';
@@ -79,34 +81,42 @@ function initials(name: string): string {
  * Avatar menu holding account-level actions (theme, sign out) that don't
  * belong in the main nav.
  */
-function AccountMenu({ name, onSignOut }: { name: string; onSignOut: () => void }) {
+function AccountMenu({ name, email, onSignOut }: { name: string; email: string; onSignOut: () => void }) {
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
   const { setColorScheme } = useMantineColorScheme();
   const computedColorScheme = useComputedColorScheme('light');
   const dark = computedColorScheme === 'dark';
 
   return (
-    <Menu position="bottom-end" withArrow>
-      <Menu.Target>
-        <UnstyledButton aria-label="Account menu">
-          <Avatar color="gpoGreen" radius="xl">
-            {initials(name)}
-          </Avatar>
-        </UnstyledButton>
-      </Menu.Target>
-      <Menu.Dropdown>
-        <Menu.Label>{name}</Menu.Label>
-        <Group justify="space-between" wrap="nowrap" px="sm" py={4}>
-          <Text size="sm">Dark mode</Text>
-          <Switch
-            aria-label="Dark mode"
-            checked={dark}
-            onChange={(e) => setColorScheme(e.currentTarget.checked ? 'dark' : 'light')}
-          />
-        </Group>
-        <Menu.Divider />
-        <Menu.Item onClick={onSignOut}>Sign out</Menu.Item>
-      </Menu.Dropdown>
-    </Menu>
+    <>
+      <Menu position="bottom-end" withArrow>
+        <Menu.Target>
+          <UnstyledButton aria-label="Account menu">
+            <Avatar color="gpoGreen" radius="xl">
+              {initials(name)}
+            </Avatar>
+          </UnstyledButton>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Label>{name}</Menu.Label>
+          <Group justify="space-between" wrap="nowrap" px="sm" py={4}>
+            <Text size="sm">Dark mode</Text>
+            <Switch
+              aria-label="Dark mode"
+              checked={dark}
+              onChange={(e) => setColorScheme(e.currentTarget.checked ? 'dark' : 'light')}
+            />
+          </Group>
+          <Menu.Divider />
+          <Menu.Item onClick={() => setEditingProfile(true)}>Edit profile</Menu.Item>
+          <Menu.Item onClick={() => setChangingPassword(true)}>Change password</Menu.Item>
+          <Menu.Item onClick={onSignOut}>Sign out</Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+      {changingPassword && <ChangePasswordModal onClose={() => setChangingPassword(false)} />}
+      {editingProfile && <ProfileModal name={name} email={email} onClose={() => setEditingProfile(false)} />}
+    </>
   );
 }
 
@@ -168,7 +178,7 @@ function RootLayout() {
             <HeaderLink to="/work-queue">Work queue</HeaderLink>
             <HeaderLink to="/rtd-filings">RTD filings</HeaderLink>
             <HeaderLink to="/admin">Admin</HeaderLink>
-            <AccountMenu name={me.data.name} onSignOut={signOut} />
+            <AccountMenu name={me.data.name} email={me.data.email} onSignOut={signOut} />
           </Group>
         </Group>
       </AppShell.Header>

@@ -25,7 +25,7 @@ import {
 // rule-labels.ts's doc comment). validation/rules.js's own dependency
 // chain has no node:crypto import, so this subpath is browser-safe.
 import { IMPLEMENTED_RULE_REFS } from '@gpo/tax-receipts-core/validation/rules.js';
-import { api, type RidingImportRow, type RidingRow } from '../api.js';
+import { api, type AdminUserRow, type RidingImportRow, type RidingRow } from '../api.js';
 import { EmailsSection } from './admin-emails.js';
 import { RolesSection } from './admin-roles.js';
 import { ChangeLogPage } from './change-log.js';
@@ -577,6 +577,8 @@ function UsersSection() {
   const users = useQuery({ queryKey: ['admin-users'], queryFn: api.listUsers });
   const roles = useQuery({ queryKey: ['admin-roles'], queryFn: api.listRoles });
   const roleOptions = (roles.data?.data ?? []).map((r) => ({ value: r.key, label: r.name }));
+  const [resetting, setResetting] = useState<AdminUserRow | null>(null);
+  const [editing, setEditing] = useState<AdminUserRow | null>(null);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'readonly' });
   const create = useMutation({
     mutationFn: () => api.createUser(form),
@@ -614,6 +616,7 @@ function UsersSection() {
                 <Table.Th>Role</Table.Th>
                 <Table.Th>CFO designate</Table.Th>
                 <Table.Th>Active</Table.Th>
+                <Table.Th />
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -636,6 +639,16 @@ function UsersSection() {
                       checked={u.active}
                       onChange={(e) => toggleActive.mutate({ id: u.id, active: e.currentTarget.checked })}
                     />
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap="xs" wrap="nowrap">
+                      <Button size="xs" variant="light" onClick={() => setEditing(u)}>
+                        Edit
+                      </Button>
+                      <Button size="xs" variant="light" onClick={() => setResetting(u)}>
+                        Reset password
+                      </Button>
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -678,7 +691,108 @@ function UsersSection() {
           <Alert color="red">{(create.error ?? changeRole.error ?? toggleActive.error)?.message}</Alert>
         )}
       </Stack>
+      {resetting && <ResetPasswordModal user={resetting} onClose={() => setResetting(null)} />}
+      {editing && <EditUserModal user={editing} onClose={() => setEditing(null)} />}
     </Card>
+  );
+}
+
+/** Edit a user's name and email (EO evaluation row 5). Role and active
+ *  status stay as the quick controls in the table. */
+function EditUserModal({ user, onClose }: { user: AdminUserRow; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ name: user.name, email: user.email, reason: '' });
+  const save = useMutation({
+    mutationFn: () => api.updateUser(user.id, form),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['admin-users'] }),
+        qc.invalidateQueries({ queryKey: ['me'] }),
+      ]);
+      onClose();
+    },
+  });
+
+  return (
+    <Modal opened onClose={onClose} title={`Edit user: ${user.name}`}>
+      <Stack gap="sm">
+        <TextInput label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.currentTarget.value })} />
+        <TextInput
+          label="Email (used to sign in)"
+          type="email"
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.currentTarget.value })}
+        />
+        <TextInput
+          label="Reason (required)"
+          value={form.reason}
+          onChange={(e) => setForm({ ...form, reason: e.currentTarget.value })}
+        />
+        {save.isError && <Alert color="red">{save.error.message}</Alert>}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!form.name.trim() || !form.email.trim() || form.reason.trim().length < 3}
+            loading={save.isPending}
+            onClick={() => save.mutate()}
+          >
+            Save
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+/** Admin password reset (EO evaluation row 12): sets a temporary password
+ *  the admin passes on, and signs the user out everywhere. */
+function ResetPasswordModal({ user, onClose }: { user: AdminUserRow; onClose: () => void }) {
+  const [password, setPassword] = useState('');
+  const [reason, setReason] = useState('');
+  const reset = useMutation({ mutationFn: () => api.resetUserPassword(user.id, password, reason) });
+
+  return (
+    <Modal opened onClose={onClose} title={`Reset password: ${user.name}`}>
+      {reset.isSuccess ? (
+        <Stack gap="sm">
+          <Alert color="green">
+            Password reset. {user.name} has been signed out everywhere; give them the temporary password
+            and ask them to change it from their account menu.
+          </Alert>
+          <Group justify="flex-end">
+            <Button onClick={onClose}>Done</Button>
+          </Group>
+        </Stack>
+      ) : (
+        <Stack gap="sm">
+          <TextInput
+            label="Temporary password (12+ chars)"
+            value={password}
+            onChange={(e) => setPassword(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Reason (required)"
+            value={reason}
+            onChange={(e) => setReason(e.currentTarget.value)}
+          />
+          {reset.isError && <Alert color="red">{reset.error.message}</Alert>}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              disabled={password.length < 12 || reason.trim().length < 3}
+              loading={reset.isPending}
+              onClick={() => reset.mutate()}
+            >
+              Reset password
+            </Button>
+          </Group>
+        </Stack>
+      )}
+    </Modal>
   );
 }
 
