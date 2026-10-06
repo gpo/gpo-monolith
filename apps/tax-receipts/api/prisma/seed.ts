@@ -167,6 +167,8 @@ async function main(): Promise<void> {
     { email: 'rules@gpo.test', name: 'Rules Authority', role: 'rules_authority', allRidings: true },
     { email: 'books@gpo.test', name: 'Bookkeeper', role: 'bookkeeper', allRidings: true },
     { email: 'filer@gpo.test', name: 'RTD Filer', role: 'filer', isCfoDesignate: true, allRidings: true },
+    // the least-privileged role, for showing what is refused (EO evaluation row 66)
+    { email: 'readonly@gpo.test', name: 'Read Only', role: 'readonly' },
   ];
   for (const u of users) {
     await prisma.user.upsert({
