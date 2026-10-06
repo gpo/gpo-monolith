@@ -33,6 +33,7 @@ const BASE_DATA: ReceiptPdfData = {
   province: 'ON',
   postalCode: 'M1M 1M1',
   country: 'CA',
+  layout: 'LEGACY',
 };
 
 async function extractText(bytes: Buffer): Promise<string> {
@@ -80,6 +81,18 @@ describe('renderReceiptPdf text extraction (ticket 3.4, F4)', () => {
     // every dynamic field appears once per stamped copy (three copies per page).
     expect(text.split('GPO-00402510').length - 1).toBe(3);
     expect(text.split('$123.45').length - 1).toBe(3);
+  });
+
+  it('the CONTRIBUTOR_TYPE layout prints "Contributor Type: Individual" on every copy (EO evaluation row 56)', async () => {
+    const text = await extractText(await renderReceiptPdf({ ...BASE_DATA, layout: 'CONTRIBUTOR_TYPE' }));
+    expect(text.split('Contributor Type: Individual').length - 1).toBe(3);
+    expect(text.split('Contribution Type: Monetary').length - 1).toBe(3);
+    expect(text.split('GPO-00402510').length - 1).toBe(3);
+  });
+
+  it('the LEGACY layout prints no contributor type', async () => {
+    const text = await extractText(await renderReceiptPdf(BASE_DATA));
+    expect(text).not.toContain('Contributor Type');
   });
 
   it('renders the goods-and-services contribution type when flagged', async () => {

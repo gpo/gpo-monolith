@@ -12,6 +12,7 @@ import { receiptEntityLabel } from '../leadership/contestants.js';
 import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
 import type { PrismaClient, Receipt, ReceiptDelivery } from '../generated/prisma/index.js';
 import { renderReceiptPdf } from './pdf.js';
+import { getReceiptSettings } from './settings.js';
 
 /**
  * Individual receipt issuance (ticket 3.1, the first slice of Phase 3).
@@ -246,6 +247,7 @@ export async function issueReceipt(
     province,
     postalCode: address.postalcode!,
     country,
+    layout: (await getReceiptSettings(prisma)).receiptLayout,
   });
   const artifact = await storeArtifact(
     { prisma, storageDir: deps.storageDir },

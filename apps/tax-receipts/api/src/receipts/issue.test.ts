@@ -1,6 +1,7 @@
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PDFParse } from 'pdf-parse';
 import { PDFDocument } from 'pdf-lib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setKillSwitch } from '../auth/kill-switch.js';
@@ -14,6 +15,7 @@ import {
   ReceiptIssuanceValidationError,
   issueReceipt,
 } from './issue.js';
+import { setReceiptLayout } from './settings.js';
 
 const prisma = testPrisma();
 
@@ -119,6 +121,43 @@ describe('receipt issuance (ticket 3.1)', () => {
       where: { subjectType: 'ReceiptAllocation', subjectId: allocationRow.id },
     });
     expect(allocationLog).not.toBeNull();
+  });
+
+  it('renders the LEGACY layout by default, and the contributor type once the layout is switched (change-logged)', async () => {
+    const contact = await seedContact();
+    async function issuedPdfText() {
+      const contribution = await seedContribution(contact.id);
+      await seedMetadata(contribution.id);
+      const { id } = await issueReceipt(
+        { prisma, storageDir },
+        {
+          contributionId: contribution.id,
+          actorUserId: baseline.cfoUserId,
+          reason: 'issue test receipt',
+          politicalEntityLabel: 'Green Party of Ontario',
+        },
+      );
+      const receipt = await prisma.receipt.findUniqueOrThrow({ where: { id }, include: { pdfArtifact: true } });
+      const parser = new PDFParse({ data: new Uint8Array(await readFile(path.join(storageDir, receipt.pdfArtifact!.uri))) });
+      try {
+        return (await parser.getText()).text;
+      } finally {
+        await parser.destroy();
+      }
+    }
+
+    expect(await issuedPdfText()).not.toContain('Contributor Type'); // LEGACY by default
+
+    await setReceiptLayout(prisma, { userId: baseline.adminUserId, reason: 'switch for the test' }, 'CONTRIBUTOR_TYPE');
+    expect(await issuedPdfText()).toContain('Contributor Type: Individual');
+
+    const entry = await prisma.changeLogEntry.findFirstOrThrow({ where: { subjectType: 'ReceiptSettings' } });
+    expect(entry).toMatchObject({
+      actorUserId: baseline.adminUserId,
+      reason: 'switch for the test',
+      before: { receiptLayout: 'LEGACY' },
+      after: { receiptLayout: 'CONTRIBUTOR_TYPE' },
+    });
   });
 
   it('rejects issuance while the kill switch is engaged', async () => {

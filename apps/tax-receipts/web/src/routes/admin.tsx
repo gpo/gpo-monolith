@@ -28,6 +28,7 @@ import { IMPLEMENTED_RULE_REFS } from '@gpo/tax-receipts-core/validation/rules.j
 import { api, type AdminUserRow, type RidingImportRow, type RidingRow } from '../api.js';
 import { EmailsSection } from './admin-emails.js';
 import { LeadershipContestantsSection } from './admin-leadership.js';
+import { ReceiptSettingsSection } from './admin-receipts.js';
 import { RolesSection } from './admin-roles.js';
 import { ChangeLogPage } from './change-log.js';
 import { DevToolsPage } from './dev-tools.js';
@@ -36,7 +37,7 @@ import { RULE_LABELS } from '../rule-labels.js';
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
  * ContributionLimit buckets, users, roles, the RTD holiday calendar,
- * per-riding Qomon spaces, leadership contestants, and the kill switch. Writes are permission-gated
+ * per-riding Qomon spaces, leadership contestants, receipt settings, and the kill switch. Writes are permission-gated
  * server-side (settings: `settings.administer`; users and roles:
  * `users.administer`); a 403 here just means "ask a sysadmin."
  *
@@ -70,6 +71,7 @@ export const ADMIN_SECTIONS = [
   { slug: 'users', label: 'Users', component: () => <UsersSection />, devOnly: false },
   { slug: 'roles', label: 'Roles', component: () => <RolesSection />, devOnly: false },
   { slug: 'kill-switch', label: 'Kill switch', component: () => <KillSwitchSection />, devOnly: false },
+  { slug: 'receipts', label: 'Receipts', component: () => <ReceiptSettingsSection />, devOnly: false },
   { slug: 'emails', label: 'Emails', component: () => <EmailsSection />, devOnly: false },
   { slug: 'validation-rules', label: 'Validation rules', component: () => <ValidationRulesSection />, devOnly: false },
   { slug: 'change-log', label: 'Change log', component: () => <ChangeLogPage />, devOnly: false },

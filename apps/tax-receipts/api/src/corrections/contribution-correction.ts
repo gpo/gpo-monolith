@@ -22,6 +22,7 @@ import type {
   ReceivedBy,
 } from '../generated/prisma/index.js';
 import { renderReceiptPdf } from '../receipts/pdf.js';
+import { getReceiptSettings } from '../receipts/settings.js';
 import { runValidationForContribution } from '../validation/run.js';
 import { renderCancellationNoticePdf } from './cancellation-notice.js';
 import { OWED_DC1A, OWED_RETURN_NOTE, openOwedToEo } from './owed-to-eo.js';
@@ -959,6 +960,7 @@ export async function attachIssuedPdfs(
   },
 ): Promise<CorrectionResult['issuedReceipts']> {
   const out: CorrectionResult['issuedReceipts'] = [];
+  const { receiptLayout } = await getReceiptSettings(deps.prisma);
   for (const { planned, receipt, address, addressLine1 } of issued) {
     const primary = await opts.contributionFor(planned.lines[0]!.contributionRef);
     const pdfBytes = await renderReceiptPdf({
@@ -981,6 +983,7 @@ export async function attachIssuedPdfs(
       province: address.state ?? 'ON',
       postalCode: address.postalcode!,
       country: address.country ?? 'CA',
+      layout: receiptLayout,
     });
     const artifact = await storeArtifact(deps, { kind: 'PDF', bytes: pdfBytes, extension: 'pdf' });
     await withChangeLog(
