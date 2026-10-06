@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
 import type { Prisma } from '../generated/prisma/index.js';
-import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact } from '../test/db.js';
 import {
   SpaceIssuanceBlockedError,
   getSpaceIssuanceGate,
@@ -37,7 +37,7 @@ describe('per-space issuance (ticket 3.12, first slice)', () => {
     amountCents = 5_000,
     overrides: Record<string, unknown> = {},
   ) {
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: BigInt(nextTransactionId),
         name,
@@ -175,7 +175,7 @@ describe('per-space issuance (ticket 3.12, first slice)', () => {
 
   it('keeps going past a per-row failure (missing address) and reports it', async () => {
     const good = await seedContribution('Dana Donor', 5_000);
-    const noAddress = await prisma.contact.create({
+    const noAddress = await fixtureContact(prisma, {
       data: { qomonContactId: BigInt(nextTransactionId), name: 'No Address Ned' },
     });
     const badContribution = await createTestContribution(prisma, {

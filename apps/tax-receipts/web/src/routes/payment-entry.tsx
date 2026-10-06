@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Alert, Button, Card, Group, Loader, NativeSelect, NumberInput, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Anchor, Button, Card, Group, Loader, NativeSelect, NumberInput, Stack, Text, TextInput } from '@mantine/core';
 import { api, ApiError, type ContactHit, type IntakeFlag, type PaymentMethodKey } from '../api.js';
+import { ContactFormModal } from '../components/contact-form-modal.js';
 import { DonorPicker } from '../components/donor-picker.js';
 import {
   ContributionFields,
@@ -20,7 +21,9 @@ import { money } from './contribution-detail.js';
 /**
  * Manual entry (D12, screens.md): record a payment and attribute it to one or
  * more contributions, or attribute what is left of a payment already on file.
- * The tool owns payments and contributions; nothing here touches Qomon. Fields
+ * The tool owns payments and contributions; nothing here touches Qomon except
+ * adding a new contributor, which goes to Qomon first when it is configured
+ * (D13). Fields
  * left on "derived" (the period, chiefly) are settled by the same intake
  * derivation the Qomon import uses.
  */
@@ -53,7 +56,9 @@ function FlagNotes({ flags }: { flags: IntakeFlag[] }) {
 
 export function NewPaymentPage() {
   const qc = useQueryClient();
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const [donor, setDonor] = useState<ContactHit | null>(null);
+  const [addingDonor, setAddingDonor] = useState(false);
   const [amount, setAmount] = useState<number | ''>('');
   const [receivedOn, setReceivedOn] = useState(todayIso());
   const [method, setMethod] = useState<PaymentMethodKey>('CHEQUE');
@@ -147,11 +152,28 @@ export function NewPaymentPage() {
     <Stack gap="lg">
       <PageHeader title="Add a payment" backTo="/contributions" backLabel="Back to contributions" />
 
+      {addingDonor && (
+        <ContactFormModal
+          contact={null}
+          onClose={() => setAddingDonor(false)}
+          onSaved={(saved) =>
+            setDonor({ id: saved.id, name: saved.name, email: saved.email, qomonContactId: saved.qomonContactId })
+          }
+        />
+      )}
+
       <Card withBorder>
         <Stack gap="sm">
           <Text fw={600}>Payment</Text>
           <Group align="flex-start" grow>
-            <DonorPicker label="Donor who paid" value={donor} onChange={setDonor} />
+            <Stack gap={4}>
+              <DonorPicker label="Donor who paid" value={donor} onChange={setDonor} />
+              {me.data?.can.addContacts && (
+                <Anchor component="button" type="button" size="xs" ta="left" onClick={() => setAddingDonor(true)}>
+                  Not on file? Add a new contributor
+                </Anchor>
+              )}
+            </Stack>
             <NumberInput
               label="Amount ($)"
               min={0.01}

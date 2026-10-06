@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fixtureWrite, makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { fixtureWrite, makeContribution, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
 
@@ -26,7 +26,7 @@ describe('payment/contribution invariants (D12)', () => {
       amountCents: 10_000,
     });
     // a couple's single cheque: halve the original, attribute the rest to a spouse
-    const spouse = await prisma.contact.create({ data: { name: 'Sam Donor' } });
+    const spouse = await fixtureContact(prisma, { data: { name: 'Sam Donor' } });
     await fixtureWrite(prisma, async (tx) => {
       await tx.contribution.update({ where: { id: contributionId }, data: { amountCents: 5_000 } });
       await tx.contribution.create({
@@ -67,7 +67,7 @@ describe('payment/contribution invariants (D12)', () => {
       qomonTransactionId: 1n,
       amountCents: 10_000,
     });
-    const other = await prisma.contact.create({ data: { name: 'Right Person' } });
+    const other = await fixtureContact(prisma, { data: { name: 'Right Person' } });
     // mid-transaction the payment is over-attributed (old still ACTIVE + new);
     // the deferred trigger judges only the committed state
     const replacement = await fixtureWrite(prisma, async (tx) => {

@@ -12,6 +12,7 @@ import {
   QomonValidationError,
 } from './errors.js';
 import { syncedFieldsToQomon, type QomonSyncedFields } from './transaction-extra-fields.js';
+import { mergeContact } from './contact-write.js';
 import type {
   QomonBundle,
   QomonCodeCampaign,
@@ -304,6 +305,12 @@ export class InMemoryQomon implements QomonApi {
     const replaced = { ...contact, id };
     this.contacts.set(id, replaced);
     return structuredClone(replaced);
+  }
+
+  async updateContact(id: number, changes: Partial<QomonContact>): Promise<QomonContact> {
+    const current = await this.getContact(id);
+    await this.replaceContact(id, mergeContact(current, changes, id));
+    return this.getContact(id);
   }
 
   async getContact(id: number): Promise<QomonContact> {

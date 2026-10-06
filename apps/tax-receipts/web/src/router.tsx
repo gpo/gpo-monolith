@@ -35,6 +35,7 @@ import { ADMIN_SECTIONS, AdminLayout, visibleAdminSections } from './routes/admi
 import { AttributePaymentPage, NewPaymentPage } from './routes/payment-entry.js';
 import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
+import { ContributorDetailPage, ContributorsPage } from './routes/contributors.js';
 import { DashboardPage } from './routes/dashboard.js';
 import { DonorPrecheckConfirmPage } from './routes/donor-precheck.js';
 import { EntityReportsPage } from './routes/entity-reports.js';
@@ -175,6 +176,7 @@ function RootLayout() {
           </Link>
           <Group gap="xs">
             <HeaderLink to="/contributions">Contributions</HeaderLink>
+            <HeaderLink to="/contributors">Contributors</HeaderLink>
             <HeaderLink to="/work-queue">Work queue</HeaderLink>
             <HeaderLink to="/rtd-filings">RTD filings</HeaderLink>
             <HeaderLink to="/admin">Admin</HeaderLink>
@@ -222,6 +224,21 @@ const contributionDetailRoute = createRoute({
   component: () => {
     const { id } = useParams({ from: '/contributions/$id' });
     return <ContributionDetailPage id={id} />;
+  },
+});
+
+const contributorsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/contributors',
+  component: ContributorsPage,
+});
+
+const contributorDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/contributors/$id',
+  component: () => {
+    const { id } = useParams({ from: '/contributors/$id' });
+    return <ContributorDetailPage id={id} />;
   },
 });
 
@@ -316,6 +333,8 @@ const routeTree = rootRoute.addChildren([
   donorPrecheckRoute,
   contributionsRoute,
   contributionDetailRoute,
+  contributorsRoute,
+  contributorDetailRoute,
   newPaymentRoute,
   attributePaymentRoute,
   workQueueRoute,

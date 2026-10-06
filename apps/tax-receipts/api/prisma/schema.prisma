@@ -36,6 +36,11 @@ enum ReceivedBy {
   ENTITY
 }
 
+/// Ontario accepts contributions from individuals only (EO evaluation row 23)
+enum ContributorType {
+  INDIVIDUAL
+}
+
 enum ReceiptStatus {
   ISSUED
   CANCELLED
@@ -215,29 +220,34 @@ enum ChangeLogSubjectType {
 // Financial core
 // ---------------------------------------------------------------------------
 
+/// A contributor. Guarded by invariant 5: every insert or update must run
+/// inside a change-logged transaction (contacts/write.ts, D13).
 model Contact {
-  id             String    @id @default(cuid())
-  /// null only in development and testing (D12): before go-live a contact needs
-  /// a Qomon link before a contribution can be attributed to it (invariant 9).
-  qomonContactId BigInt?   @unique
-  name           String
-  /// Qomon's separate firstname/surname (ticket 4.1: the ALL/S2P2 EO reports
+  id              String          @id @default(cuid())
+  /// the Qomon contact this mirrors (D13). Null for a tool-owned contact: one
+  /// added in the tool while no Qomon space is configured, or a fixture.
+  qomonContactId  BigInt?         @unique
+  name            String
+  /// separate first and last name (ticket 4.1: the ALL/S2P2 EO reports
   /// need first and last name as distinct columns, which `name` cannot supply
   /// once joined; null when Qomon has no name split, e.g. an org-only contact)
-  firstName      String?
-  lastName       String?
-  email          String?
-  /// full mailing address as last synced from Qomon (JSON blob)
-  addresses      Json      @default("[]")
-  lastSyncedAt   DateTime?
+  firstName       String?
+  lastName        String?
+  email           String?
+  contributorType ContributorType @default(INDIVIDUAL)
+  /// mailing address, a single-element array in Qomon's address shape
+  /// (housenumber, street, city, state, postalcode, country); see
+  /// contacts/address.ts
+  addresses       Json            @default("[]")
+  lastSyncedAt    DateTime?
   /// hash over amount/date/contact-relevant fields for cheap drift detection
-  syncHash       String?
+  syncHash        String?
   /// set when a duplicate was merged into another contact (corrections.md
   /// action 10); the record stays, pointing at the survivor
-  mergedIntoId   String?
-  mergedAt       DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  mergedIntoId    String?
+  mergedAt        DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   mergedInto       Contact?               @relation("ContactMerge", fields: [mergedIntoId], references: [id])
   mergedFrom       Contact[]              @relation("ContactMerge")

@@ -170,6 +170,9 @@ export class QomonClient implements QomonApi {
   replaceContact(id: number, contact: QomonContact) {
     return this.contacts.replaceContact(id, contact);
   }
+  updateContact(id: number, changes: Partial<QomonContact>) {
+    return this.contacts.updateContact(id, changes);
+  }
   getContact(id: number) {
     return this.contacts.getContact(id);
   }

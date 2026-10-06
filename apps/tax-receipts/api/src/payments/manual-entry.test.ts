@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 import { addContributionToPayment, enterManualPayment, ManualEntryError, previewIntake } from './manual-entry.js';
 
 const prisma = testPrisma();
@@ -12,7 +12,7 @@ describe('manual entry (D12): a payment and contribution with no Qomon transacti
     await resetDb(prisma);
     baseline = await seedBaseline(prisma);
     // no Qomon link: allowed in development and testing (D12, invariant 9)
-    contactId = (await prisma.contact.create({ data: { name: 'Dana Donor', email: 'dana@example.org' } })).id;
+    contactId = (await fixtureContact(prisma, { data: { name: 'Dana Donor', email: 'dana@example.org' } })).id;
   });
 
   const base = () => ({
@@ -58,7 +58,8 @@ describe('manual entry (D12): a payment and contribution with no Qomon transacti
 
   it('logs the payment, contribution, and metadata in one cascade carrying the actor and reason', async () => {
     await enterManualPayment(prisma, base());
-    const entries = await prisma.changeLogEntry.findMany();
+    // the fixture contact's own entry is not part of this cascade
+    const entries = await prisma.changeLogEntry.findMany({ where: { subjectType: { not: 'Contact' } } });
     expect(entries.map((e) => e.subjectType).sort()).toEqual(['Contribution', 'Payment']);
     expect(new Set(entries.map((e) => e.correlationId)).size).toBe(1);
     expect(entries.every((e) => e.actorUserId === baseline.cfoUserId && e.reason === base().reason)).toBe(true);
@@ -110,7 +111,7 @@ describe('manual entry (D12): a payment and contribution with no Qomon transacti
 
   describe('a payment attributed across several contributions', () => {
     it('creates every contribution on the one payment, each with its own donor, entity, and derived period', async () => {
-      const sam = await prisma.contact.create({ data: { name: 'Sam Spouse' } });
+      const sam = await fixtureContact(prisma, { data: { name: 'Sam Spouse' } });
       await prisma.riding.create({ data: { ridingNumber: 12, name: 'Brampton West', active: true, qomonApiKey: 'x' } });
 
       const result = await enterManualPayment(prisma, {
@@ -166,8 +167,8 @@ describe('manual entry (D12): a payment and contribution with no Qomon transacti
       enterManualPayment(prisma, { ...base(), descriptive: { entity_kind: 'PARTY', riding_number: 12 } }),
     ).rejects.toThrow(/party contribution carries no riding/);
 
-    const survivor = await prisma.contact.create({ data: { name: 'Val T.' } });
-    const merged = await prisma.contact.create({ data: { name: 'Valerie T.', mergedIntoId: survivor.id } });
+    const survivor = await fixtureContact(prisma, { data: { name: 'Val T.' } });
+    const merged = await fixtureContact(prisma, { data: { name: 'Valerie T.', mergedIntoId: survivor.id } });
     await expect(enterManualPayment(prisma, { ...base(), contactId: merged.id })).rejects.toThrow(/merged into another contact/);
     await expect(
       enterManualPayment(prisma, { ...base(), contributions: [{ amountCents: 7_500, contactId: merged.id }] }),
@@ -177,7 +178,7 @@ describe('manual entry (D12): a payment and contribution with no Qomon transacti
   describe('attributing the rest of a payment later', () => {
     it('adds a contribution within what is unattributed, and reports what is left', async () => {
       const { payment } = await enterManualPayment(prisma, { ...base(), contributions: [{ amountCents: 5_000 }] });
-      const sam = await prisma.contact.create({ data: { name: 'Sam Spouse' } });
+      const sam = await fixtureContact(prisma, { data: { name: 'Sam Spouse' } });
 
       const added = await addContributionToPayment(prisma, {
         actorUserId: baseline.cfoUserId,

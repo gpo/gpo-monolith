@@ -85,11 +85,16 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
     expect(workItems.every((w) => w.kind === 'VALIDATION' && w.status === 'OPEN')).toBe(true);
 
     // the import's writes go through the guarded change-log path, one entry
-    // per created row, all in one cascade
-    const entries = await prisma.changeLogEntry.findMany();
-    expect(entries.map((e) => e.subjectType).sort()).toEqual(['Contribution', 'Payment']);
+    // per created row: the new contact first (D13), then the payment and
+    // contribution in one cascade
+    const all = await prisma.changeLogEntry.findMany();
+    expect(all.map((e) => e.subjectType).sort()).toEqual(['Contact', 'Contribution', 'Payment']);
+    expect(all.every((e) => e.actorUserId === null)).toBe(true); // system actor
+    const contactEntry = all.find((e) => e.subjectType === 'Contact')!;
+    expect(contactEntry).toMatchObject({ subjectId: contribution?.contactId, before: null });
+    expect(contactEntry.after).toMatchObject({ name: 'Dana Donor', qomonContactId: '501' });
+    const entries = all.filter((e) => e.subjectType !== 'Contact');
     expect(new Set(entries.map((e) => e.correlationId)).size).toBe(1);
-    expect(entries.every((e) => e.actorUserId === null)).toBe(true); // system actor
     expect(contribution?.correlationId).toBe(entries[0]?.correlationId);
 
     // a second transaction for the same Qomon contact reuses the local Contact row

@@ -7,7 +7,7 @@ import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
 import { issueReceipt } from '../receipts/issue.js';
-import { createTestContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -44,8 +44,8 @@ describe('correction routes (corrections.md actions 4, 5, 6, 8, 9, 12)', () => {
     });
 
     const address = [{ housenumber: '1', street: 'Main St', city: 'Toronto', state: 'ON', postalcode: 'M1M1M1', country: 'CA' }];
-    const dana = await prisma.contact.create({ data: { qomonContactId: 1n, name: 'Dana Donor', addresses: address } });
-    const robin = await prisma.contact.create({ data: { qomonContactId: 2n, name: 'Robin Recipient', addresses: address } });
+    const dana = await fixtureContact(prisma, { data: { qomonContactId: 1n, name: 'Dana Donor', addresses: address } });
+    const robin = await fixtureContact(prisma, { data: { qomonContactId: 2n, name: 'Robin Recipient', addresses: address } });
     danaId = dana.id;
     robinId = robin.id;
 

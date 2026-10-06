@@ -12,7 +12,7 @@ import { prepareRtdFiling } from '../rtd/prepare.js';
 import { IssuanceDisabledError } from '../auth/kill-switch.js';
 import { MissingAddressError, issueReceipt } from '../receipts/issue.js';
 import { TerminalReceiptError } from '../receipts/allocate.js';
-import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact, fixtureContactUpdate } from '../test/db.js';
 import { cancelReceipt, previewReceiptCorrection, reissueReceipt } from './cancel.js';
 
 const prisma = testPrisma();
@@ -39,7 +39,7 @@ describe('correction actions 1 & 2: cancel / reissue (ticket 3.10)', () => {
     { housenumber: '1', street: 'Main St', city: 'Toronto', state: 'ON', postalcode: 'M1M1M1', country: 'CA' },
   ]) {
     const id = nextContactId++;
-    return prisma.contact.create({
+    return fixtureContact(prisma, {
       data: { qomonContactId: id, name: 'Dana Donor', addresses: addresses as Prisma.InputJsonValue },
     });
   }
@@ -264,7 +264,7 @@ describe('correction actions 1 & 2: cancel / reissue (ticket 3.10)', () => {
     // The address was fine at issuance; simulate it going stale/incomplete
     // in Qomon before the correction runs (reissue re-derives address fresh
     // from the live cache, per corrections.md action 2).
-    await prisma.contact.update({
+    await fixtureContactUpdate(prisma, {
       where: { id: contact.id },
       data: { addresses: [{ housenumber: '1', street: 'Main St', country: 'CA' }] as Prisma.InputJsonValue },
     });

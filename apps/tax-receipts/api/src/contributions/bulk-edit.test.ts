@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact } from '../test/db.js';
 import {
   BulkEditEmptyChangesError,
   BulkEditTooLargeError,
@@ -18,7 +18,7 @@ describe('bulkEditContributionMetadata (ticket 1.4, local-only since D12)', () =
   });
 
   async function seedRow(qomonId: bigint, opts: { ridingNumber?: number | null; nonDeductibleCents?: number } = {}) {
-    const contact = await prisma.contact.create({ data: { qomonContactId: qomonId, name: 'Dana Donor' } });
+    const contact = await fixtureContact(prisma, { data: { qomonContactId: qomonId, name: 'Dana Donor' } });
     const contribution = await createTestContribution(prisma, {
       contactId: contact.id,
       qomonTransactionId: qomonId,
@@ -82,7 +82,7 @@ describe('bulkEditContributionMetadata (ticket 1.4, local-only since D12)', () =
 
   it('reports a per-row failure without stopping the rest of the batch', async () => {
     const a = await seedRow(4n, { ridingNumber: 84 });
-    const contact = await prisma.contact.create({ data: { qomonContactId: 40n, name: 'No Metadata' } });
+    const contact = await fixtureContact(prisma, { data: { qomonContactId: 40n, name: 'No Metadata' } });
     const noMetadata = await createTestContribution(prisma, { contactId: contact.id, qomonTransactionId: 40n, amountCents: 1, acceptedAt: new Date('2026-03-01T00:00:00Z') });
 
     const result = await bulkEditContributionMetadata(

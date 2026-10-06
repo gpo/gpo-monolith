@@ -21,6 +21,7 @@ import {
 } from '@mantine/core';
 import { api, ApiError, type ContributionDetail, type MetadataEditInput } from '../api.js';
 import { describeRuleRef } from '../rule-labels.js';
+import { ContactFormModal } from '../components/contact-form-modal.js';
 import { CorrectionPanel } from '../components/correction-panel.js';
 import { PageHeader } from '../components/PageHeader.js';
 import { ReceiptActions } from '../components/receipt-actions.js';
@@ -123,8 +124,9 @@ function a2RidingEntityWarning(
  * Contribution detail (ticket 1.5, screens.md 3): the payment behind the
  * contribution, metadata editable with a mandatory reason, allocations/
  * receipts, RTD inclusions, WorkItems, and the change-log slice for this
- * contribution. Import provenance when the payment came from Qomon, and a
- * "refresh donor from Qomon" action (contacts stay Qomon-owned, D12).
+ * contribution. Import provenance when the payment came from Qomon, an
+ * "edit donor" action, and for a Qomon contact a "refresh donor from Qomon"
+ * action (D13).
  */
 
 export function money(cents: number): string {
@@ -228,9 +230,15 @@ export function ContributionDetailPage({ id }: { id: string }) {
 
   const [refreshOutcome, setRefreshOutcome] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [editingDonor, setEditingDonor] = useState(false);
+  const donorRecord = useQuery({
+    queryKey: ['contact', detail?.contact.id],
+    queryFn: () => api.getContact(detail!.contact.id),
+    enabled: editingDonor && !!detail,
+  });
 
-  // Contacts stay Qomon-owned (D12), so a corrected donor address in Qomon
-  // reaches the tool through this on-demand refresh, not through the
+  // A Qomon contact (D13) can change in Qomon, so a corrected donor address
+  // there reaches the tool through this on-demand refresh, not through the
   // contribution itself, which is the tool's own.
   const refreshDonor = useMutation({
     mutationFn: () => api.refreshContributionContact(id),
@@ -291,6 +299,10 @@ export function ContributionDetailPage({ id }: { id: string }) {
   return (
     <Stack gap="lg">
       <PageHeader title="Contribution" backTo="/contributions" backLabel="Back to list" />
+      {editingDonor && donorRecord.data && (
+        <ContactFormModal contact={donorRecord.data} onClose={() => setEditingDonor(false)} />
+      )}
+      {editingDonor && donorRecord.isError && <Alert color="red">Could not load the donor to edit.</Alert>}
 
       <Card withBorder>
         <Stack gap="xs">
@@ -303,17 +315,24 @@ export function ContributionDetailPage({ id }: { id: string }) {
                   {detail.qomon.lastSyncedAt ? new Date(detail.qomon.lastSyncedAt).toLocaleString() : 'never'}
                 </Text>
               )}
-              <Button
-                size="xs"
-                variant="light"
-                onClick={() => {
-                  setRefreshOutcome(null);
-                  refreshDonor.mutate();
-                }}
-                loading={refreshDonor.isPending}
-              >
-                Refresh donor from Qomon
-              </Button>
+              {me.data?.can.editContacts && (
+                <Button size="xs" variant="light" onClick={() => setEditingDonor(true)} loading={editingDonor && donorRecord.isLoading}>
+                  Edit donor
+                </Button>
+              )}
+              {detail.contact.qomonContactId !== null && (
+                <Button
+                  size="xs"
+                  variant="light"
+                  onClick={() => {
+                    setRefreshOutcome(null);
+                    refreshDonor.mutate();
+                  }}
+                  loading={refreshDonor.isPending}
+                >
+                  Refresh donor from Qomon
+                </Button>
+              )}
             </Group>
           </Group>
           {refreshOutcome && (
@@ -341,7 +360,13 @@ export function ContributionDetailPage({ id }: { id: string }) {
             </Alert>
           )}
           <Group grow>
-            <Text>Donor: {detail.contact.name}</Text>
+            <Text>
+              Donor:{' '}
+              <Link to="/contributors/$id" params={{ id: detail.contact.id }}>
+                {detail.contact.name}
+              </Link>{' '}
+              (Individual)
+            </Text>
             <Text>Amount: {money(detail.amountCents)}</Text>
             <Text>Accepted: {new Date(detail.acceptedAt).toLocaleDateString()}</Text>
             <Text>Payment state: {detail.payment.state}</Text>
@@ -357,8 +382,9 @@ export function ContributionDetailPage({ id }: { id: string }) {
             Address on file:{' '}
             {detail.contact.address
               ? `${detail.contact.address.line1}, ${detail.contact.address.city} ${detail.contact.address.province} ${detail.contact.address.postalCode}, ${detail.contact.address.country}`
-              : 'none — a receipt cannot be issued until this donor has an address in Qomon'}
+              : 'none — a receipt cannot be issued until this donor has an address on file'}
           </Text>
+          <Text size="sm">Contributor type: Individual</Text>
           {(detail.note ?? detail.payment.note) && (
             <Text size="sm">Note: {detail.note ?? detail.payment.note}</Text>
           )}

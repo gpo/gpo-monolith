@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
-import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -29,7 +29,7 @@ describe('receipt routes (ticket 3.1)', () => {
       data: { passwordHash: await hashPassword('cfo-pass-phrase') },
     });
 
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: 1n,
         name: 'Dana Donor',
@@ -196,7 +196,7 @@ describe('receipt allocation route (ticket 3.2)', () => {
       },
     });
 
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: 1n,
         name: 'Dana Donor',
@@ -318,7 +318,7 @@ describe('receipt correction routes: cancel / reissue (ticket 3.10)', () => {
       },
     });
 
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: 1n,
         name: 'Dana Donor',

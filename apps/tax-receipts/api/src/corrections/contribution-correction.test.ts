@@ -8,7 +8,7 @@ import type { Prisma } from '../generated/prisma/index.js';
 import { issueReceipt } from '../receipts/issue.js';
 import { markRtdFilingSent } from '../rtd/mark-sent.js';
 import { prepareRtdFiling } from '../rtd/prepare.js';
-import { createTestContribution, fixtureWrite, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { createTestContribution, fixtureWrite, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 import { correctAmount, moveContributions, moveReceipt, reallocate, refund, splitContribution } from './actions.js';
 import {
   CorrectionBlockedError,
@@ -50,7 +50,7 @@ describe('contribution correction engine (corrections.md actions 4, 5, 6, 8, 9, 
   });
 
   async function seedContact(name = 'Dana Donor', addresses: unknown[] = GOOD_ADDRESS) {
-    return prisma.contact.create({
+    return fixtureContact(prisma, {
       data: { qomonContactId: nextContactId++, name, addresses: addresses as Prisma.InputJsonValue },
     });
   }

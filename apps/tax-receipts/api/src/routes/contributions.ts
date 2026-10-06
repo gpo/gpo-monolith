@@ -15,7 +15,7 @@ import type { SessionUser } from '../plugins/auth.js';
  * screens.md 3), metadata edit (ticket 1.2), and bulk edit (ticket 1.4).
  * The tool owns contributions (D12), so the edit and bulk-edit routes work on
  * the local database only. The one route that talks to Qomon is the donor
- * refresh, because contacts stay Qomon-owned; it returns 501 until a Qomon
+ * refresh, for contacts Qomon owns (D13); it returns 501 until a Qomon
  * client is configured.
  */
 export async function contributionRoutes(
@@ -104,7 +104,7 @@ export async function contributionRoutes(
           .code(501)
           .send({ error: 'Qomon is not configured (QOMON_API_KEY unset); cannot refresh the donor' });
       }
-      const outcome = await refreshContributionContact(app.prisma, opts.qomon, request.params.id);
+      const outcome = await refreshContributionContact(app.prisma, opts.qomon, request.params.id, user.id);
       return reply.send({ outcome });
     },
   });

@@ -35,6 +35,7 @@ export type AppAction =
 export type AppSubject =
   | 'all'
   | 'Contribution'
+  | 'Contact'
   | 'Payment'
   | 'ContributionMetadata'
   | 'Receipt'

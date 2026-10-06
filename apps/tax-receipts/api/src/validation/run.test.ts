@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact } from '../test/db.js';
 import { runValidationForAllContributions, runValidationForContribution } from './run.js';
 
 const prisma = testPrisma();
@@ -14,7 +14,7 @@ describe('validation engine v1 (ticket 1.7)', () => {
   });
 
   async function seedContact(qomonContactId: bigint, email: string | null = null) {
-    return prisma.contact.create({
+    return fixtureContact(prisma, {
       data: {
         qomonContactId,
         name: 'Dana Donor',

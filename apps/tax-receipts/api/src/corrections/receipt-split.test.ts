@@ -8,7 +8,7 @@ import { allocateToReceipt, TerminalReceiptError } from '../receipts/allocate.js
 import { issueReceipt } from '../receipts/issue.js';
 import { markRtdFilingSent } from '../rtd/mark-sent.js';
 import { prepareRtdFiling } from '../rtd/prepare.js';
-import { createTestContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact, fixtureContactUpdate } from '../test/db.js';
 import { cancelReceipt } from './cancel.js';
 import { CorrectionBlockedError, CorrectionValidationError } from './contribution-correction.js';
 import { previewReceiptSplit, splitReceipt } from './receipt-split.js';
@@ -38,7 +38,7 @@ describe('correction action 7: split a receipt', () => {
     baseline = await seedBaseline(prisma);
     storageDir = await mkdtemp(path.join(tmpdir(), 'gpo-split-test-'));
     nextTx = 1n;
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: 1n,
         name: 'Dana Donor',
@@ -180,7 +180,7 @@ describe('correction action 7: split a receipt', () => {
   });
 
   it('is blocked, before any write, when the donor has no printable address', async () => {
-    await prisma.contact.update({ where: { id: contactId }, data: { addresses: [] } });
+    await fixtureContactUpdate(prisma, { where: { id: contactId }, data: { addresses: [] } });
     const plan = await previewReceiptSplit(prisma, input());
     expect(plan.blockers[0]).toContain('Dana Donor is missing');
     await expect(splitReceipt({ prisma, storageDir }, input())).rejects.toBeInstanceOf(CorrectionBlockedError);

@@ -6,7 +6,7 @@ import {
   QomonRateLimitError,
   QomonServerError,
 } from './errors.js';
-import { GuardedContactWriter, IncompleteContactError } from './contact-write.js';
+import { GuardedContactWriter, IncompleteContactError, mergeContact } from './contact-write.js';
 
 describe('RateLimiter', () => {
   it('spaces calls to the configured rps', async () => {
@@ -138,5 +138,38 @@ describe('GuardedContactWriter', () => {
         address: { street: 'x' },
       }),
     ).resolves.toMatchObject({ id: 1 });
+  });
+
+  it('updates by writing back the whole current record with the changes merged in', async () => {
+    const store = new Map<number, Record<string, unknown>>([
+      [7, { id: 7, firstname: 'Ada', surname: 'Lovelace', phone: '555', address: { street: 'Old St', city: 'Guelph', lat: 1 } }],
+    ]);
+    const w = new GuardedContactWriter({
+      createContact: async (c) => c,
+      replaceContact: async (id, c) => {
+        store.set(id, c);
+        return c;
+      },
+      getContact: async (id) => structuredClone(store.get(id)!),
+    });
+    // no email on file: a plain replace would refuse this contact
+    const updated = await w.updateContact(7, { surname: 'King', address: { street: 'New St' } });
+    expect(updated).toEqual({
+      id: 7,
+      firstname: 'Ada',
+      surname: 'King',
+      phone: '555',
+      address: { street: 'New St', city: 'Guelph', lat: 1 },
+    });
+  });
+});
+
+describe('mergeContact', () => {
+  it('leaves the address alone when the changes do not name it, and never takes an id from the changes', () => {
+    expect(mergeContact({ id: 1, firstname: 'A', address: { city: 'X' } }, { id: 99, firstname: 'B' }, 1)).toEqual({
+      id: 1,
+      firstname: 'B',
+      address: { city: 'X' },
+    });
   });
 });

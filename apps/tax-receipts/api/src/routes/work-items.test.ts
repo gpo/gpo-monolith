@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -19,7 +19,7 @@ describe('work queue routes (ticket 1.8)', () => {
       where: { id: baseline.adminUserId },
       data: { passwordHash: await hashPassword('admin-pass-phrase') },
     });
-    const contact = await prisma.contact.create({ data: { qomonContactId: 1n, name: 'Dana Donor' } });
+    const contact = await fixtureContact(prisma, { data: { qomonContactId: 1n, name: 'Dana Donor' } });
     const item = await prisma.workItem.create({
       data: { kind: 'VALIDATION', subjectType: 'Contribution', subjectId: 'c1', contactId: contact.id, ruleRef: 'A8' },
     });

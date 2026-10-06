@@ -15,15 +15,14 @@ import {
   type ChangedTransaction,
   type ChangeFeedSource,
   type QomonApi,
-  type QomonContact,
   type QomonSyncedFields,
   type QomonTransaction,
 } from '@gpo/qomon-client';
 import { withChangeLog } from '../changelog/write.js';
+import { mirrorQomonContact, revalidateContact } from '../contacts/write.js';
 import { descriptiveToColumns } from '../contributions/metadata-cache.js';
 import { createPaymentWithContribution } from '../payments/create.js';
 import { runValidationForContribution } from '../validation/run.js';
-import type { Prisma } from '../generated/prisma/index.js';
 import type { PrismaClient } from '../generated/prisma/index.js';
 
 /**
@@ -49,7 +48,9 @@ import type { PrismaClient } from '../generated/prisma/index.js';
  * Contact sync is on-demand only (data-model §5): a contact is fetched the
  * first time the sweep sees a transaction for it. The nightly "contacts on
  * unissued receipts" refresh has no receipts to refresh yet (Phase 3) and is
- * deliberately out of scope here.
+ * deliberately out of scope here. A contact the sweep creates is
+ * change-logged with no actor (`system`), like the payment it arrives with
+ * (D13: `contact` is a guarded table).
  */
 
 export interface MirrorSweepDeps {
@@ -97,6 +98,8 @@ const REASON_NEW_STUB = 'import sweep: new Qomon transaction, intake defaults ap
 const REASON_NEW_FROM_QOMON = 'import sweep: new Qomon transaction, metadata taken from Qomon on first sight';
 const REASON_NEW_NO_PERIOD = 'import sweep: new Qomon transaction, no period resolves yet';
 const REASON_BACKFILL = 'import sweep: metadata backfilled now that a period resolves';
+const REASON_NEW_CONTACT = 'import sweep: new Qomon contact, first seen on a transaction';
+const REASON_REFRESH_CONTACT = 'refreshed donor from Qomon';
 
 const KNOWN_STATUS_KINDS: ReadonlySet<string> = new Set([
   'valid',
@@ -360,19 +363,6 @@ async function backfillMetadataIfPossible(
   return true;
 }
 
-function contactFieldsFromQomon(fetched: QomonContact, fallbackId: number) {
-  return {
-    name: contactDisplayName(fetched, fallbackId),
-    // Kept alongside `name` (ticket 4.1): the ALL/S2P2 EO reports need
-    // Contributor_First_Name / Contributor_Last_Name as separate columns,
-    // which the joined display name can't supply back apart.
-    firstName: fetched.firstname?.trim() || null,
-    lastName: fetched.surname?.trim() || null,
-    email: fetched.mail ?? null,
-    addresses: (fetched.address ? [fetched.address] : []) as Prisma.InputJsonValue,
-  };
-}
-
 async function ensureContact(
   prisma: PrismaClient,
   qomon: Pick<QomonApi, 'getContact'>,
@@ -383,12 +373,11 @@ async function ensureContact(
   if (existing) return existing.id;
 
   const fetched = await qomon.getContact(qomonContactId);
-  const created = await prisma.contact.create({
-    data: {
-      qomonContactId: id,
-      ...contactFieldsFromQomon(fetched, qomonContactId),
-      lastSyncedAt: new Date(),
-    },
+  const created = await mirrorQomonContact(prisma, {
+    userId: null,
+    reason: REASON_NEW_CONTACT,
+    qomonContactId,
+    fetched,
   });
   return created.id;
 }
@@ -402,29 +391,28 @@ async function ensureContact(
  * contribution has no such volume concern, and "refresh, right now" should
  * actually mean that for the donor's address too — otherwise a corrected
  * address in Qomon can never reach a contact created before the fix.
+ *
+ * Change-logged like every contact write (D13), with the user who asked for
+ * the refresh as the actor.
  */
 export async function refreshContactFromQomon(
   prisma: PrismaClient,
   qomon: Pick<QomonApi, 'getContact'>,
   contactId: string,
+  actorUserId: string | null,
 ): Promise<void> {
   const contact = await prisma.contact.findUnique({ where: { id: contactId } });
-  // a contact with no Qomon link (development and testing only, D12) has
-  // nothing to refresh from
+  // a tool-owned contact (no Qomon link, D13) has nothing to refresh from
   if (!contact || contact.qomonContactId === null) return;
   const qomonContactId = Number(contact.qomonContactId);
   const fetched = await qomon.getContact(qomonContactId);
-  await prisma.contact.update({
-    where: { id: contactId },
-    data: { ...contactFieldsFromQomon(fetched, qomonContactId), lastSyncedAt: new Date() },
+  await mirrorQomonContact(prisma, {
+    userId: actorUserId,
+    reason: REASON_REFRESH_CONTACT,
+    qomonContactId,
+    fetched,
   });
-}
-
-function contactDisplayName(c: QomonContact, fallbackId: number): string {
-  const parts = [c.firstname, c.surname].filter(
-    (p): p is string => typeof p === 'string' && p.trim().length > 0,
-  );
-  return parts.length > 0 ? parts.join(' ') : `Qomon contact ${fallbackId}`;
+  await revalidateContact(prisma, contact.id);
 }
 
 /** A Qomon-side edit or deletion of an imported transaction (O47): one open

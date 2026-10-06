@@ -10,6 +10,7 @@ import { $Enums } from '../generated/prisma/index.js';
 const pairs: Array<[string, readonly string[], readonly string[]]> = [
   ['EntityKind', core.EntityKind.options, Object.values($Enums.EntityKind)],
   ['ReceivedBy', core.ReceivedBy.options, Object.values($Enums.ReceivedBy)],
+  ['ContributorType', core.ContributorType.options, Object.values($Enums.ContributorType)],
   ['ReceiptStatus', core.ReceiptStatus.options, Object.values($Enums.ReceiptStatus)],
   ['ReceiptDelivery', core.ReceiptDelivery.options, Object.values($Enums.ReceiptDelivery)],
   ['ReceiptNumberSource', core.ReceiptNumberSource.options, Object.values($Enums.ReceiptNumberSource)],

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
-import { issueReceipt as fixtureIssueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { issueReceipt as fixtureIssueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -29,7 +29,7 @@ describe('entity report routes (ticket 4.5)', () => {
       data: { passwordHash: await hashPassword('admin-pass-phrase') },
     });
 
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: 1n,
         name: 'Dana Donor',

@@ -28,6 +28,7 @@ export const PERMISSION_KEYS = [
   'settings.administer',
   'records.readAll',
   'payment.enter',
+  'contact.manage',
   'contribution.edit',
   'contribution.correct',
   'workItem.create',
@@ -84,6 +85,15 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
     description: 'Record manual payments (cheque, cash, e-transfer) and the contributions they fund.',
     grant: (can) => {
       can('create', ['Payment', 'Contribution']);
+    },
+  },
+  'contact.manage': {
+    group: 'Contributions',
+    label: 'Add and edit contributors',
+    description:
+      "Add new contributors and edit a contributor's name, email, and address. When a Qomon space is configured the change is made in Qomon first.",
+    grant: (can) => {
+      can(['create', 'update'], 'Contact');
     },
   },
   'contribution.edit': {
@@ -220,6 +230,7 @@ export const BUILT_IN_ROLES: BuiltInRole[] = [
     permissions: [
       'records.readAll',
       'payment.enter',
+      'contact.manage',
       'contribution.edit',
       'contribution.correct',
       'receipt.issue',
@@ -236,6 +247,7 @@ export const BUILT_IN_ROLES: BuiltInRole[] = [
     description: 'Day-to-day contribution and receipt work.',
     permissions: [
       'payment.enter',
+      'contact.manage',
       'contribution.edit',
       'contribution.correct',
       'workItem.create',
