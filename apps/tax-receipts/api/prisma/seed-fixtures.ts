@@ -3,6 +3,8 @@ import { PrismaClient, type EntityKind, type Prisma, type ReceivedBy } from '../
 import { allocateToReceipt } from '../src/receipts/allocate.js';
 import { issueReceipt } from '../src/receipts/issue.js';
 import { withChangeLog } from '../src/changelog/write.js';
+import { createLeadershipContestant } from '../src/leadership/contestants.js';
+import { enterManualPayment } from '../src/payments/manual-entry.js';
 import { runValidationForAllContributions } from '../src/validation/run.js';
 import { resolveWorkItem } from '../src/work-items/resolve.js';
 
@@ -73,9 +75,12 @@ import { resolveWorkItem } from '../src/work-items/resolve.js';
  * | Riding 100 (real: Simcoe North) | Used as-is, active — "riding B," kept distinct from 121 so a fixture needing two different ridings (Space D) still demonstrates that. |
  * | Period 9501 | Fixture-only by-election period (`BY_ELECTION`), scoped to riding 121 — periods have no such 1-124 constraint, so a reserved block works fine here. |
  * | Period 9502 | Fixture-only annual period ("Space A"), dated 2028 so it can never collide with a real period's date range or with real Qomon-mirrored data landing in the real 2026 Annual party space. |
- * | Contacts/contributions 800001-800017 | Group 1: one contribution per validation rule (ticket 2.1), plus a three-deposit RTD row-inclusion case reused by Group 2 below. |
+ * | Contacts/contributions 800001-800018 | Group 1: one contribution per validation rule (ticket 2.1), plus a three-deposit RTD row-inclusion case reused by Group 2 below. |
  * | Contacts/contributions 900001-900012, 900101-900102 | Group 2: five issuance spaces (ticket 3.12) - clean, blocked, partial-failure, multi-space donor. |
  * | Contacts/contributions 910001-910002 | Group 3 (new): one donor, two contributions, consolidated onto one receipt (ticket 3.2). |
+ * | Period 9503 | Fixture-only annual period for Group 4 (EO evaluation rows 25, 26, 28), dated 2029 so it cannot collide with 9502 or a real period. |
+ * | Contacts `*@g4.fixture.test`, payments noted `fixture-g4-*` | Group 4: tool-owned contacts (no Qomon id, so editable without Qomon) and MANUAL payments, keyed by email and payment note rather than an id range. |
+ * | Leadership contest "Fixture leadership contest (not real)" | Group 4's two leadership contestants, keyed by name. |
  *
  * Run: `pnpm db:seed:fixtures` (needs `pnpm db:seed` run first — it must run
  * first, not just "first the first time," since this script depends on the
@@ -88,6 +93,7 @@ const ANNUAL_2026 = 67; // '2026 Annual', from prisma/seed.ts
 const ANNUAL_2025 = 63; // '2025 Annual', from prisma/seed.ts
 const BY_ELECTION_PERIOD_ID = 9501;
 const SPACE_A_PERIOD_ID = 9502; // see header comment: why this can't be the real 2026 Annual period
+const EO_EVALUATION_PERIOD_ID = 9503; // Group 4, fully issued so its reports can be generated on the call
 
 // Real riding numbers, borrowed for fixture use — see header comment for
 // why there's no such thing as a "fixture-only" riding number here.
@@ -138,7 +144,7 @@ interface Group1Fixture {
   externalRef?: string | null;
   periodId: number;
   ridingNumber: number | null;
-  entityKind: 'PARTY' | 'CA' | 'CAMPAIGN';
+  entityKind: EntityKind;
   receivedBy: 'GPO' | 'ENTITY';
 }
 
@@ -325,6 +331,20 @@ const GROUP_1_FIXTURES: Group1Fixture[] = [
     ridingNumber: null,
     entityKind: 'PARTY',
     receivedBy: 'GPO',
+  },
+  {
+    demonstrates:
+      'A2 — LEADERSHIP with no contestant, as a Qomon import arrives (Qomon has no contestant field); name one on the detail page to clear it',
+    qomonContactId: 800_018n,
+    contactName: 'Leadership Import Donor',
+    address: ONTARIO_ADDRESS,
+    qomonTransactionId: 800_018n,
+    amountCents: 5_000,
+    acceptedAt: '2026-03-01T12:00:00Z',
+    periodId: ANNUAL_2026,
+    ridingNumber: null,
+    entityKind: 'LEADERSHIP',
+    receivedBy: 'ENTITY',
   },
   // --- RTD fixtures: one contact, three deposits, crossing the $200 RTD
   //     threshold on the second. Raw material for the RTD-flow walkthrough
@@ -736,6 +756,179 @@ async function ensureGroup3(cfoUserId: string): Promise<void> {
 }
 
 // ===========================================================================
+// Group 4 — EO evaluation rows 25, 26, 28 (eo/evaluation-readiness.md):
+// which entity a contribution is directed to (including a leadership
+// contestant), the agency flag, and one payment split across entities. All
+// in fixture period 9503 and entered through the real manual-entry path
+// (MANUAL cheques), then issued, so the ALL and S2P2 reports for each 9503
+// space can be generated on the call with no setup: the CA 121 file shows
+// Agency_Contribution Y and N side by side, and the LEADERSHIP file shows
+// entity type LC with each contestant's name.
+//
+// The contacts are tool-owned (no Qomon id, D13), so they can be edited on
+// the call without Qomon, and each has an email address.
+// ===========================================================================
+
+const LEADERSHIP_CONTEST = 'Fixture leadership contest (not real)';
+const LEADERSHIP_CONTESTANTS = ['Jordan Rivers', 'Sam Okafor'] as const;
+type ContestantName = (typeof LEADERSHIP_CONTESTANTS)[number];
+
+interface Group4Part {
+  amountCents: number;
+  entityKind: EntityKind;
+  ridingNumber?: number;
+  contestant?: ContestantName;
+  receivedBy: ReceivedBy;
+  /** issued as the party CFO right after entry; false leaves it for a live
+   *  issue (the leadership space wizard) */
+  issue: boolean;
+}
+
+interface Group4Fixture {
+  /** EO evaluation row(s) and what this shows; printed to the console */
+  demonstrates: string;
+  /** keys the payment (idempotency), as its note. Not the external ref:
+   *  rule A4 reads one as a processor record, which an entity-received
+   *  cheque is not. */
+  key: string;
+  firstName: string;
+  lastName: string;
+  /** one part = an unsplit payment; several = one cheque split across entities */
+  parts: Group4Part[];
+}
+
+const GROUP_4_FIXTURES: Group4Fixture[] = [
+  {
+    demonstrates: 'rows 26 + 68 — agency contribution: GPO received a gift for CA riding 121 (Agency_Contribution Y)',
+    key: 'fixture-g4-1',
+    firstName: 'Agency',
+    lastName: 'Alex',
+    parts: [{ amountCents: 15_000, entityKind: 'CA', ridingNumber: FIXTURE_ACTIVE_RIDING_A, receivedBy: 'GPO', issue: true }],
+  },
+  {
+    demonstrates: 'row 26 contrast — the same CA received it directly (Agency_Contribution N)',
+    key: 'fixture-g4-2',
+    firstName: 'Direct',
+    lastName: 'Dee',
+    parts: [{ amountCents: 12_000, entityKind: 'CA', ridingNumber: FIXTURE_ACTIVE_RIDING_A, receivedBy: 'ENTITY', issue: true }],
+  },
+  {
+    demonstrates: 'row 28 — one $500 cheque received by GPO, split $300 to the party and $200 to CA riding 121 (the CA part is agency)',
+    key: 'fixture-g4-3',
+    firstName: 'Split',
+    lastName: 'Sam',
+    parts: [
+      { amountCents: 30_000, entityKind: 'PARTY', receivedBy: 'GPO', issue: true },
+      { amountCents: 20_000, entityKind: 'CA', ridingNumber: FIXTURE_ACTIVE_RIDING_A, receivedBy: 'GPO', issue: true },
+    ],
+  },
+  {
+    demonstrates: 'row 25 — directed to leadership contestant Jordan Rivers, received by the contestant (LC, over $200 so it is on the S2P2)',
+    key: 'fixture-g4-4',
+    firstName: 'Leadership',
+    lastName: 'Lee',
+    parts: [{ amountCents: 25_000, entityKind: 'LEADERSHIP', contestant: 'Jordan Rivers', receivedBy: 'ENTITY', issue: true }],
+  },
+  {
+    demonstrates: 'rows 25 + 26 — directed to leadership contestant Sam Okafor, received by GPO (LC, Agency_Contribution Y)',
+    key: 'fixture-g4-5',
+    firstName: 'Leadership',
+    lastName: 'Lou',
+    parts: [{ amountCents: 10_000, entityKind: 'LEADERSHIP', contestant: 'Sam Okafor', receivedBy: 'GPO', issue: true }],
+  },
+  {
+    demonstrates: 'row 25 live — a leadership gift left unissued, for the LEADERSHIP space wizard (its receipt prints the contestant name)',
+    key: 'fixture-g4-6',
+    firstName: 'Leadership',
+    lastName: 'Pat',
+    parts: [{ amountCents: 7_500, entityKind: 'LEADERSHIP', contestant: 'Jordan Rivers', receivedBy: 'GPO', issue: false }],
+  },
+];
+
+/** The fixture contest's contestants, created (change-logged) if absent. */
+async function ensureLeadershipContestants(adminUserId: string): Promise<Map<ContestantName, string>> {
+  const ids = new Map<ContestantName, string>();
+  for (const name of LEADERSHIP_CONTESTANTS) {
+    let contestant = await prisma.leadershipContestant.findFirst({ where: { name, contestName: LEADERSHIP_CONTEST } });
+    if (contestant) {
+      console.log(`  leadership contestant ${name}: already exists — left as-is`);
+    } else {
+      contestant = await createLeadershipContestant(prisma, {
+        name,
+        contestName: LEADERSHIP_CONTEST,
+        actorUserId: adminUserId,
+        reason: 'fixture: leadership contestant for EO evaluation row 25',
+      });
+      console.log(`  leadership contestant ${name}: created`);
+    }
+    ids.set(name, contestant.id);
+  }
+  return ids;
+}
+
+async function ensureGroup4Fixture(
+  f: Group4Fixture,
+  cfoUserId: string,
+  contestantIds: Map<ContestantName, string>,
+): Promise<void> {
+  if (await prisma.payment.findFirst({ where: { note: f.key } })) {
+    console.log(`  skip (already seeded): ${f.firstName} ${f.lastName} — ${f.demonstrates}`);
+    return;
+  }
+
+  const email = `${f.firstName}.${f.lastName}@g4.fixture.test`.toLowerCase();
+  let contact = await prisma.contact.findFirst({ where: { email } });
+  contact ??= await createSeedContact({
+    name: `${f.firstName} ${f.lastName}`,
+    firstName: f.firstName,
+    lastName: f.lastName,
+    email,
+    addresses: [ONTARIO_ADDRESS],
+  });
+
+  const amountCents = f.parts.reduce((sum, p) => sum + p.amountCents, 0);
+  const { contributions } = await enterManualPayment(prisma, {
+    actorUserId: cfoUserId,
+    reason: `fixture: ${f.demonstrates}`,
+    contactId: contact.id,
+    amountCents,
+    receivedAt: new Date('2029-03-01T17:00:00Z'),
+    method: 'CHEQUE',
+    note: f.key,
+    contributions: f.parts.map((p) => ({
+      amountCents: p.amountCents,
+      descriptive: {
+        period_id: EO_EVALUATION_PERIOD_ID,
+        entity_kind: p.entityKind,
+        riding_number: p.ridingNumber ?? null,
+        leadership_contestant_id: p.contestant ? contestantIds.get(p.contestant)! : null,
+        received_by: p.receivedBy,
+      },
+    })),
+  });
+
+  const issued: string[] = [];
+  for (const [i, p] of f.parts.entries()) {
+    if (!p.issue) continue;
+    const receipt = await issueReceipt(
+      { prisma, storageDir: STORAGE_DIR },
+      {
+        contributionId: contributions[i]!.id,
+        actorUserId: cfoUserId,
+        reason: `fixture: issued so the 9503 reports can be generated (${f.demonstrates})`,
+        // a leadership receipt prints its contestant's name instead
+        politicalEntityLabel: p.entityKind === 'CA' ? `York-Simcoe ${p.ridingNumber}` : 'Green Party of Ontario',
+      },
+    );
+    issued.push(receipt.receiptNumber);
+  }
+
+  console.log(
+    `  created${issued.length > 0 ? ` + issued ${issued.join(', ')}` : ''}: ${f.firstName} ${f.lastName} — ${f.demonstrates}`,
+  );
+}
+
+// ===========================================================================
 // Setup helpers (ridings, periods) + the per-fixture writers
 // ===========================================================================
 
@@ -876,6 +1069,7 @@ async function main(): Promise<void> {
   await forceRidingActive(FIXTURE_DEFUNCT_RIDING, false, 'demonstrates A3 — real ridings 121/100 below are left at their real active:true');
   await ensurePeriod(BY_ELECTION_PERIOD_ID, 'Fixture by-election (not a real EO period)', 'BY_ELECTION', [FIXTURE_ACTIVE_RIDING_A], '2026-06-01T05:00:00Z', '2026-09-01T04:00:00Z');
   await ensurePeriod(SPACE_A_PERIOD_ID, 'Fixture — clean space (not a real EO period)', 'ANNUAL', [], '2028-01-01T05:00:00Z', '2029-01-01T05:00:00Z');
+  await ensurePeriod(EO_EVALUATION_PERIOD_ID, 'Fixture — EO evaluation (not a real EO period)', 'ANNUAL', [], '2029-01-01T05:00:00Z', '2030-01-01T05:00:00Z');
 
   console.log('Group 1 — validation rule coverage + RTD row-inclusion prep:');
   for (const fixture of GROUP_1_FIXTURES) {
@@ -894,6 +1088,13 @@ async function main(): Promise<void> {
 
   console.log('Group 3 — allocation consolidation (ticket 3.2):');
   await ensureGroup3(cfo.id);
+
+  console.log('Group 4 — EO evaluation rows 25, 26, 28 (period 9503):');
+  const admin = await prisma.user.findUnique({ where: { email: 'admin@gpo.test' } });
+  const contestantIds = await ensureLeadershipContestants(admin?.id ?? cfo.id);
+  for (const fixture of GROUP_4_FIXTURES) {
+    await ensureGroup4Fixture(fixture, cfo.id, contestantIds);
+  }
 
   console.log('Running the validation registry over everything just seeded...');
   const result = await runValidationForAllContributions(prisma);

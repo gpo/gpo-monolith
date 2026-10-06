@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Checkbox, Group, NativeSelect, NumberInput, Stack, Text, TextInput } from '@mantine/core';
-import { api, type ContactHit, type ContributionEntryInput } from '../api.js';
+import { api, type ContactHit, type ContributionEntryInput, type EntityKindKey } from '../api.js';
+import { ENTITY_KIND_OPTIONS, isRidingScoped } from '../entity-kind.js';
 import { DonorPicker } from './donor-picker.js';
+import { LeadershipContestantSelect } from './leadership-contestant-select.js';
 
 /**
  * The fields of one contribution on the entry form (manual entry, D12): who it
@@ -18,8 +20,10 @@ export interface ContributionRow {
   amount: number | '';
   /** YYYY-MM-DD; '' = the date the payment was received */
   acceptedOn: string;
-  entityKind: 'PARTY' | 'CA' | 'CAMPAIGN';
+  entityKind: EntityKindKey;
   riding: number | '';
+  /** the contestant, for a LEADERSHIP row */
+  leadershipContestantId: string | null;
   /** '' = derive from the date */
   periodId: string;
   receivedBy: 'GPO' | 'ENTITY';
@@ -37,6 +41,7 @@ export function emptyRow(key: number): ContributionRow {
     acceptedOn: '',
     entityKind: 'PARTY',
     riding: '',
+    leadershipContestantId: null,
     periodId: '',
     receivedBy: 'GPO',
     goodsServices: false,
@@ -66,7 +71,10 @@ export function todayIso(): string {
 /** What is wrong with a row, or null when it can be sent. */
 export function rowProblem(row: ContributionRow, amountCents: number): string | null {
   if (amountCents <= 0) return 'Enter an amount.';
-  if (row.entityKind !== 'PARTY' && row.riding === '') return 'A CA or campaign contribution needs its riding number.';
+  if (isRidingScoped(row.entityKind) && row.riding === '') return 'A CA or campaign contribution needs its riding number.';
+  if (row.entityKind === 'LEADERSHIP' && !row.leadershipContestantId) {
+    return 'A leadership contribution needs its leadership contestant.';
+  }
   if (dollarsToCents(row.nonDeductible) > amountCents) return 'The non-deductible portion cannot exceed the amount.';
   return null;
 }
@@ -81,7 +89,8 @@ export function rowToEntry(row: ContributionRow, amountCents: number): Contribut
     ...(row.note.trim() ? { note: row.note.trim() } : {}),
     descriptive: {
       entity_kind: row.entityKind,
-      riding_number: row.entityKind === 'PARTY' ? null : row.riding === '' ? null : row.riding,
+      riding_number: !isRidingScoped(row.entityKind) || row.riding === '' ? null : row.riding,
+      ...(row.entityKind === 'LEADERSHIP' ? { leadership_contestant_id: row.leadershipContestantId } : {}),
       received_by: row.receivedBy,
       goods_services: row.goodsServices,
       ...(dollarsToCents(row.nonDeductible) > 0 ? { non_deductible_cents: dollarsToCents(row.nonDeductible) } : {}),
@@ -116,7 +125,7 @@ export function ContributionFields({
   const ridings = useQuery({ queryKey: ['admin-ridings'], queryFn: api.listRidings });
 
   const effectiveDate = row.acceptedOn || fallbackDate;
-  const riding = row.entityKind === 'PARTY' || row.riding === '' ? null : row.riding;
+  const riding = !isRidingScoped(row.entityKind) || row.riding === '' ? null : row.riding;
   const preview = useQuery({
     queryKey: ['intake-preview', effectiveDate, riding, row.sourceCode, externalRef],
     queryFn: () =>
@@ -154,29 +163,34 @@ export function ContributionFields({
         />
         <NativeSelect
           label="Recipient"
-          data={[
-            { value: 'PARTY', label: 'Party (province-wide)' },
-            { value: 'CA', label: 'Constituency association' },
-            { value: 'CAMPAIGN', label: 'Campaign' },
-          ]}
+          data={ENTITY_KIND_OPTIONS}
           value={row.entityKind}
-          onChange={(e) => set({ entityKind: e.currentTarget.value as ContributionRow['entityKind'], riding: '' })}
-        />
-        <NumberInput
-          label="Riding (1 to 124)"
-          min={1}
-          max={124}
-          allowDecimal={false}
-          disabled={row.entityKind === 'PARTY'}
-          placeholder={row.entityKind === 'PARTY' ? 'N/A for the party' : ''}
-          value={row.riding}
-          onChange={(v) => set({ riding: typeof v === 'number' ? v : '' })}
-          description={
-            row.entityKind !== 'PARTY' && typeof row.riding === 'number'
-              ? (ridings.data?.data.find((r) => r.ridingNumber === row.riding)?.name ?? 'not a riding on file')
-              : undefined
+          onChange={(e) =>
+            set({ entityKind: e.currentTarget.value as ContributionRow['entityKind'], riding: '', leadershipContestantId: null })
           }
         />
+        {row.entityKind === 'LEADERSHIP' ? (
+          <LeadershipContestantSelect
+            value={row.leadershipContestantId}
+            onChange={(leadershipContestantId) => set({ leadershipContestantId })}
+          />
+        ) : (
+          <NumberInput
+            label="Riding (1 to 124)"
+            min={1}
+            max={124}
+            allowDecimal={false}
+            disabled={!isRidingScoped(row.entityKind)}
+            placeholder={!isRidingScoped(row.entityKind) ? 'N/A for the party' : ''}
+            value={row.riding}
+            onChange={(v) => set({ riding: typeof v === 'number' ? v : '' })}
+            description={
+              isRidingScoped(row.entityKind) && typeof row.riding === 'number'
+                ? (ridings.data?.data.find((r) => r.ridingNumber === row.riding)?.name ?? 'not a riding on file')
+                : undefined
+            }
+          />
+        )}
       </Group>
       <Group align="flex-start" grow>
         <NativeSelect
@@ -206,6 +220,11 @@ export function ContributionFields({
           ]}
           value={row.receivedBy}
           onChange={(e) => set({ receivedBy: e.currentTarget.value as ContributionRow['receivedBy'] })}
+          description={
+            row.receivedBy === 'GPO' && row.entityKind !== 'PARTY'
+              ? 'Agency contribution: GPO received it for another entity'
+              : undefined
+          }
         />
         <TextInput
           label="Source code"

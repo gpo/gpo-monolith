@@ -43,6 +43,7 @@ const SUBJECT_TYPES = [
   'User',
   'IssuanceKillSwitch',
   'Role',
+  'LeadershipContestant',
 ];
 
 function jsonCell(value: unknown): string {

@@ -32,6 +32,8 @@ export function descriptiveToColumns(d: GpoMetadataDescriptive) {
     periodId: d.period_id,
     ridingNumber: d.riding_number,
     entityKind: d.entity_kind,
+    // only a LEADERSHIP row names a contestant (rule A2)
+    leadershipContestantId: d.entity_kind === 'LEADERSHIP' ? d.leadership_contestant_id : null,
     receivedBy: d.received_by,
     goodsServices: d.goods_services,
     nonDeductibleCents: d.non_deductible_cents,

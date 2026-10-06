@@ -9,17 +9,23 @@ import { roleKeyFromName } from '../auth/roles.js';
 import { sessionsOfUser } from '../auth/session-store.js';
 import { withChangeLog } from '../changelog/write.js';
 import { listOutstandingDonorPrechecks } from '../donors/precheck.js';
+import {
+  createLeadershipContestant,
+  listLeadershipContestants,
+  updateLeadershipContestant,
+} from '../leadership/contestants.js';
 import type { SessionUser } from '../plugins/auth.js';
 import { runValidationForAllContributions } from '../validation/run.js';
 
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
- * ContributionLimit buckets, users/roles, the RTD holiday calendar, and
- * per-riding Qomon spaces. Period and limit writes take a reason and are
- * change-logged (EO evaluation row 19). Settings writes need `administer Period`
- * (`settings.administer`); user and role writes need `administer User`
- * (`users.administer`); see auth/permissions.ts. Reads need only
- * authentication, matching every other list route.
+ * ContributionLimit buckets, users/roles, the RTD holiday calendar,
+ * per-riding Qomon spaces, and leadership contestants. Period, limit, and
+ * contestant writes take a reason and are change-logged (EO evaluation row
+ * 19). Settings writes need `administer Period` (`settings.administer`);
+ * user and role writes need `administer User` (`users.administer`); see
+ * auth/permissions.ts. Reads need only authentication, matching every other
+ * list route.
  * The one exception is a riding's `qomonApiKey`: never round-tripped back
  * out of a GET, sysadmin-only or not (see `redactRiding` below).
  *
@@ -341,6 +347,56 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         data.push(redactRiding(riding));
       }
       return reply.send({ imported: data.length, created, updated, data });
+    },
+  });
+
+  // ---- Leadership contestants (EO evaluation row 25) -----------------
+
+  // Read by every entry form that can direct a contribution to a contestant,
+  // so it needs only authentication, like the periods and ridings lists.
+  r.get('/admin/leadership-contestants', async (request, reply) => {
+    if (!request.user) return reply.code(401).send({ error: 'authentication required' });
+    return reply.send({ data: await listLeadershipContestants(app.prisma) });
+  });
+
+  const ContestantBody = z.object({
+    name: z.string().trim().min(1),
+    contestName: z.string().trim().min(1),
+    active: z.boolean().optional(),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/admin/leadership-contestants',
+    schema: { body: ContestantBody.extend({ reason: z.string().trim().min(3) }) },
+    handler: async (request, reply) => {
+      const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const { reason, ...fields } = request.body;
+      const created = await createLeadershipContestant(app.prisma, { ...fields, actorUserId: auth.user.id, reason });
+      return reply.code(201).send(created);
+    },
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/admin/leadership-contestants/:id',
+    schema: {
+      params: z.object({ id: z.string() }),
+      body: ContestantBody.partial().extend({ reason: z.string().trim().min(3) }),
+    },
+    handler: async (request, reply) => {
+      const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const { reason, ...fields } = request.body;
+      const updated = await updateLeadershipContestant(app.prisma, {
+        id: request.params.id,
+        ...fields,
+        actorUserId: auth.user.id,
+        reason,
+      });
+      if (!updated) return reply.code(404).send({ error: 'no such leadership contestant' });
+      return reply.send(updated);
     },
   });
 

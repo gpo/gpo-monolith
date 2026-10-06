@@ -290,7 +290,7 @@ export async function issueReceipt(
     /** override the reserved number (to test invariant 3 rejections). */
     forceNumber?: string;
     numberSource?: 'SEQUENCE' | 'FOREIGN';
-    entityKind?: 'CA' | 'CAMPAIGN' | 'PARTY';
+    entityKind?: 'CA' | 'CAMPAIGN' | 'PARTY' | 'LEADERSHIP';
     ridingNumber?: number | null;
     status?: 'ISSUED' | 'CANCELLED' | 'VOID';
     contactNameSnapshot?: string;

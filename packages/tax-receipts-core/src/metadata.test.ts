@@ -9,6 +9,7 @@ const descriptive: GpoMetadataDescriptive = {
   period_id: 67,
   riding_number: 84,
   entity_kind: 'CA',
+  leadership_contestant_id: null,
   received_by: 'GPO',
   goods_services: false,
   non_deductible_cents: 0,

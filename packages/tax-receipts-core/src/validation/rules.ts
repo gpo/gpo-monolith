@@ -5,6 +5,7 @@ import {
 } from '../limits/contribution-limit.js';
 import type { PeriodRow } from '../period/calendar.js';
 import { parseRidingFromSourceCode } from '../source-code.js';
+import { isRidingScoped } from '../enums.js';
 import { isEntityEligible, type RidingRow } from '../space/eligibility.js';
 import type {
   AddressForValidation,
@@ -61,18 +62,27 @@ export function checkA1PeriodWindow(
 /** `period` and `riding` feed the "CAMPAIGN only in a riding with an active
  *  campaign for the period" clause via `isEntityEligible` (space/eligibility.ts);
  *  omit both to skip just that clause (e.g. a caller without period context
- *  yet) — the shape checks below still run. */
+ *  yet) — the shape checks below still run. A LEADERSHIP contribution, like
+ *  a PARTY one, carries no riding, and must name its contestant (EO
+ *  evaluation row 25); no other kind may name one. */
 export function checkA2RidingEntityConsistency(
   c: ContributionForValidationRules,
   period?: PeriodRow,
   riding?: RidingRow,
 ): ValidationFinding | null {
   const { entityKind, ridingNumber } = c.metadata;
-  if (entityKind === 'PARTY' && ridingNumber !== null) {
-    return { ruleRef: 'A2', message: 'entity kind PARTY must not carry a riding number' };
+  const contestantId = c.metadata.leadershipContestantId ?? null;
+  if (!isRidingScoped(entityKind) && ridingNumber !== null) {
+    return { ruleRef: 'A2', message: `entity kind ${entityKind} must not carry a riding number` };
   }
-  if (entityKind !== 'PARTY' && ridingNumber === null) {
+  if (isRidingScoped(entityKind) && ridingNumber === null) {
     return { ruleRef: 'A2', message: `entity kind ${entityKind} requires a riding number` };
+  }
+  if (entityKind === 'LEADERSHIP' && contestantId === null) {
+    return { ruleRef: 'A2', message: 'entity kind LEADERSHIP requires a leadership contestant' };
+  }
+  if (entityKind !== 'LEADERSHIP' && contestantId !== null) {
+    return { ruleRef: 'A2', message: `entity kind ${entityKind} must not name a leadership contestant` };
   }
   if (ridingNumber !== null && (ridingNumber < 1 || ridingNumber > 124)) {
     return { ruleRef: 'A2', message: `riding number ${ridingNumber} is out of range (1-124)` };
@@ -261,9 +271,9 @@ export interface OverLimitCheckInput {
   limits: readonly ContributionLimitRow[];
 }
 
-/** No data source yet for `candidateSelf` / `leadership` (0.7's
- *  attribution flags): every contribution here attributes via entity kind
- *  only (PARTY/CA/CAMPAIGN), never LEADERSHIP/CANDIDATE_SELF. */
+/** No data source yet for `candidateSelf` (0.7's attribution flag): every
+ *  contribution here attributes via entity kind only (PARTY/CA/CAMPAIGN/
+ *  LEADERSHIP), never CANDIDATE_SELF. */
 export function checkB2OverLimit(input: OverLimitCheckInput): ValidationFinding | null {
   const evaluation = evaluateLimits({
     year: input.contribution.year,
@@ -429,7 +439,6 @@ export function runContributionRules(ctx: RuleRunContext): ValidationFinding[] {
           ridingNumber: ctx.contribution.metadata.ridingNumber,
           year: ctx.overLimit.contributionYear,
           candidateSelf: false,
-          leadership: false,
         },
         otherContributionsThisYear: ctx.overLimit.otherContributionsThisYear,
         limits: ctx.overLimit.limits,

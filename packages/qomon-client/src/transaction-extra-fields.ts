@@ -16,10 +16,10 @@ import type { GpoMetadataDescriptive } from '@gpo/tax-receipts-core';
  * transaction), `eo_contributor_id`, `exception_reason`,
  * `non_deductible_cents`, `external_ref`.
  *
- * Qomon's "Political Entity Type" dropdown also offers "Leadership
- * Contestant", which this tool's CA/CAMPAIGN/PARTY split has no equivalent
- * for; treated as unparseable on read (out of this tool's scope), and this
- * tool never writes it.
+ * Qomon's "Political Entity Type" dropdown's "Leadership Contestant" maps to
+ * LEADERSHIP. Which contestant is tool-local (`leadership_contestant_id`):
+ * Qomon has no field for it, so an imported leadership contribution arrives
+ * with none and rule A2 flags it until an operator names the contestant.
  *
  * Three more Qomon-owned keys exist in the same object but are NOT this
  * tool's to read or write: "Reported to EO On" (likely an RTD-filing echo —
@@ -42,13 +42,14 @@ const ENTITY_KIND_TO_QOMON: Record<GpoMetadataDescriptive['entity_kind'], string
   PARTY: 'Party',
   CA: 'Association',
   CAMPAIGN: 'Candidate',
+  LEADERSHIP: 'Leadership Contestant',
 };
 
 const ENTITY_KIND_FROM_QOMON: Record<string, GpoMetadataDescriptive['entity_kind']> = {
   Party: 'PARTY',
   Association: 'CA',
   Candidate: 'CAMPAIGN',
-  // 'Leadership Contestant' deliberately absent: no equivalent, unparseable.
+  'Leadership Contestant': 'LEADERSHIP',
 };
 
 /** The subset of GpoMetadataDescriptive that actually lives in Qomon. */
@@ -86,7 +87,7 @@ export function syncedFieldsToQomon(d: QomonSyncedFields): Record<string, unknow
 /** Translate Qomon's flat extra_json back into this tool's synced fields.
  *  Returns null if it isn't an object, or any of this tool's six fields is
  *  missing or holds a value this tool doesn't recognize (an unmapped
- *  "Leadership Contestant" entity type, for instance) — treated the same as
+ *  entity type, for instance) — treated the same as
  *  "no metadata set yet" rather than guessing at a partial result. */
 export function qomonToSyncedFields(raw: unknown): QomonSyncedFields | null {
   if (typeof raw !== 'object' || raw === null) return null;

@@ -1,6 +1,7 @@
 import {
   runRepGate,
   type PeriodRow,
+  type PoliticalEntitySpace,
   type ReceivableFlag,
   type RepGateFinding,
   type RidingRow,
@@ -103,6 +104,9 @@ export interface LoadedReceiptRow {
   lost: boolean;
   entityKind: EntityKind;
   ridingNumber: number | null;
+  /** a LEADERSHIP receipt's contestant, from its contribution (which a
+   *  receipt freezes: invariant 6); null for every other kind */
+  leadershipContestant: { id: string; name: string } | null;
   periodId: number;
   issueDate: Date;
   /** the receipt's total, already summed over its allocations (invariant: a
@@ -176,7 +180,7 @@ export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScop
     include: {
       addressSnapshot: true,
       contact: true,
-      allocations: { include: { contribution: true } },
+      allocations: { include: { contribution: { include: { leadershipContestant: true } } } },
     },
     orderBy: { receiptNumber: 'asc' },
   });
@@ -198,6 +202,9 @@ export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScop
       lost: receipt.lost,
       entityKind: receipt.entityKind,
       ridingNumber: receipt.ridingNumber,
+      leadershipContestant: contribution.leadershipContestant
+        ? { id: contribution.leadershipContestant.id, name: contribution.leadershipContestant.name }
+        : null,
       periodId: receipt.periodId,
       issueDate: receipt.issueDate,
       amountCents: allocation.amountCents,
@@ -224,6 +231,16 @@ export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScop
   }
 
   return { rows, receivable };
+}
+
+export type PoliticalEntityLabelResolver = (space: PoliticalEntitySpace) => string;
+
+/** The Political_Entity value for a row: a leadership contestant's own name
+ *  from the registry (one LEADERSHIP file covers every contestant in the
+ *  period, so a single caller-typed label cannot be right for all of them),
+ *  otherwise the caller's label. */
+export function withLeadershipContestantLabel(resolve: PoliticalEntityLabelResolver): PoliticalEntityLabelResolver {
+  return (space) => space.leadershipContestant?.name ?? resolve(space);
 }
 
 /** Fetches the Period/Riding rows the loaded receipts reference and runs the

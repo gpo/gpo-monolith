@@ -10,6 +10,7 @@ import {
 import { storeArtifact, type ArtifactStoreDeps } from '../artifacts/store.js';
 import { assertIssuanceEnabled } from '../auth/kill-switch.js';
 import { withChangeLog } from '../changelog/write.js';
+import { receiptEntityLabel } from '../leadership/contestants.js';
 import { addressFrom } from '../contacts/address.js';
 import type { PrismaClient, Receipt, ReceiptDelivery } from '../generated/prisma/index.js';
 import { renderReceiptPdf } from '../receipts/pdf.js';
@@ -401,7 +402,7 @@ export async function reissueReceipt(
     acceptedAt: primary.acceptedAt,
     eligibleAmountCents: created.totalAmountCents,
     isGoodsServices: primary.goodsServices,
-    politicalEntityLabel: input.politicalEntityLabel,
+    politicalEntityLabel: await receiptEntityLabel(deps.prisma, primary, input.politicalEntityLabel),
     eoContributorId: primary.eoContributorId,
     contributorName: receipt.contactNameSnapshot,
     replacesReceiptNumber: receipt.receiptNumber,

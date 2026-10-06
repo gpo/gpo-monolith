@@ -1,3 +1,4 @@
+import { isAgencyContribution } from '@gpo/tax-receipts-core';
 import type { EntityKind, Prisma, PrismaClient, ReceivedBy } from '../generated/prisma/index.js';
 
 /**
@@ -13,6 +14,9 @@ export interface ContributionListFilters {
   ridingNumber?: number | null;
   entityKind?: EntityKind;
   receivedBy?: ReceivedBy;
+  /** agency contributions only (received by GPO, directed to another
+   *  entity), or only the rest */
+  agency?: boolean;
   /** substring match against the donor's name or email, case-insensitive. */
   contactQuery?: string;
   minAmountCents?: number;
@@ -40,7 +44,10 @@ export interface ContributionListRow {
   periodId: number | null;
   ridingNumber: number | null;
   entityKind: string | null;
+  leadershipContestantName: string | null;
   receivedBy: string | null;
+  /** derived: received by GPO for another entity (EO evaluation row 26) */
+  agencyContribution: boolean | null;
   sourceCode: string | null;
   nonDeductibleCents: number | null;
   hasReceipt: boolean;
@@ -79,6 +86,11 @@ export async function listContributions(
   if (f.ridingNumber !== undefined) descriptiveWhere.ridingNumber = f.ridingNumber;
   if (f.entityKind) descriptiveWhere.entityKind = f.entityKind;
   if (f.receivedBy) descriptiveWhere.receivedBy = f.receivedBy;
+  if (f.agency !== undefined) {
+    descriptiveWhere.OR = f.agency
+      ? [{ receivedBy: 'GPO', entityKind: { not: 'PARTY' } }]
+      : [{ receivedBy: 'ENTITY' }, { entityKind: 'PARTY' }];
+  }
 
   // superseded and refunded rows are history, not the working set (D12)
   const and: Prisma.ContributionWhereInput[] = [{ status: 'ACTIVE' }];
@@ -139,6 +151,7 @@ export async function listContributions(
     where,
     include: {
       contact: true,
+      leadershipContestant: true,
       payment: { include: { qomonLink: true } },
       allocations: { where: { receipt: { status: 'ISSUED' } }, select: { id: true } },
     },
@@ -180,7 +193,9 @@ export async function listContributions(
     periodId: r.periodId,
     ridingNumber: r.periodId === null ? null : r.ridingNumber,
     entityKind: r.periodId === null ? null : r.entityKind,
+    leadershipContestantName: r.periodId === null ? null : (r.leadershipContestant?.name ?? null),
     receivedBy: r.periodId === null ? null : r.receivedBy,
+    agencyContribution: r.periodId === null ? null : isAgencyContribution(r.receivedBy, r.entityKind),
     sourceCode: r.periodId === null ? null : r.sourceCode,
     nonDeductibleCents: r.periodId === null ? null : r.nonDeductibleCents,
     hasReceipt: r.allocations.length > 0,

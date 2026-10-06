@@ -8,6 +8,7 @@ import { storeArtifact } from '../artifacts/store.js';
 import { assertIssuanceEnabled } from '../auth/kill-switch.js';
 import { addressFrom } from '../contacts/address.js';
 import { withChangeLog } from '../changelog/write.js';
+import { receiptEntityLabel } from '../leadership/contestants.js';
 import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
 import type { PrismaClient, Receipt, ReceiptDelivery } from '../generated/prisma/index.js';
 import { renderReceiptPdf } from './pdf.js';
@@ -236,7 +237,7 @@ export async function issueReceipt(
     acceptedAt: contribution.acceptedAt,
     eligibleAmountCents: amountCents,
     isGoodsServices: contribution.goodsServices,
-    politicalEntityLabel: input.politicalEntityLabel,
+    politicalEntityLabel: await receiptEntityLabel(prisma, contribution, input.politicalEntityLabel),
     eoContributorId: contribution.eoContributorId,
     contributorName: contribution.contact.name,
     addressLine1,

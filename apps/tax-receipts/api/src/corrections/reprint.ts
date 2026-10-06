@@ -1,6 +1,7 @@
 import type { ArtifactStoreDeps } from '../artifacts/store.js';
 import { storeArtifact } from '../artifacts/store.js';
 import { withChangeLog } from '../changelog/write.js';
+import { receiptEntityLabel } from '../leadership/contestants.js';
 import type { ReceiptReprint, ReceiptReprintKind } from '../generated/prisma/index.js';
 import { ReceiptNotFoundError, TerminalReceiptError } from '../receipts/allocate.js';
 import { renderReceiptPdf } from '../receipts/pdf.js';
@@ -145,7 +146,7 @@ export async function reprintReceipt(deps: ArtifactStoreDeps, input: ReprintInpu
     acceptedAt: primary.acceptedAt,
     eligibleAmountCents: receipt.allocations.reduce((sum, a) => sum + a.amountCents, 0),
     isGoodsServices: primary.goodsServices,
-    politicalEntityLabel: input.politicalEntityLabel,
+    politicalEntityLabel: await receiptEntityLabel(prisma, primary, input.politicalEntityLabel),
     eoContributorId: primary.eoContributorId,
     contributorName,
     addressLine1: snapshot.line1,

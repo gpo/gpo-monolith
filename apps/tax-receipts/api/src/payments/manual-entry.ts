@@ -1,10 +1,12 @@
 import {
   deriveIntakeDefaults,
+  isRidingScoped,
   type GpoMetadataDescriptive,
   type IntakeFlag,
   type PaymentMethod,
 } from '@gpo/tax-receipts-core';
 import { withChangeLog } from '../changelog/write.js';
+import { assertLeadershipAttribution } from '../leadership/contestants.js';
 import { loadPeriods } from '../sync/mirror-sweep.js';
 import { runValidationForContribution } from '../validation/run.js';
 import { createContribution, createPaymentWithContribution } from './create.js';
@@ -138,6 +140,7 @@ async function resolveDescriptive(
           period_id: overrides.period_id,
           riding_number: null,
           entity_kind: 'PARTY',
+          leadership_contestant_id: null,
           received_by: 'GPO',
           goods_services: false,
           non_deductible_cents: 0,
@@ -155,10 +158,12 @@ async function resolveDescriptive(
   if (descriptive.non_deductible_cents > input.amountCents) {
     throw new ManualEntryError('the non-deductible portion cannot exceed the amount');
   }
-  if (descriptive.entity_kind === 'PARTY' && descriptive.riding_number !== null) {
-    throw new ManualEntryError('a party contribution carries no riding number');
+  if (!isRidingScoped(descriptive.entity_kind) && descriptive.riding_number !== null) {
+    throw new ManualEntryError(
+      `a ${descriptive.entity_kind === 'PARTY' ? 'party' : 'leadership'} contribution carries no riding number`,
+    );
   }
-  if (descriptive.entity_kind !== 'PARTY' && descriptive.riding_number === null) {
+  if (isRidingScoped(descriptive.entity_kind) && descriptive.riding_number === null) {
     throw new ManualEntryError(`a ${descriptive.entity_kind} contribution needs a riding number`);
   }
   return { descriptive, flags: derived.flags };
@@ -191,14 +196,14 @@ export async function enterManualPayment(prisma: PrismaClient, input: ManualPaym
   const periods = await loadPeriods(prisma);
   const resolved: Awaited<ReturnType<typeof resolveDescriptive>>[] = [];
   for (const e of entries) {
-    resolved.push(
-      await resolveDescriptive(periods, {
-        amountCents: e.amountCents,
-        acceptedAt: e.acceptedAt ?? input.receivedAt,
-        externalRef: input.externalRef ?? null,
-        overrides: e.descriptive ?? {},
-      }),
-    );
+    const r = await resolveDescriptive(periods, {
+      amountCents: e.amountCents,
+      acceptedAt: e.acceptedAt ?? input.receivedAt,
+      externalRef: input.externalRef ?? null,
+      overrides: e.descriptive ?? {},
+    });
+    await assertLeadershipAttribution(prisma, r.descriptive.entity_kind, r.descriptive.leadership_contestant_id);
+    resolved.push(r);
   }
 
   const { payment, contributions } = await withChangeLog(
@@ -289,6 +294,7 @@ export async function addContributionToPayment(prisma: PrismaClient, input: AddC
     externalRef: payment.externalRef,
     overrides: input.descriptive ?? {},
   });
+  await assertLeadershipAttribution(prisma, descriptive.entity_kind, descriptive.leadership_contestant_id);
 
   const contribution = await withChangeLog(
     prisma,

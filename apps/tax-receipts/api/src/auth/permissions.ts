@@ -65,7 +65,8 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   'settings.administer': {
     group: 'System',
     label: 'Manage annual settings',
-    description: 'Edit periods, contribution limits, the RTD holiday calendar, and ridings, and use the email log and outbox tools.',
+    description:
+      'Edit periods, contribution limits, the RTD holiday calendar, ridings, and leadership contestants, and use the email log and outbox tools.',
     grant: (can) => {
       can('administer', ['Period', 'ContributionLimit', 'Riding']);
     },

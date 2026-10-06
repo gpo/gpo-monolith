@@ -44,8 +44,6 @@ export const ContributionForLimits = z.object({
    *  contribution to their own campaign (routes to CANDIDATE_SELF, and is
    *  exempt from the CAMPAIGN bucket). */
   candidateSelf: z.boolean().default(false),
-  /** Contribution to a leadership contestant (routes to LEADERSHIP). */
-  leadership: z.boolean().default(false),
 });
 export type ContributionForLimits = z.infer<typeof ContributionForLimits>;
 
@@ -71,7 +69,7 @@ export interface LimitEvaluation {
 /** Which bucket a contribution's dollars count against, or `null` if it does
  *  not participate in limit checking (e.g. an unknown configuration). */
 export function attributeBucket(c: ContributionForLimits): Bucket | null {
-  if (c.leadership) return 'LEADERSHIP';
+  if (c.entityKind === 'LEADERSHIP') return 'LEADERSHIP';
   if (c.candidateSelf) return 'CANDIDATE_SELF';
   switch (c.entityKind) {
     case 'PARTY':

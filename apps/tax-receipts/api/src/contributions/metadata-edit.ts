@@ -1,5 +1,6 @@
 import type { GpoMetadataDescriptive } from '@gpo/tax-receipts-core';
 import { withChangeLog } from '../changelog/write.js';
+import { assertLeadershipAttribution } from '../leadership/contestants.js';
 import { runValidationForContribution } from '../validation/run.js';
 import { descriptiveToColumns, isReceiptedOrReported } from './metadata-cache.js';
 import type { Contribution, PrismaClient } from '../generated/prisma/index.js';
@@ -64,6 +65,12 @@ export async function editContributionMetadata(
       'this contribution backs an issued receipt or an RTD filing; edit it through a correction action instead',
     );
   }
+  await assertLeadershipAttribution(
+    prisma,
+    input.descriptive.entity_kind,
+    input.descriptive.leadership_contestant_id,
+    contribution.leadershipContestantId,
+  );
 
   const updated = await withChangeLog(
     prisma,

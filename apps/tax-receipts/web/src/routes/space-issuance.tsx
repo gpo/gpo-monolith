@@ -27,6 +27,7 @@ import {
 } from '../api.js';
 import { describeRuleRef } from '../rule-labels.js';
 import { PageHeader } from '../components/PageHeader.js';
+import { entityKindLabel, leadershipLabelNote } from '../entity-kind.js';
 import { defaultPoliticalEntityLabel, money } from './contribution-detail.js';
 
 /**
@@ -55,7 +56,7 @@ interface SpaceIssuanceParams {
 }
 
 function spaceLabel({ periodId, ridingNumber, entityKind }: SpaceIssuanceParams): string {
-  return `Period ${periodId} · ${ridingNumber !== null ? `Riding ${ridingNumber}` : 'Party'} · ${entityKind}`;
+  return `Period ${periodId} · ${ridingNumber !== null ? `Riding ${ridingNumber} · ` : ''}${entityKindLabel(entityKind)}`;
 }
 
 export function SpaceIssuancePage(params: SpaceIssuanceParams) {
@@ -356,6 +357,7 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
             <TextInput
               label="Received-by label (as it should print on every receipt)"
               placeholder="e.g. Green Party of Ontario"
+              description={leadershipLabelNote(entityKind)}
               value={politicalEntityLabel ?? defaultPoliticalEntityLabel(entityKind)}
               onChange={(e) => setPoliticalEntityLabel(e.currentTarget.value)}
             />

@@ -1,3 +1,4 @@
+import { isAgencyContribution } from '@gpo/tax-receipts-core';
 import { formatAddress, type FormattedAddress } from '../contacts/address.js';
 import type { PrismaClient } from '../generated/prisma/index.js';
 
@@ -39,6 +40,19 @@ export interface ContributionDetail {
     note: string | null;
     /** what no ACTIVE contribution on this payment covers yet */
     unattributedCents: number;
+    /** every ACTIVE contribution on this payment, this one included: how one
+     *  payment is split across donors and entities (EO evaluation row 28) */
+    contributions: Array<{
+      id: string;
+      contactName: string;
+      amountCents: number;
+      periodId: number | null;
+      entityKind: string | null;
+      ridingNumber: number | null;
+      leadershipContestantName: string | null;
+      receivedBy: string | null;
+      agencyContribution: boolean | null;
+    }>;
   };
   /** import provenance; null for MANUAL and LEGACY_IMPORT payments */
   qomon: {
@@ -54,7 +68,12 @@ export interface ContributionDetail {
     periodId: number;
     ridingNumber: number | null;
     entityKind: string;
+    leadershipContestantId: string | null;
+    leadershipContestantName: string | null;
     receivedBy: string;
+    /** derived, never stored: GPO received money directed to another entity
+     *  as its agent (EO evaluation row 26; the ALL report's Agency_Contribution) */
+    agencyContribution: boolean;
     goodsServices: boolean;
     nonDeductibleCents: number;
     processedDate: string | null;
@@ -105,7 +124,17 @@ export async function getContributionDetail(
     where: { id: contributionId },
     include: {
       contact: true,
-      payment: { include: { qomonLink: true } },
+      leadershipContestant: true,
+      payment: {
+        include: {
+          qomonLink: true,
+          contributions: {
+            where: { status: 'ACTIVE' },
+            include: { contact: true, leadershipContestant: true },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      },
       allocations: { include: { receipt: true } },
       rtdInclusions: true,
     },
@@ -115,10 +144,7 @@ export async function getContributionDetail(
     return null;
   }
 
-  const attributed = await prisma.contribution.aggregate({
-    where: { paymentId: row.paymentId, status: 'ACTIVE' },
-    _sum: { amountCents: true },
-  });
+  const attributedCents = row.payment.contributions.reduce((sum, c) => sum + c.amountCents, 0);
 
   const [workItems, changeLog] = await Promise.all([
     prisma.workItem.findMany({
@@ -163,7 +189,19 @@ export async function getContributionDetail(
       externalRef: row.payment.externalRef,
       payerName: row.payment.payerName,
       note: row.payment.note,
-      unattributedCents: row.payment.amountCents - (attributed._sum.amountCents ?? 0),
+      unattributedCents: row.payment.amountCents - attributedCents,
+      // the descriptive fields read as null until a period resolves, as in the list
+      contributions: row.payment.contributions.map((c) => ({
+        id: c.id,
+        contactName: c.contact.name,
+        amountCents: c.amountCents,
+        periodId: c.periodId,
+        entityKind: c.periodId === null ? null : c.entityKind,
+        ridingNumber: c.periodId === null ? null : c.ridingNumber,
+        leadershipContestantName: c.leadershipContestant?.name ?? null,
+        receivedBy: c.periodId === null ? null : c.receivedBy,
+        agencyContribution: c.periodId === null ? null : isAgencyContribution(c.receivedBy, c.entityKind),
+      })),
     },
     qomon: row.payment.qomonLink
       ? {
@@ -190,7 +228,10 @@ export async function getContributionDetail(
             periodId: row.periodId,
             ridingNumber: row.ridingNumber,
             entityKind: row.entityKind,
+            leadershipContestantId: row.leadershipContestantId,
+            leadershipContestantName: row.leadershipContestant?.name ?? null,
             receivedBy: row.receivedBy,
+            agencyContribution: isAgencyContribution(row.receivedBy, row.entityKind),
             goodsServices: row.goodsServices,
             nonDeductibleCents: row.nonDeductibleCents,
             processedDate: row.processedDate ? row.processedDate.toISOString() : null,

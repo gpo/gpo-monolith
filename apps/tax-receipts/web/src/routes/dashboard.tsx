@@ -12,6 +12,7 @@ import {
   Title,
 } from '@mantine/core';
 import { api } from '../api.js';
+import { entityKindLabel } from '../entity-kind.js';
 
 /**
  * Space dashboard (ticket 1.10, screens.md 1, PRD I3): the process owner's
@@ -28,15 +29,6 @@ function stageColor(stage: string): string {
   if (stage === 'issued' || stage === 'delivered') return 'blue';
   if (stage === 'reconciled') return 'teal';
   return 'gray';
-}
-
-/** Same wording as RECIPIENT_KIND_OPTIONS in contribution-detail.tsx — enum
- * values stay PARTY/CA/CAMPAIGN on the wire, only the on-screen label changes. */
-function entityKindLabel(entityKind: string): string {
-  if (entityKind === 'CA') return 'Constituency association';
-  if (entityKind === 'CAMPAIGN') return 'Campaign';
-  if (entityKind === 'PARTY') return 'Party (province-wide)';
-  return entityKind;
 }
 
 export function DashboardPage() {

@@ -9,6 +9,7 @@ import {
 import { storeArtifact, type ArtifactStoreDeps } from '../artifacts/store.js';
 import { getKillSwitch } from '../auth/kill-switch.js';
 import { withChangeLog, type ChangeLogContext } from '../changelog/write.js';
+import { assertLeadershipAttribution, receiptEntityLabel } from '../leadership/contestants.js';
 import { addressFrom } from '../contacts/address.js';
 import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
 import type {
@@ -116,6 +117,9 @@ export interface ReplacementSpec {
   periodId?: number | null;
   ridingNumber?: number | null;
   entityKind?: EntityKind;
+  /** a LEADERSHIP replacement's contestant; defaults to the original's when
+   *  it was LEADERSHIP too, and is dropped for any other kind */
+  leadershipContestantId?: string | null;
   receivedBy?: ReceivedBy;
   goodsServices?: boolean;
   /** required when the original has a non-deductible amount and the
@@ -160,6 +164,7 @@ export interface PlannedContribution {
   periodId: number | null;
   ridingNumber: number | null;
   entityKind: EntityKind;
+  leadershipContestantId: string | null;
   receivedBy: ReceivedBy;
   goodsServices: boolean;
   nonDeductibleCents: number;
@@ -325,6 +330,19 @@ function resolveReplacement(
     throw new CorrectionValidationError('a non-deductible amount must be between 0 and the replacement amount');
   }
 
+  const entityKind = spec.entityKind ?? old.entityKind;
+  const leadershipContestantId =
+    entityKind !== 'LEADERSHIP'
+      ? null
+      : spec.leadershipContestantId !== undefined
+        ? spec.leadershipContestantId
+        : old.entityKind === 'LEADERSHIP'
+          ? old.leadershipContestantId
+          : null;
+  if (entityKind === 'LEADERSHIP' && leadershipContestantId === null) {
+    throw new CorrectionValidationError('a leadership replacement needs its leadership contestant');
+  }
+
   return {
     ref,
     contactId,
@@ -333,7 +351,8 @@ function resolveReplacement(
     acceptedAt: spec.acceptedAt ?? old.acceptedAt,
     periodId: spec.periodId !== undefined ? spec.periodId : old.periodId,
     ridingNumber: spec.ridingNumber !== undefined ? spec.ridingNumber : old.ridingNumber,
-    entityKind: spec.entityKind ?? old.entityKind,
+    entityKind,
+    leadershipContestantId,
     receivedBy: spec.receivedBy ?? old.receivedBy,
     goodsServices: spec.goodsServices ?? old.goodsServices,
     nonDeductibleCents,
@@ -550,6 +569,20 @@ async function prepare(prisma: PrismaClient, input: CorrectionInput): Promise<Pr
       replacements,
     };
   });
+
+  // a new attribution to a contestant must be to one on the registry (an
+  // unchanged one may have been made inactive since)
+  for (const change of plannedChanges) {
+    const old = loaded.get(change.contributionId)!;
+    for (const r of change.replacements) {
+      if (r.entityKind !== 'LEADERSHIP') continue;
+      try {
+        await assertLeadershipAttribution(prisma, r.entityKind, r.leadershipContestantId, old.leadershipContestantId);
+      } catch (err) {
+        throw new CorrectionValidationError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  }
 
   // --- payments: invariant 1 on the payment, state after a refund ---------
   const paymentIds = [...new Set(rows.map((r) => r.paymentId))];
@@ -934,7 +967,11 @@ export async function attachIssuedPdfs(
       acceptedAt: primary.acceptedAt,
       eligibleAmountCents: planned.totalAmountCents,
       isGoodsServices: primary.goodsServices,
-      politicalEntityLabel: opts.labelFor(planned.entityKind, planned.ridingNumber),
+      politicalEntityLabel: await receiptEntityLabel(
+        deps.prisma,
+        primary,
+        opts.labelFor(planned.entityKind, planned.ridingNumber),
+      ),
       eoContributorId: primary.eoContributorId,
       contributorName: planned.contactName,
       replacesReceiptNumber: planned.replacesReceiptNumber,
@@ -1051,6 +1088,7 @@ export async function applyCorrection(deps: ArtifactStoreDeps, input: Correction
               periodId: r.periodId,
               ridingNumber: r.ridingNumber,
               entityKind: r.entityKind,
+              leadershipContestantId: r.leadershipContestantId,
               receivedBy: r.receivedBy,
               goodsServices: r.goodsServices,
               nonDeductibleCents: r.nonDeductibleCents,

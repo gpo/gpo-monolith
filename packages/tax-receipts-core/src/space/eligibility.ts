@@ -11,6 +11,8 @@ import type { PeriodRow } from '../period/calendar.js';
  * registry:
  *
  *  - PARTY: always eligible (no riding).
+ *  - LEADERSHIP: always eligible as a space (no riding). Which contestant
+ *    a contribution names is rule A2's check, not the space's.
  *  - CA: eligible wherever `Riding.active` is true. Not period-scoped: CAs
  *    don't activate/deactivate per period in practice, so a single current
  *    flag is correct, not a simplification.
@@ -31,7 +33,7 @@ export function isEntityEligible(
   period: PeriodRow | undefined,
   riding: RidingRow | undefined,
 ): boolean {
-  if (entityKind === 'PARTY') return true;
+  if (entityKind === 'PARTY' || entityKind === 'LEADERSHIP') return true;
   if (ridingNumber === null) return false; // shape problem; A2's job to report
   if (!riding?.active) return false;
   if (entityKind === 'CA') return true;
