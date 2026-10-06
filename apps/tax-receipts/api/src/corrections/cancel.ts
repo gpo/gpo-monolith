@@ -14,6 +14,7 @@ import { receiptEntityLabel } from '../leadership/contestants.js';
 import { addressFrom } from '../contacts/address.js';
 import type { PrismaClient, Receipt, ReceiptDelivery } from '../generated/prisma/index.js';
 import { renderReceiptPdf } from '../receipts/pdf.js';
+import { getReceiptSettings } from '../receipts/settings.js';
 import { ReceiptNotFoundError, TerminalReceiptError } from '../receipts/allocate.js';
 import { MissingAddressError, ReceiptIssuanceValidationError } from '../receipts/issue.js';
 import { renderCancellationNoticePdf } from './cancellation-notice.js';
@@ -412,6 +413,7 @@ export async function reissueReceipt(
     province,
     postalCode: address.postalcode!,
     country,
+    layout: (await getReceiptSettings(deps.prisma)).receiptLayout,
   });
   const artifact = await storeArtifact(deps, { kind: 'PDF', bytes: pdfBytes, extension: 'pdf' });
 

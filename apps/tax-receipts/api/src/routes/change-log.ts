@@ -1,29 +1,9 @@
+import { ChangeLogSubjectType } from '@gpo/tax-receipts-core';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { exportChangeLogCsv, listChangeLog } from '../changelog/list.js';
 import type { SessionUser } from '../plugins/auth.js';
-
-const ChangeLogSubjectType = z.enum([
-  'Contribution',
-  'ContributionMetadata',
-  'Contact',
-  'AddressSnapshot',
-  'Receipt',
-  'ReceiptAllocation',
-  'RtdFiling',
-  'RtdInclusion',
-  'EntityReport',
-  'EOForm',
-  'WorkItem',
-  'Period',
-  'ContributionLimit',
-  'DonorCyclePreference',
-  'SpaceState',
-  'ReconciliationMark',
-  'User',
-  'IssuanceKillSwitch',
-]);
 
 const ChangeLogQuery = z.object({
   subjectType: ChangeLogSubjectType.optional(),

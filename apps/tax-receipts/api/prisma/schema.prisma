@@ -218,6 +218,7 @@ enum ChangeLogSubjectType {
   EmailDeliverySettings
   Role
   LeadershipContestant
+  ReceiptSettings
 }
 
 // ---------------------------------------------------------------------------
@@ -1045,6 +1046,26 @@ model EmailDeliverySettings {
   updatedAt          DateTime @updatedAt
 
   @@map("email_delivery_settings")
+}
+
+/// Which receipt PDF layout to draw. LEGACY is the receipt as it has always
+/// been drawn; CONTRIBUTOR_TYPE adds "Contributor Type: Individual" (EO
+/// evaluation row 56).
+enum ReceiptLayout {
+  LEGACY
+  CONTRIBUTOR_TYPE
+}
+
+/// Receipt rendering settings (singleton row). A layout change applies to
+/// receipts rendered after it, including reissues and reprints, never to
+/// PDFs already stored. LEGACY by default.
+model ReceiptSettings {
+  id              String        @id @default("singleton")
+  receiptLayout   ReceiptLayout @default(LEGACY)
+  updatedByUserId String?
+  updatedAt       DateTime      @updatedAt
+
+  @@map("receipt_settings")
 }
 
 model PrintBatchItem {

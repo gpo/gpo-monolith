@@ -663,6 +663,15 @@ export interface EmailLogFilters {
   cursor?: string;
 }
 
+/** Receipt rendering settings (api/src/receipts/settings.ts) */
+export type ReceiptLayout = 'LEGACY' | 'CONTRIBUTOR_TYPE';
+
+export interface ReceiptSettings {
+  receiptLayout: ReceiptLayout;
+  updatedByUserId: string | null;
+  updatedAt: string | null;
+}
+
 export interface EmailDeliverySettings {
   provider: string;
   liveSendingAllowed: boolean;
@@ -1145,6 +1154,12 @@ export const api = {
     return request<{ data: EmailLogRow[]; nextCursor: string | null }>(`/admin/emails${qs ? `?${qs}` : ''}`);
   },
   getEmail: (id: string) => request<EmailDetail>(`/admin/emails/${id}`),
+  getReceiptSettings: () => request<ReceiptSettings>('/admin/receipt-settings'),
+  setReceiptLayout: (receiptLayout: ReceiptLayout, reason: string) =>
+    request<ReceiptSettings>('/admin/receipt-settings', {
+      method: 'PUT',
+      body: JSON.stringify({ receiptLayout, reason }),
+    }),
   getEmailSettings: () => request<EmailDeliverySettings>('/admin/email-settings'),
   setLiveSending: (liveSendingEnabled: boolean, reason: string) =>
     request<EmailDeliverySettings>('/admin/email-settings', {

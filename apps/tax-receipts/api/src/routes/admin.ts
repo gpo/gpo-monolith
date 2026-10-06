@@ -15,6 +15,7 @@ import {
   updateLeadershipContestant,
 } from '../leadership/contestants.js';
 import type { SessionUser } from '../plugins/auth.js';
+import { getReceiptSettings, setReceiptLayout } from '../receipts/settings.js';
 import { runValidationForAllContributions } from '../validation/run.js';
 
 /**
@@ -99,6 +100,27 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       // the full registry re-runs rather than a scoped subset.
       const revalidation = await runValidationForAllContributions(app.prisma);
       return reply.send({ period, revalidation });
+    },
+  });
+
+  // ---- Receipt settings ----------------------------------------------
+
+  r.get('/admin/receipt-settings', async (request, reply) => {
+    if (!request.user) return reply.code(401).send({ error: 'authentication required' });
+    return reply.send(await getReceiptSettings(app.prisma));
+  });
+
+  r.route({
+    method: 'PUT',
+    url: '/admin/receipt-settings',
+    schema: {
+      body: z.object({ receiptLayout: z.enum(['LEGACY', 'CONTRIBUTOR_TYPE']), reason: z.string().trim().min(3) }),
+    },
+    handler: async (request, reply) => {
+      const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const { receiptLayout, reason } = request.body;
+      return reply.send(await setReceiptLayout(app.prisma, { userId: auth.user.id, reason }, receiptLayout));
     },
   });
 

@@ -5,6 +5,7 @@ import { receiptEntityLabel } from '../leadership/contestants.js';
 import type { ReceiptReprint, ReceiptReprintKind } from '../generated/prisma/index.js';
 import { ReceiptNotFoundError, TerminalReceiptError } from '../receipts/allocate.js';
 import { renderReceiptPdf } from '../receipts/pdf.js';
+import { getReceiptSettings } from '../receipts/settings.js';
 
 /**
  * Correction action 3 and the lost status (corrections.md, ticket 3.11): a new
@@ -156,6 +157,7 @@ export async function reprintReceipt(deps: ArtifactStoreDeps, input: ReprintInpu
     postalCode: snapshot.postalCode,
     country: snapshot.country,
     isCopy: input.kind === 'LOST_COPY',
+    layout: (await getReceiptSettings(prisma)).receiptLayout,
   });
   const artifact = await storeArtifact(deps, { kind: 'PDF', bytes, extension: 'pdf' });
 

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib';
+import type { ReceiptLayout } from '../generated/prisma/index.js';
 
 /**
  * Individual receipt PDF rendering (ticket 3.1). Draws onto the same
@@ -37,7 +38,11 @@ export interface ReceiptPdfData {
   replacesReceiptNumber?: string | null;
   /** stamps every copy "COPY" for a lost-receipt reprint (status L). */
   isCopy?: boolean;
+  /** which receipt layout to draw (ReceiptSettings); the caller reads the
+   *  setting so every render path agrees */
+  layout: ReceiptLayout;
 }
+
 
 const TEMPLATE_PATH = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -104,6 +109,69 @@ function drawRow(position: number, page: PDFPage, font: PDFFont, data: ReceiptPd
   }
 }
 
+/** Ontario accepts contributions from individuals only, so `ContributorType`
+ *  has the one value (EO evaluation row 56). */
+const CONTRIBUTOR_TYPE_LABEL = 'Individual';
+
+/** The `CONTRIBUTOR_TYPE` layout: `drawRow` with a sixth line in the
+ *  right-hand column. Six lines at 15pt fill the band five fill at 18pt,
+ *  clear of the template's signature image. Kept separate from `drawRow` so
+ *  the legacy layout stays exactly as it was. */
+function drawRowWithContributorType(
+  position: number,
+  page: PDFPage,
+  font: PDFFont,
+  data: ReceiptPdfData,
+  width: number,
+  height: number,
+): void {
+  page.drawText(
+    `Issue Date: ${formatIsoDate(data.issueDate)}\n` +
+      `Received on: ${formatIsoDate(data.acceptedAt)}\n` +
+      `Eligible Amount: $${formatDollars(data.eligibleAmountCents)}\n` +
+      `Contributor Type: ${CONTRIBUTOR_TYPE_LABEL}\n` +
+      `Contribution Type: ${data.isGoodsServices ? 'Goods and Services' : 'Monetary'}\n` +
+      `Received By: ${data.politicalEntityLabel}`,
+    { x: width - 250, y: height - 115 - position, size: 9, lineHeight: 15, font },
+  );
+  page.drawText(`Receipt No: ${data.receiptNumber}\nReceived from:\n`, {
+    x: 40,
+    y: height - 110 - position,
+    size: 9,
+    lineHeight: 14,
+    font,
+  });
+  const addressLines = [
+    data.contributorName,
+    [data.addressLine1, data.addressLine2].filter(Boolean).join(', '),
+    `${data.city} ${data.province} ${data.postalCode.replace(' ', '')}`,
+    data.country,
+  ];
+  page.drawText(addressLines.join('\n').toUpperCase(), {
+    x: 70,
+    y: height - 150 - position,
+    size: 9,
+    lineHeight: 11,
+    font,
+  });
+  if (data.replacesReceiptNumber) {
+    page.drawText(`This cancels and replaces receipt #${data.replacesReceiptNumber}`, {
+      x: 40,
+      y: height - 215 - position,
+      size: 8,
+      font,
+    });
+  }
+  if (data.isCopy) {
+    page.drawText('COPY', { x: width / 2 - 20, y: height - 215 - position, size: 14, font });
+  }
+}
+
+const ROW_RENDERERS: Record<ReceiptLayout, typeof drawRow> = {
+  LEGACY: drawRow,
+  CONTRIBUTOR_TYPE: drawRowWithContributorType,
+};
+
 /** Render one issued receipt as a single-page PDF (the template's three
  *  stamped copies), returning the file bytes. */
 export async function renderReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
@@ -128,8 +196,9 @@ export async function renderReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
     });
   }
 
+  const drawLayoutRow = ROW_RENDERERS[data.layout];
   for (const position of [0, 255, 510]) {
-    drawRow(position, copiedPage, font, data, width, height);
+    drawLayoutRow(position, copiedPage, font, data, width, height);
   }
 
   return Buffer.from(await pdfDoc.save());

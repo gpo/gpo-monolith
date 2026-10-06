@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
+import { ChangeLogSubjectType as ChangeLogSubjectTypeEnum } from '../generated/prisma/index.js';
 import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
 
 const prisma = testPrisma();
@@ -52,6 +53,18 @@ describe('change-log explorer routes (ticket 1.11)', () => {
     const res = await app.inject({ method: 'GET', url: '/change-log', cookies: { [cookie.name]: cookie.value } });
     expect(res.statusCode).toBe(200);
     expect(res.json().data.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('filters by every subject type the database records, including Role and ReceiptSettings', async () => {
+    const cookie = await login();
+    for (const subjectType of Object.values(ChangeLogSubjectTypeEnum)) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/change-log?subjectType=${subjectType}`,
+        cookies: { [cookie.name]: cookie.value },
+      });
+      expect(res.statusCode, subjectType).toBe(200);
+    }
   });
 
   it('exports CSV with the right content type', async () => {
