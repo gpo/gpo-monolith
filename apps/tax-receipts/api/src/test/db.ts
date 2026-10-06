@@ -127,15 +127,36 @@ export async function markSuperseded(prisma: PrismaClient, contributionId: strin
   });
 }
 
+/**
+ * Insert or update a contact in a change-logged transaction. `contact` is a
+ * guarded table (invariant 5, D13), so a bare `prisma.contact.create/update`
+ * is refused by the database.
+ */
+export async function fixtureContact(prisma: PrismaClient, args: Prisma.ContactCreateArgs) {
+  return withChangeLog(prisma, { userId: null, reason: 'test fixture' }, async (ctx) => {
+    const contact = await ctx.tx.contact.create(args);
+    await ctx.log({ subjectType: 'Contact', subjectId: contact.id });
+    return contact;
+  });
+}
+
+export async function fixtureContactUpdate(prisma: PrismaClient, args: Prisma.ContactUpdateArgs) {
+  return withChangeLog(prisma, { userId: null, reason: 'test fixture' }, async (ctx) => {
+    const contact = await ctx.tx.contact.update(args);
+    await ctx.log({ subjectType: 'Contact', subjectId: contact.id });
+    return contact;
+  });
+}
+
 export interface ContributionFixture {
   contactId: string;
   contributionId: string;
   paymentId: string;
 }
 
-/** Insert a contact + payment + initial contribution directly (none of the
- *  tables is guarded by invariant 5, so no change-log context is needed for
- *  fixtures). A `qomonTransactionId` also creates the payment's Qomon link,
+/** Insert a contact + payment + initial contribution directly, each in a
+ *  change-logged fixture transaction (all three tables are guarded by
+ *  invariant 5). A `qomonTransactionId` also creates the payment's Qomon link,
  *  as an import would; leave it out for a manual-style payment. */
 export async function makeContribution(
   prisma: PrismaClient,
@@ -157,7 +178,7 @@ export async function makeContribution(
   const contactId =
     opts.contactId ??
     (
-      await prisma.contact.create({
+      await fixtureContact(prisma, {
         data: {
           qomonContactId: opts.qomonContactId ?? null,
           name: opts.contactName ?? 'Dana Donor',

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { makeContribution, resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact } from '../test/db.js';
 import {
   DonorPrecheckTokenExpiredError,
   DonorPrecheckTokenNotFoundError,
@@ -62,7 +62,7 @@ describe('donor pre-check (ticket 3.9, story V4)', () => {
 
   it('skips a donor with no email on file rather than failing the whole space', async () => {
     const { contact, contributionId } = await (async () => {
-      const c = await prisma.contact.create({
+      const c = await fixtureContact(prisma, {
         data: { qomonContactId: 2n, name: 'No Email Ned', email: null },
       });
       const contribution = await createTestContribution(prisma, { qomonTransactionId: 2n, contactId: c.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') });

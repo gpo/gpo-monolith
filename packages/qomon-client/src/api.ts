@@ -84,5 +84,10 @@ export interface QomonApi {
   createContact(contact: QomonContact): Promise<{ id: number }>;
   /** Full-replace PATCH; every field must be supplied. */
   replaceContact(id: number, contact: QomonContact): Promise<QomonContact>;
+  /** Change some fields of a contact: reads the current record, merges
+   *  `changes` onto it (the address field by field), writes the whole object
+   *  back (PATCH is a full replace), and returns the record as re-read
+   *  after the write. */
+  updateContact(id: number, changes: Partial<QomonContact>): Promise<QomonContact>;
   getContact(id: number): Promise<QomonContact>;
 }

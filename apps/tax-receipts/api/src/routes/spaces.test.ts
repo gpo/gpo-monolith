@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
-import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -22,7 +22,7 @@ describe('GET /spaces (ticket 1.10)', () => {
       where: { id: baseline.adminUserId },
       data: { passwordHash: await hashPassword('admin-pass-phrase') },
     });
-    const contact = await prisma.contact.create({ data: { qomonContactId: 1n, name: 'Dana Donor' } });
+    const contact = await fixtureContact(prisma, { data: { qomonContactId: 1n, name: 'Dana Donor' } });
     const contribution = await createTestContribution(prisma, { contactId: contact.id, qomonTransactionId: 1n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') });
     await withChangeLog(prisma, { userId: null, reason: 'fixture' }, async (ctx) => {
       const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: { periodId: baseline.periodId, ridingNumber: 84, entityKind: 'CA', receivedBy: 'GPO' } });
@@ -72,7 +72,7 @@ describe('per-space issuance routes (ticket 3.12)', () => {
       data: { passwordHash: await hashPassword('cfo-pass-phrase') },
     });
 
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: 1n,
         name: 'Dana Donor',
@@ -221,7 +221,7 @@ describe('donor pre-check send route (ticket 3.9)', () => {
       },
     });
 
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: { qomonContactId: 1n, name: 'Dana Donor', email: 'dana@example.org' },
     });
     contactId = contact.id;

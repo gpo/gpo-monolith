@@ -56,6 +56,7 @@ import authPlugin from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
 import { adminRoutes } from './routes/admin.js';
 import { changeLogRoutes } from './routes/change-log.js';
+import { contactRoutes } from './routes/contacts.js';
 import { contributionRoutes } from './routes/contributions.js';
 import { correctionRoutes } from './routes/corrections.js';
 import { deliveryRoutes } from './routes/delivery.js';
@@ -81,7 +82,10 @@ export interface BuildAppOptions {
   trustProxy?: boolean;
   logger?: boolean;
   /** the party-level Qomon space; the mirror-sweep trigger (ticket 1.1)
-   *  registers regardless, but a party sweep 404s without this. */
+   *  registers regardless, but a party sweep 404s without this. Its
+   *  presence also decides who owns contacts (D13): with it, contributors
+   *  added or edited in the tool are written to Qomon first; without it,
+   *  the tool owns them. */
   qomon?: QomonApi;
   /** default base URL for a riding's own Qomon space when the riding row
    *  doesn't override it (see routes/sync.ts). */
@@ -226,6 +230,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     buildRidingQomon: opts.buildRidingQomon,
   });
   await app.register(contributionRoutes, { qomon: opts.qomon });
+  await app.register(contactRoutes, { qomon: opts.qomon });
   await app.register(paymentRoutes);
   await app.register(donorPrecheckRoutes);
   await app.register(receiptRoutes, {

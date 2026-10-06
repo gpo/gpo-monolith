@@ -6,7 +6,7 @@ import type { PrismaClient } from '../generated/prisma/index.js';
 /**
  * "Refresh donor from Qomon" (ticket 3.1 follow-up, reworked for D12).
  *
- * Contacts stay Qomon-owned (data-model §1) and a receipt snapshots the
+ * Contacts are Qomon-owned when Qomon is configured (D13) and a receipt snapshots the
  * donor's address, so a corrected address in Qomon has to be able to reach
  * the tool before a receipt is issued. The bulk sweep fetches a contact only
  * the first time it sees it (to bound Qomon call volume), so this on-demand,
@@ -22,6 +22,8 @@ export async function refreshContributionContact(
   prisma: PrismaClient,
   qomon: Pick<QomonApi, 'getContact'>,
   contributionId: string,
+  /** who asked for the refresh; recorded on the contact's change-log entry */
+  actorUserId: string | null,
 ): Promise<ContactRefreshOutcome> {
   const contribution = await prisma.contribution.findUnique({
     where: { id: contributionId },
@@ -29,12 +31,11 @@ export async function refreshContributionContact(
   });
   if (!contribution) throw new ContributionNotFoundError(contributionId);
 
-  // a contact with no Qomon link (development and testing only, D12) has
-  // nothing to refresh from
+  // a tool-owned contact (no Qomon link, D13) has nothing to refresh from
   if (contribution.contact.qomonContactId === null) return 'not-linked';
 
   try {
-    await refreshContactFromQomon(prisma, qomon, contribution.contact.id);
+    await refreshContactFromQomon(prisma, qomon, contribution.contact.id, actorUserId);
     return 'refreshed';
   } catch (err) {
     // a contact deleted in Qomon shouldn't fail the click; the cached copy

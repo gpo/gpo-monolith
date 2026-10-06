@@ -252,7 +252,7 @@ describe('roles and permissions (EO evaluation rows 7 to 10)', () => {
       method: 'PUT',
       url: '/admin/periods/2020',
       cookies: administrator,
-      payload: { name: '2020 Annual', kind: 'ANNUAL', startsAt: '2020-01-01T05:00:00Z', endsAt: '2021-01-01T05:00:00Z' },
+      payload: { name: '2020 Annual', kind: 'ANNUAL', startsAt: '2020-01-01T05:00:00Z', endsAt: '2021-01-01T05:00:00Z', reason: 'new period' },
     });
     expect(period.statusCode).toBe(403);
   });

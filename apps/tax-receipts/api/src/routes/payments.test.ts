@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -34,8 +34,8 @@ describe('payment entry routes (D12 manual entry)', () => {
       },
     });
     await prisma.riding.create({ data: { ridingNumber: 12, name: 'Brampton West', active: true, qomonApiKey: 'x' } });
-    danaId = (await prisma.contact.create({ data: { name: 'Dana Donor' } })).id;
-    samId = (await prisma.contact.create({ data: { name: 'Sam Spouse' } })).id;
+    danaId = (await fixtureContact(prisma, { data: { name: 'Dana Donor' } })).id;
+    samId = (await fixtureContact(prisma, { data: { name: 'Sam Spouse' } })).id;
 
     app = await buildApp({ prisma, sessionSecret: SECRET, artifactStorageDir: '/tmp/unused' });
     await app.ready();

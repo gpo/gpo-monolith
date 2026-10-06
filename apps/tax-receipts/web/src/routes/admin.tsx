@@ -126,7 +126,7 @@ function KillSwitchSection() {
 function PeriodsSection() {
   const qc = useQueryClient();
   const periods = useQuery({ queryKey: ['admin-periods'], queryFn: api.listPeriods });
-  const [form, setForm] = useState({ id: '', name: '', kind: 'ANNUAL', startsAt: '', endsAt: '' });
+  const [form, setForm] = useState({ id: '', name: '', kind: 'ANNUAL', startsAt: '', endsAt: '', reason: '' });
   const save = useMutation({
     mutationFn: () =>
       api.savePeriod(Number(form.id), {
@@ -135,9 +135,10 @@ function PeriodsSection() {
         ridingNumbers: [],
         startsAt: form.startsAt,
         endsAt: form.endsAt,
+        reason: form.reason.trim(),
       }),
     onSuccess: () => {
-      setForm({ id: '', name: '', kind: 'ANNUAL', startsAt: '', endsAt: '' });
+      setForm({ id: '', name: '', kind: 'ANNUAL', startsAt: '', endsAt: '', reason: '' });
       return qc.invalidateQueries({ queryKey: ['admin-periods'] });
     },
   });
@@ -197,15 +198,21 @@ function PeriodsSection() {
             onChange={(e) => setForm({ ...form, endsAt: e.currentTarget.value })}
           />
         </Group>
+        <TextInput
+          label="Reason (required, recorded in the change log)"
+          value={form.reason}
+          onChange={(e) => setForm({ ...form, reason: e.currentTarget.value })}
+        />
         <Group>
           <Button
             onClick={() => save.mutate()}
             loading={save.isPending}
-            disabled={!form.id || !form.name || !form.startsAt || !form.endsAt}
+            disabled={!form.id || !form.name || !form.startsAt || !form.endsAt || form.reason.trim().length < 3}
           >
             Save period
           </Button>
         </Group>
+        {save.isError && <Alert color="red">{save.error.message}</Alert>}
         {save.isSuccess && <Alert color="green">Saved. Validation re-run against every mirrored contribution.</Alert>}
       </Stack>
     </Card>
@@ -216,6 +223,9 @@ function ContributionLimitsSection() {
   const qc = useQueryClient();
   const limits = useQuery({ queryKey: ['admin-limits'], queryFn: api.listContributionLimits });
   const [form, setForm] = useState({ year: '', bucket: 'PARTY', amountCents: '', notes: '' });
+  // one reason field covers a save or a removal; both are change-logged
+  const [reason, setReason] = useState('');
+  const hasReason = reason.trim().length >= 3;
   const save = useMutation({
     mutationFn: () =>
       api.saveContributionLimit({
@@ -223,12 +233,19 @@ function ContributionLimitsSection() {
         bucket: form.bucket,
         amountCents: Math.round(Number(form.amountCents) * 100),
         notes: form.notes || null,
+        reason: reason.trim(),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-limits'] }),
+    onSuccess: () => {
+      setReason('');
+      return qc.invalidateQueries({ queryKey: ['admin-limits'] });
+    },
   });
   const remove = useMutation({
-    mutationFn: (id: string) => api.deleteContributionLimit(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-limits'] }),
+    mutationFn: (id: string) => api.deleteContributionLimit(id, reason.trim()),
+    onSuccess: () => {
+      setReason('');
+      return qc.invalidateQueries({ queryKey: ['admin-limits'] });
+    },
   });
 
   return (
@@ -256,7 +273,14 @@ function ContributionLimitsSection() {
                   <Table.Td>${(l.amountCents / 100).toFixed(2)}</Table.Td>
                   <Table.Td>{l.notes ?? '—'}</Table.Td>
                   <Table.Td>
-                    <Button size="xs" color="red" variant="subtle" onClick={() => remove.mutate(l.id)}>
+                    <Button
+                      size="xs"
+                      color="red"
+                      variant="subtle"
+                      disabled={!hasReason}
+                      title={hasReason ? undefined : 'Enter a reason below first'}
+                      onClick={() => remove.mutate(l.id)}
+                    >
                       Remove
                     </Button>
                   </Table.Td>
@@ -280,11 +304,17 @@ function ContributionLimitsSection() {
           />
           <TextInput label="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.currentTarget.value })} />
         </Group>
+        <TextInput
+          label="Reason (required to save or remove, recorded in the change log)"
+          value={reason}
+          onChange={(e) => setReason(e.currentTarget.value)}
+        />
         <Group>
-          <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!form.year || !form.amountCents}>
+          <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!form.year || !form.amountCents || !hasReason}>
             Save bucket
           </Button>
         </Group>
+        {(save.isError || remove.isError) && <Alert color="red">{(save.error ?? remove.error)?.message}</Alert>}
       </Stack>
     </Card>
   );

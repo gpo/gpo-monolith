@@ -15,7 +15,8 @@ import { runValidationForAllContributions } from '../validation/run.js';
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
  * ContributionLimit buckets, users/roles, the RTD holiday calendar, and
- * per-riding Qomon spaces. Settings writes need `administer Period`
+ * per-riding Qomon spaces. Period and limit writes take a reason and are
+ * change-logged (EO evaluation row 19). Settings writes need `administer Period`
  * (`settings.administer`); user and role writes need `administer User`
  * (`users.administer`); see auth/permissions.ts. Reads need only
  * authentication, matching every other list route.
@@ -70,14 +71,22 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   r.route({
     method: 'PUT',
     url: '/admin/periods/:id',
-    schema: { params: z.object({ id: z.coerce.number().int() }), body: PeriodBody.omit({ id: true }) },
+    schema: {
+      params: z.object({ id: z.coerce.number().int() }),
+      body: PeriodBody.omit({ id: true }).extend({ reason: z.string().trim().min(3) }),
+    },
     handler: async (request, reply) => {
       const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
-      const period = await app.prisma.period.upsert({
-        where: { id: request.params.id },
-        create: { id: request.params.id, ...request.body },
-        update: request.body,
+      const { reason, ...fields } = request.body;
+      const id = request.params.id;
+      // change-logged (EO evaluation row 19): a period's window decides
+      // which contributions count toward it
+      const period = await withChangeLog(app.prisma, { userId: auth.user.id, reason }, async (ctx) => {
+        const before = await ctx.tx.period.findUnique({ where: { id } });
+        const after = await ctx.tx.period.upsert({ where: { id }, create: { id, ...fields }, update: fields });
+        await ctx.log({ subjectType: 'Period', subjectId: String(id), before: before ?? undefined, after });
+        return after;
       });
       // "an edit re-runs validation A1" (screens.md 11) — the period window
       // check touches every contribution, not just ones in this period, so
@@ -106,15 +115,20 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   r.route({
     method: 'PUT',
     url: '/admin/contribution-limits',
-    schema: { body: LimitBody },
+    schema: { body: LimitBody.extend({ reason: z.string().trim().min(3) }) },
     handler: async (request, reply) => {
       const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
-      const { year, bucket, ...rest } = request.body;
-      const row = await app.prisma.contributionLimit.upsert({
-        where: { year_bucket: { year, bucket } },
-        create: { year, bucket, ...rest },
-        update: rest,
+      const { year, bucket, reason, ...rest } = request.body;
+      const row = await withChangeLog(app.prisma, { userId: auth.user.id, reason }, async (ctx) => {
+        const before = await ctx.tx.contributionLimit.findUnique({ where: { year_bucket: { year, bucket } } });
+        const after = await ctx.tx.contributionLimit.upsert({
+          where: { year_bucket: { year, bucket } },
+          create: { year, bucket, ...rest },
+          update: rest,
+        });
+        await ctx.log({ subjectType: 'ContributionLimit', subjectId: after.id, before: before ?? undefined, after });
+        return after;
       });
       return reply.send(row);
     },
@@ -123,11 +137,18 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   r.route({
     method: 'DELETE',
     url: '/admin/contribution-limits/:id',
-    schema: { params: z.object({ id: z.string() }) },
+    schema: { params: z.object({ id: z.string() }), body: z.object({ reason: z.string().trim().min(3) }) },
     handler: async (request, reply) => {
       const auth = requireAdmin(request.user as SessionUser | undefined, request.ability);
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
-      await app.prisma.contributionLimit.delete({ where: { id: request.params.id } });
+      const existing = await app.prisma.contributionLimit.findUnique({ where: { id: request.params.id } });
+      if (!existing) return reply.code(404).send({ error: 'no such contribution limit' });
+      await withChangeLog(app.prisma, { userId: auth.user.id, reason: request.body.reason }, async (ctx) => {
+        await ctx.tx.contributionLimit.delete({ where: { id: existing.id } });
+        // the entry keeps the removed bucket, so the limit that applied
+        // stays on record
+        await ctx.log({ subjectType: 'ContributionLimit', subjectId: existing.id, before: existing });
+      });
       return reply.code(204).send();
     },
   });

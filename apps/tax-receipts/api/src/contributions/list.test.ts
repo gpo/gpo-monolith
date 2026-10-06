@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution, markSuperseded } from '../test/db.js';
+import { issueReceipt, resetDb, seedBaseline, testPrisma, createTestContribution, markSuperseded, fixtureContact } from '../test/db.js';
 import { listContributions } from './list.js';
 
 const prisma = testPrisma();
@@ -22,7 +22,7 @@ describe('listContributions (ticket 1.3)', () => {
     ridingNumber?: number | null;
     entityKind?: 'PARTY' | 'CA' | 'CAMPAIGN';
   }) {
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: opts.qomonTransactionId,
         name: opts.contactName ?? 'Dana Donor',

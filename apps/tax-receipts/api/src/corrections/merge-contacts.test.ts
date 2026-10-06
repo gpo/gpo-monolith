@@ -7,7 +7,7 @@ import { issueReceipt } from '../receipts/issue.js';
 import { buildRtdDraft } from '../rtd/draft.js';
 import { markRtdFilingSent } from '../rtd/mark-sent.js';
 import { prepareRtdFiling } from '../rtd/prepare.js';
-import { createTestContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 import { moveContributions } from './actions.js';
 import { CorrectionValidationError, applyCorrection, previewCorrection } from './contribution-correction.js';
 import { ContactNotMergedError, mergeContacts, unmergeContact } from './merge-contacts.js';
@@ -41,7 +41,7 @@ describe('correction action 10: merge duplicate contacts', () => {
   });
 
   const seedContact = (name: string) =>
-    prisma.contact.create({ data: { qomonContactId: nextContact++, name, addresses: ADDRESS, email: 'val@example.org' } });
+    fixtureContact(prisma, { data: { qomonContactId: nextContact++, name, addresses: ADDRESS, email: 'val@example.org' } });
 
   async function seedContribution(contactId: string, amountCents: number, receipted = false) {
     const c = await createTestContribution(prisma, {
@@ -140,7 +140,9 @@ describe('correction action 10: merge duplicate contacts', () => {
     const owed = await prisma.workItem.findMany({ where: { kind: 'OWED_TO_EO', ruleRef: 'corrections-11' } });
     expect(owed.map((w) => w.subjectId)).toEqual([contribution.id]);
     expect(result.owedToEoWorkItemIds).toHaveLength(1);
-    const log = await prisma.changeLogEntry.findFirstOrThrow({ where: { subjectType: 'Contact', subjectId: duplicate.id } });
+    const log = await prisma.changeLogEntry.findFirstOrThrow({
+      where: { subjectType: 'Contact', subjectId: duplicate.id, reason: { not: 'test fixture' } },
+    });
     expect(JSON.stringify(log.after)).toContain('donor confirmed by phone');
   });
 

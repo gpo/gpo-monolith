@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 import { listWorkItems } from './list.js';
 
 const prisma = testPrisma();
@@ -11,7 +11,7 @@ describe('listWorkItems (ticket 1.8)', () => {
   });
 
   async function seedItem(kind: 'VALIDATION' | 'DIFF' | 'OWED_TO_EO' | 'SYNC_INCIDENT', ruleRef?: string) {
-    const contact = await prisma.contact.create({ data: { qomonContactId: BigInt(Math.floor(Math.random() * 1e9)), name: 'Dana Donor' } });
+    const contact = await fixtureContact(prisma, { data: { qomonContactId: BigInt(Math.floor(Math.random() * 1e9)), name: 'Dana Donor' } });
     return prisma.workItem.create({
       data: { kind, subjectType: 'Contribution', subjectId: 'c1', contactId: contact.id, ruleRef },
     });

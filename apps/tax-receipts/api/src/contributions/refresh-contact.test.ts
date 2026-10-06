@@ -1,6 +1,6 @@
 import { InMemoryQomon } from '@gpo/qomon-client/fake';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { makeContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { makeContribution, resetDb, seedBaseline, testPrisma, fixtureContactUpdate } from '../test/db.js';
 import { ContributionNotFoundError } from './metadata-edit.js';
 import { refreshContributionContact } from './refresh-contact.js';
 
@@ -13,7 +13,7 @@ describe('refreshContributionContact (D12: contacts stay Qomon-owned)', () => {
   });
 
   it('throws for an unknown contribution', async () => {
-    await expect(refreshContributionContact(prisma, new InMemoryQomon(), 'nope')).rejects.toBeInstanceOf(
+    await expect(refreshContributionContact(prisma, new InMemoryQomon(), 'nope', null)).rejects.toBeInstanceOf(
       ContributionNotFoundError,
     );
   });
@@ -31,15 +31,21 @@ describe('refreshContributionContact (D12: contacts stay Qomon-owned)', () => {
       qomonTransactionId: 4n,
       amountCents: 5_000,
     });
-    await prisma.contact.update({
+    await fixtureContactUpdate(prisma, {
       where: { id: contactId },
       data: { addresses: [{ city: 'Waterloo', postalcode: 'N2L6H5', country: 'CAN' }] },
     });
 
-    await expect(refreshContributionContact(prisma, qomon, contributionId)).resolves.toBe('refreshed');
+    await expect(refreshContributionContact(prisma, qomon, contributionId, null)).resolves.toBe('refreshed');
 
     const contact = await prisma.contact.findUniqueOrThrow({ where: { id: contactId } });
     expect((contact.addresses as Array<{ street?: string }>)[0]).toMatchObject({ street: 'Main St' });
+    // the refresh is change-logged like any contact write (D13)
+    const entry = await prisma.changeLogEntry.findFirstOrThrow({
+      where: { subjectType: 'Contact', subjectId: contactId, reason: 'refreshed donor from Qomon' },
+    });
+    expect(entry.before).toMatchObject({ addresses: [{ city: 'Waterloo' }] });
+    expect(entry.after).toMatchObject({ addresses: [expect.objectContaining({ street: 'Main St' })] });
     expect((await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).amountCents).toBe(5_000);
     expect((await prisma.contribution.findUniqueOrThrow({ where: { id: contributionId } })).amountCents).toBe(5_000);
   });
@@ -47,13 +53,13 @@ describe('refreshContributionContact (D12: contacts stay Qomon-owned)', () => {
   it('tolerates a contact that no longer exists in Qomon', async () => {
     // contact 5 was never seeded in Qomon, so getContact 404s
     const { contributionId } = await makeContribution(prisma, { qomonContactId: 5n, qomonTransactionId: 5n, amountCents: 100 });
-    await expect(refreshContributionContact(prisma, new InMemoryQomon(), contributionId)).resolves.toBe(
+    await expect(refreshContributionContact(prisma, new InMemoryQomon(), contributionId, null)).resolves.toBe(
       'not-found-in-qomon',
     );
   });
 
   it('is a no-op for a contact with no Qomon link (development and testing)', async () => {
     const { contributionId } = await makeContribution(prisma, { amountCents: 100 });
-    await expect(refreshContributionContact(prisma, new InMemoryQomon(), contributionId)).resolves.toBe('not-linked');
+    await expect(refreshContributionContact(prisma, new InMemoryQomon(), contributionId, null)).resolves.toBe('not-linked');
   });
 });

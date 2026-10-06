@@ -63,6 +63,10 @@ export interface Me {
     sendRtdFilings: boolean;
     fileEOForms: boolean;
     enterPayments: boolean;
+    /** add contributors (contact.manage) */
+    addContacts: boolean;
+    /** edit contributors (contact.manage) */
+    editContacts: boolean;
     correctContributions: boolean;
     correctReceipts: boolean;
     administerUsers: boolean;
@@ -132,6 +136,9 @@ export interface ContributionDetail {
     name: string;
     email: string | null;
     address: { line1: string; city: string; province: string; postalCode: string; country: string } | null;
+    contributorType: 'INDIVIDUAL';
+    /** null for a tool-owned contact (D13) */
+    qomonContactId: string | null;
   };
   amountCents: number;
   acceptedAt: string;
@@ -279,6 +286,85 @@ export interface ContactHit {
   name: string;
   email: string | null;
   qomonContactId: string | null;
+  mergedIntoId?: string | null;
+  formattedAddress?: FormattedAddress | null;
+}
+
+export interface FormattedAddress {
+  line1: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  country: string;
+}
+
+/** A mailing address in Qomon's shape, which is how contacts store it. */
+export interface ContactAddress {
+  housenumber: string | null;
+  street: string;
+  city: string;
+  /** province or state, e.g. "ON" */
+  state: string;
+  postalcode: string;
+  country: string;
+}
+
+/** Where a new contributor is created (D13): in Qomon first when a Qomon
+ *  space is configured, otherwise in the tool. */
+export type ContactSource = 'qomon' | 'tool';
+
+export interface ContactRecord {
+  id: string;
+  name: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  contributorType: 'INDIVIDUAL';
+  address: ContactAddress | null;
+  formattedAddress: FormattedAddress | null;
+  qomonContactId: string | null;
+  source: ContactSource;
+  lastSyncedAt: string | null;
+  mergedIntoId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContactDetail extends ContactRecord {
+  /** false for a Qomon contact while Qomon is not configured here */
+  editable: boolean;
+  contributions: Array<{
+    id: string;
+    amountCents: number;
+    acceptedAt: string;
+    status: string;
+    periodId: number | null;
+    entityKind: string | null;
+    ridingNumber: number | null;
+  }>;
+  changeLog: Array<{
+    id: string;
+    actorUserId: string | null;
+    actorName: string | null;
+    reason: string;
+    before: unknown;
+    after: unknown;
+    at: string;
+    correlationId: string;
+  }>;
+}
+
+export interface ContactInput {
+  reason: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  address: ContactAddress | null;
+}
+
+export interface NewContactInput extends ContactInput {
+  /** confirms a likely duplicate (409) is a different person */
+  allowDuplicate?: boolean;
 }
 
 export interface ReallocationProposal {
@@ -919,6 +1005,19 @@ export const api = {
     return request<IntakePreview>(`/intake-preview?${params.toString()}`);
   },
   searchContacts: (query: string) => request<{ data: ContactHit[] }>(`/contacts?query=${encodeURIComponent(query)}`),
+  listContacts: (q: { query?: string; includeMerged?: boolean; limit?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (q.query) params.set('query', q.query);
+    if (q.includeMerged) params.set('includeMerged', 'true');
+    params.set('limit', String(q.limit ?? 100));
+    return request<{ data: ContactHit[] }>(`/contacts?${params.toString()}`);
+  },
+  contactSettings: () => request<{ source: ContactSource }>('/contacts/settings'),
+  getContact: (id: string) => request<ContactDetail>(`/contacts/${id}`),
+  createContact: (input: NewContactInput) =>
+    request<ContactRecord>('/contacts', { method: 'POST', body: JSON.stringify(input) }),
+  updateContact: (id: string, input: ContactInput) =>
+    request<ContactRecord>(`/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   previewCorrection: (body: CorrectionRequest) =>
     request<CorrectionPlan>('/corrections/preview', { method: 'POST', body: JSON.stringify(body) }),
   applyCorrection: (body: CorrectionRequest) =>
@@ -1019,16 +1118,16 @@ export const api = {
   simulateEmailEvent: (id: string, type: 'delivered' | 'bounced' | 'complained') =>
     request<{ applied: number }>(`/admin/emails/${id}/simulate`, { method: 'POST', body: JSON.stringify({ type }) }),
   listPeriods: () => request<{ data: PeriodRow[] }>('/admin/periods'),
-  savePeriod: (id: number, input: Omit<PeriodRow, 'id'>) =>
+  savePeriod: (id: number, input: Omit<PeriodRow, 'id'> & { reason: string }) =>
     request<{ period: PeriodRow; revalidation: unknown }>(`/admin/periods/${id}`, {
       method: 'PUT',
       body: JSON.stringify(input),
     }),
   listContributionLimits: () => request<{ data: ContributionLimitRow[] }>('/admin/contribution-limits'),
-  saveContributionLimit: (input: Omit<ContributionLimitRow, 'id'>) =>
+  saveContributionLimit: (input: Omit<ContributionLimitRow, 'id'> & { reason: string }) =>
     request<ContributionLimitRow>('/admin/contribution-limits', { method: 'PUT', body: JSON.stringify(input) }),
-  deleteContributionLimit: (id: string) =>
-    request<void>(`/admin/contribution-limits/${id}`, { method: 'DELETE' }),
+  deleteContributionLimit: (id: string, reason: string) =>
+    request<void>(`/admin/contribution-limits/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
   listBusinessDayCalendars: () => request<{ data: BusinessDayCalendarRow[] }>('/admin/business-day-calendars'),
   saveBusinessDayCalendar: (year: number, holidays: string[]) =>
     request<BusinessDayCalendarRow>(`/admin/business-day-calendars/${year}`, {

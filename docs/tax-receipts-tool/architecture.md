@@ -1,5 +1,5 @@
 ---
-last-reviewed: 2026-09-10
+last-reviewed: 2026-10-06
 review-interval-days: 60
 ---
 
@@ -91,13 +91,43 @@ structural invariants are enforced in the database by triggers in the
    column);
 3. receipt numbers come from one monotonic sequence, are immutable, and are
    never freed by cancellation;
-4. contributions, receipts, allocations, and change-log rows are never
-   hard-deleted;
-5. every mutation of metadata, receipts, or allocations happens inside a
-   change-logged transaction (actor, reason, before, after), verified at
-   commit.
+4. contributions, contacts, receipts, allocations, and change-log rows are
+   never hard-deleted;
+5. every mutation of contributions, contacts, receipts, or allocations
+   happens inside a change-logged transaction (actor, reason, before,
+   after), verified at commit. Later migrations extended this guard to
+   `contribution` and `contact`.
 
 All mutating code paths go through `withChangeLog` (`src/changelog/write.ts`).
+Period and contribution-limit edits under Admin also take a reason and are
+change-logged, though those tables are not guarded by a trigger. Tests that
+need a contact or contribution row directly use `fixtureContact` and
+`fixtureWrite` in `api/src/test/db.ts`.
+
+## Contributors
+
+Contributors (`contact` rows) are added and edited under **Contributors**
+(`/contributors`), from the donor picker on payment entry, and from a
+contribution's detail page. All writes go through `api/src/contacts/write.ts`.
+Who owns a contact depends on whether the API has a Qomon client
+(`QOMON_API_KEY` set):
+
+- **Without Qomon**, contacts are owned by the tool: a new one has no
+  `qomonContactId`, and edits update the row.
+- **With Qomon**, a new contributor is created in Qomon first and then
+  mirrored with its Qomon id. Editing a Qomon-linked contact writes only the
+  changed fields to Qomon (read, merge, full replace, via
+  `QomonApi.updateContact`) and then mirrors what Qomon holds. If Qomon
+  refuses, nothing is written locally.
+- A Qomon-linked contact cannot be edited while Qomon is not configured
+  (409). A contact with no Qomon link stays tool-owned either way.
+
+The import sweep and the "refresh donor from Qomon" action write contacts
+through the same module (`mirrorQomonContact`), so every contact change has a
+`Contact` change-log entry: the sweep's with no actor, the others with the
+user's. A contact edit re-runs validation on that contributor's active
+contributions. `GET /contacts/settings` tells the web form which mode it is
+in. Adding and editing contributors needs the `contact.manage` permission.
 
 ## Auth
 

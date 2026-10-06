@@ -63,9 +63,35 @@ export class GuardedContactWriter {
     return this.transport.replaceContact(id, { ...contact, id });
   }
 
+  /** Read-modify-write: the merged object is field-complete by
+   *  construction (Qomon's own current record plus the changes), so it does
+   *  not go through the {@link replaceContact} completeness check, which
+   *  would refuse a contact Qomon itself holds with no email. */
+  async updateContact(id: number, changes: Partial<QomonContact>): Promise<QomonContact> {
+    const current = await this.transport.getContact(id);
+    await this.transport.replaceContact(id, mergeContact(current, changes, id));
+    return this.transport.getContact(id);
+  }
+
   getContact(id: number): Promise<QomonContact> {
     return this.transport.getContact(id);
   }
+}
+
+/** `changes` onto `current`, keeping every field (and address key) the
+ *  caller did not name, including ones this client does not model. */
+export function mergeContact(
+  current: QomonContact,
+  changes: Partial<QomonContact>,
+  id: number,
+): QomonContact {
+  const { id: _id, address, ...rest } = changes;
+  void _id;
+  const merged: QomonContact = { ...current, ...rest, id };
+  if (address !== undefined) {
+    merged.address = address === null ? null : { ...(current.address ?? {}), ...address };
+  }
+  return merged;
 }
 
 function stripId(contact: QomonContact): QomonContact {

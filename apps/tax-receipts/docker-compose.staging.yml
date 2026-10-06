@@ -62,6 +62,9 @@ services:
       # nginx (web) and the load balancer sit in front
       TRUST_PROXY: 'true'
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?set PUBLIC_WEB_URL in .env.staging}
+      # Set, contributors added or edited on staging are created in this
+      # Qomon space first (D13): point it at a sandbox space, never the
+      # production one. Unset, staging keeps its own contributors.
       QOMON_API_KEY: ${QOMON_API_KEY:-}
       QOMON_API_BASE: ${QOMON_API_BASE:-https://incoming.qomon.app}
       # Staging never sends real email: every send is simulated end to end.

@@ -22,8 +22,8 @@ import {
  * The combined contributor's calendar-year RTD aggregate needs no step here:
  * the draft builder derives it live from ACTIVE contributions, so deposits that
  * only crossed $200 once merged go into the next normal filing as late records
- * (the EO-sanctioned path). Contacts are Qomon-owned, so the merge in Qomon
- * itself is the follow-up the preview lists.
+ * (the EO-sanctioned path). When both contacts are Qomon contacts, the merge
+ * in Qomon itself is the follow-up the preview lists (D13).
  */
 
 export interface MergeContactsInput {
@@ -81,9 +81,13 @@ export async function mergeContacts(prisma: PrismaClient, input: MergeContactsIn
     politicalEntityLabel: input.politicalEntityLabel,
     entityLabels: input.entityLabels,
     delivery: input.delivery,
-    extraFollowUps: [
-      `Qomon still has both records: merge ${mergedAway.name} into ${survivor.name} there too (contacts are Qomon-owned; the tool never writes to Qomon)`,
-    ],
+    // a tool-owned contact (D13) has no Qomon record to merge
+    extraFollowUps:
+      survivor.qomonContactId !== null && mergedAway.qomonContactId !== null
+        ? [
+            `Qomon still has both records: merge ${mergedAway.name} into ${survivor.name} there too (the tool does not merge contacts in Qomon)`,
+          ]
+        : [],
     inTransaction: async (ctx) => {
       // "who paid" is the same person now
       const payments = await ctx.tx.payment.findMany({ where: { contactId: mergedAway.id } });

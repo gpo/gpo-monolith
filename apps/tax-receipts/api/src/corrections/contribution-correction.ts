@@ -722,7 +722,7 @@ async function prepare(prisma: PrismaClient, input: CorrectionInput): Promise<Pr
     if (differs) {
       followUps.push(
         `Qomon still shows transaction ${link.qomonTransactionId} as ${old.contact.name}, ` +
-          `${(old.amountCents / 100).toFixed(2)}; fix it by hand if Fundraising needs it (the tool never writes to Qomon)`,
+          `${(old.amountCents / 100).toFixed(2)}; fix it by hand if Fundraising needs it (the tool never writes to Qomon transactions)`,
       );
     }
   }

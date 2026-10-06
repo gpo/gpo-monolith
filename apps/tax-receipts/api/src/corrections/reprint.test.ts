@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
 import { TerminalReceiptError } from '../receipts/allocate.js';
 import { issueReceipt } from '../receipts/issue.js';
-import { createTestContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 import { cancelReceipt } from './cancel.js';
 import { MaterialChangeError, ReprintNotAllowedError, isSpellingFix, reprintReceipt } from './reprint.js';
 
@@ -30,7 +30,7 @@ describe('reprint without cancelling: lost copy and spelling fix (corrections ac
     await resetDb(prisma);
     baseline = await seedBaseline(prisma);
     storageDir = await mkdtemp(path.join(tmpdir(), 'gpo-reprint-test-'));
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: 1n,
         name: 'Dana Donor',

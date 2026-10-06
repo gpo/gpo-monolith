@@ -1,5 +1,5 @@
 import { contributionYear, paymentMethodFromQomon } from '@gpo/tax-receipts-core';
-import { PrismaClient, type EntityKind, type ReceivedBy } from '../src/generated/prisma/index.js';
+import { PrismaClient, type EntityKind, type Prisma, type ReceivedBy } from '../src/generated/prisma/index.js';
 import { allocateToReceipt } from '../src/receipts/allocate.js';
 import { issueReceipt } from '../src/receipts/issue.js';
 import { withChangeLog } from '../src/changelog/write.js';
@@ -665,6 +665,16 @@ const GROUP_3_CONTRIBUTIONS = [
   { qomonTransactionId: 910_002n, amountCents: 2_500, acceptedAt: '2028-03-10T12:00:00Z' },
 ];
 
+/** A fixture contact, change-logged like any contact write (`contact` is a
+ *  guarded table, invariant 5 and D13). */
+async function createSeedContact(data: Prisma.ContactUncheckedCreateInput) {
+  return withChangeLog(prisma, { userId: null, reason: 'fixture: seeded contact' }, async (ctx) => {
+    const contact = await ctx.tx.contact.create({ data });
+    await ctx.log({ subjectType: 'Contact', subjectId: contact.id, after: contact });
+    return contact;
+  });
+}
+
 async function ensureGroup3(cfoUserId: string): Promise<void> {
   const existing = await findSeededContribution(GROUP_3_CONTRIBUTIONS[0]!.qomonTransactionId);
   if (existing) {
@@ -673,8 +683,10 @@ async function ensureGroup3(cfoUserId: string): Promise<void> {
   }
 
   let contact = await prisma.contact.findUnique({ where: { qomonContactId: GROUP_3_CONTACT.qomonContactId } });
-  contact ??= await prisma.contact.create({
-    data: { qomonContactId: GROUP_3_CONTACT.qomonContactId, name: GROUP_3_CONTACT.name, addresses: [ONTARIO_ADDRESS] },
+  contact ??= await createSeedContact({
+    qomonContactId: GROUP_3_CONTACT.qomonContactId,
+    name: GROUP_3_CONTACT.name,
+    addresses: [ONTARIO_ADDRESS],
   });
 
   const contributionIds: string[] = [];
@@ -768,13 +780,11 @@ async function ensureGroup1Fixture(f: Group1Fixture): Promise<void> {
 
   let contact = await prisma.contact.findUnique({ where: { qomonContactId: f.qomonContactId } });
   if (!contact) {
-    contact = await prisma.contact.create({
-      data: {
-        qomonContactId: f.qomonContactId,
-        name: f.contactName,
-        email: f.email ?? null,
-        addresses: f.address ? [f.address] : [],
-      },
+    contact = await createSeedContact({
+      qomonContactId: f.qomonContactId,
+      name: f.contactName,
+      email: f.email ?? null,
+      addresses: f.address ? [f.address] : [],
     });
   }
 
@@ -806,12 +816,10 @@ async function ensureGroup2Fixture(f: Group2Fixture, cfoUserId: string): Promise
 
   let contact = await prisma.contact.findUnique({ where: { qomonContactId: f.qomonContactId } });
   if (!contact) {
-    contact = await prisma.contact.create({
-      data: {
-        qomonContactId: f.qomonContactId,
-        name: f.contactName,
-        addresses: f.address ? [f.address] : [],
-      },
+    contact = await createSeedContact({
+      qomonContactId: f.qomonContactId,
+      name: f.contactName,
+      addresses: f.address ? [f.address] : [],
     });
   }
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { createTestContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 import { ContributionNotActiveError } from './contribution-correction.js';
 import { proposeReallocation } from './reallocation-proposal.js';
 
@@ -16,7 +16,7 @@ describe('guided reallocation proposal (corrections action 9)', () => {
     baseline = await seedBaseline(prisma); // PARTY limit $5,000
     await prisma.contributionLimit.create({ data: { year: 2026, bucket: 'CA', amountCents: 150_000 } });
     await prisma.riding.create({ data: { ridingNumber: 12, name: 'Brampton West', active: true, qomonApiKey: 'x' } });
-    contactId = (await prisma.contact.create({ data: { qomonContactId: 1n, name: 'Dana Donor' } })).id;
+    contactId = (await fixtureContact(prisma, { data: { qomonContactId: 1n, name: 'Dana Donor' } })).id;
     nextTx = 1n;
   });
 

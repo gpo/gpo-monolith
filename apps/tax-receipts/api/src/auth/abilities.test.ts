@@ -65,7 +65,7 @@ const ACTIONS: AppAction[] = [
   'manage', 'read', 'create', 'update', 'issue', 'correct', 'file', 'reconcile', 'share', 'administer',
 ];
 const SUBJECTS: AppSubject[] = [
-  'all', 'Contribution', 'Payment', 'ContributionMetadata', 'Receipt', 'WorkItem', 'RtdFiling',
+  'all', 'Contribution', 'Contact', 'Payment', 'ContributionMetadata', 'Receipt', 'WorkItem', 'RtdFiling',
   'EntityReport', 'EOForm', 'ReconciliationMark', 'Period', 'ContributionLimit', 'User',
   'IssuanceKillSwitch', 'Riding',
 ];
@@ -77,7 +77,15 @@ const SUBJECTS: AppSubject[] = [
  * ContributionMetadata (as administrator and rules_authority had), so the
  * party CFO also gets the unchecked `update Contribution`.
  */
-const ALLOWED_GAINS = new Set(['party_cfo:update:Contribution']);
+const ALLOWED_GAINS = new Set([
+  'party_cfo:update:Contribution',
+  // deliberate: `contact.manage` (D13) is a function the legacy switch
+  // predates, given to the two roles that enter payments
+  'party_cfo:create:Contact',
+  'party_cfo:update:Contact',
+  'administrator:create:Contact',
+  'administrator:update:Contact',
+]);
 
 const user = { id: 'u', isCfoDesignate: false, allRidings: true, ridingGrants: [] };
 

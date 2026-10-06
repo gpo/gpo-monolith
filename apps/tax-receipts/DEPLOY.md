@@ -82,7 +82,7 @@ Optional:
 | `EMAIL_PROVIDER` | `dev` | `resend` needs `RESEND_API_KEY`. |
 | `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` | unset | Secrets. Webhook URL: `https://<host>/api/webhooks/email`. |
 | `EMAIL_FROM`, `EMAIL_REPLY_TO` | placeholder | Sender on a domain verified in Resend. |
-| `QOMON_API_KEY`, `QOMON_API_BASE` | unset | Party-level Qomon space. Secret. Unset disables the mirror sweep. |
+| `QOMON_API_KEY`, `QOMON_API_BASE` | unset | Party-level Qomon space. Secret. Unset disables the mirror sweep, and the tool then owns its contributors (D13): ones added in the tool stay in the tool, and Qomon-linked ones cannot be edited. Set, a contributor added or edited in the tool is written to Qomon first. |
 | `EMAIL_RATE_PER_SECOND`, `EMAIL_DAILY_LIMIT`, `EMAIL_DISPATCH_INTERVAL_MS` | 5, none, 15000 | Send throttling. |
 
 The api validates its environment at start and exits with a list of what is

@@ -9,7 +9,7 @@ import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
 import type { EmailProvider } from '../delivery/email-provider.js';
 import { ResendEmailProvider } from '../delivery/resend-provider.js';
-import { createTestContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -50,7 +50,7 @@ describe('delivery routes (tickets 3.6, 3.12)', () => {
       },
     });
 
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: 1n,
         name: 'Emma Emailer',

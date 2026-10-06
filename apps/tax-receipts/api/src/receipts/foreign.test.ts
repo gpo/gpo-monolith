@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { setKillSwitch } from '../auth/kill-switch.js';
 import { withChangeLog } from '../changelog/write.js';
 import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
-import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact } from '../test/db.js';
 import {
   DuplicateForeignReceiptNumberError,
   ForeignReceiptNumberFormatError,
@@ -23,7 +23,7 @@ describe('recordForeignReceipt (ticket 3.8)', () => {
   async function seedContact(addresses: unknown[] = [
     { housenumber: '1', street: 'Main St', city: 'Toronto', state: 'ON', postalcode: 'M1M1M1', country: 'CA' },
   ]) {
-    return prisma.contact.create({
+    return fixtureContact(prisma, {
       data: { qomonContactId: 1n, name: 'Dana Donor', addresses: addresses as never },
     });
   }

@@ -153,6 +153,8 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         sendRtdFilings: request.ability.can('file', 'RtdFiling'),
         fileEOForms: request.ability.can('file', 'EOForm'),
         enterPayments: request.ability.can('create', 'Payment'),
+        addContacts: request.ability.can('create', 'Contact'),
+        editContacts: request.ability.can('update', 'Contact'),
         correctContributions: request.ability.can('correct', 'Contribution'),
         correctReceipts: request.ability.can('correct', 'Receipt'),
         administerUsers: request.ability.can('administer', 'User'),

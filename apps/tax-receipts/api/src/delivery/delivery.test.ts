@@ -11,7 +11,7 @@ import { sendDonorPrechecksForSpace } from '../donors/precheck.js';
 import type { Prisma } from '../generated/prisma/index.js';
 import { issueReceiptsForSpace } from '../space/issuance.js';
 import { getOrCreateSpaceState } from '../space/space-state.js';
-import { createTestContribution, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 import { DevEmailProvider } from './dev-provider.js';
 import { setLiveSending } from './send-mode.js';
 import { dispatchPendingEmails } from './dispatcher.js';
@@ -78,7 +78,7 @@ describe('receipt delivery (ticket 3.6)', () => {
   });
 
   async function seedDonor(name: string, delivery: 'EMAIL' | 'MAIL', opts: { email?: string | null } = {}) {
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: {
         qomonContactId: BigInt(nextId),
         name,

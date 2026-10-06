@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
-import { resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -48,7 +48,7 @@ describe('admin routes (ticket 1.12)', () => {
       method: 'PUT',
       url: '/admin/periods/2020',
       cookies: { [cookie.name]: cookie.value },
-      payload: { name: '2020 Annual', kind: 'ANNUAL', startsAt: '2020-01-01T05:00:00Z', endsAt: '2021-01-01T05:00:00Z' },
+      payload: { name: '2020 Annual', kind: 'ANNUAL', startsAt: '2020-01-01T05:00:00Z', endsAt: '2021-01-01T05:00:00Z', reason: 'new period' },
     });
     expect(write.statusCode).toBe(403);
   });
@@ -59,12 +59,41 @@ describe('admin routes (ticket 1.12)', () => {
       method: 'PUT',
       url: '/admin/periods/2020',
       cookies: { [cookie.name]: cookie.value },
-      payload: { name: '2020 Annual', kind: 'ANNUAL', startsAt: '2020-01-01T05:00:00Z', endsAt: '2021-01-01T05:00:00Z' },
+      payload: { name: '2020 Annual', kind: 'ANNUAL', startsAt: '2020-01-01T05:00:00Z', endsAt: '2021-01-01T05:00:00Z', reason: 'new period' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().period).toMatchObject({ id: 2020, name: '2020 Annual' });
     expect(res.json().revalidation).toMatchObject({ contributionsChecked: 0 });
     expect(await prisma.period.findUnique({ where: { id: 2020 } })).not.toBeNull();
+
+    // an edit is change-logged with the old and new values (EO row 19)
+    const edit = await app.inject({
+      method: 'PUT',
+      url: '/admin/periods/2020',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: '2020 Annual (corrected)', kind: 'ANNUAL', startsAt: '2020-01-01T05:00:00Z', endsAt: '2021-01-01T05:00:00Z', reason: 'typo in name' },
+    });
+    expect(edit.statusCode).toBe(200);
+    const entries = await prisma.changeLogEntry.findMany({ where: { subjectType: 'Period', subjectId: '2020' }, orderBy: { at: 'asc' } });
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ reason: 'new period', before: null });
+    expect(entries[1]).toMatchObject({
+      reason: 'typo in name',
+      before: expect.objectContaining({ name: '2020 Annual' }),
+      after: expect.objectContaining({ name: '2020 Annual (corrected)' }),
+    });
+    expect(entries[1]!.actorUserId).not.toBeNull();
+  });
+
+  it('refuses a period write with no reason', async () => {
+    const cookie = await login('sysadmin@gpo.test', 'sysadmin-pass-phrase');
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/admin/periods/2020',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { name: '2020 Annual', kind: 'ANNUAL', startsAt: '2020-01-01T05:00:00Z', endsAt: '2021-01-01T05:00:00Z' },
+    });
+    expect(res.statusCode).toBe(400);
   });
 
   it('a sysadmin can upsert and delete a contribution limit', async () => {
@@ -73,7 +102,7 @@ describe('admin routes (ticket 1.12)', () => {
       method: 'PUT',
       url: '/admin/contribution-limits',
       cookies: { [cookie.name]: cookie.value },
-      payload: { year: 2027, bucket: 'PARTY', amountCents: 500_000 },
+      payload: { year: 2027, bucket: 'PARTY', amountCents: 500_000, reason: '2027 limit published' },
     });
     expect(put.statusCode).toBe(200);
     const id = put.json().id;
@@ -82,9 +111,14 @@ describe('admin routes (ticket 1.12)', () => {
       method: 'DELETE',
       url: `/admin/contribution-limits/${id}`,
       cookies: { [cookie.name]: cookie.value },
+      payload: { reason: 'entered against the wrong year' },
     });
     expect(del.statusCode).toBe(204);
     expect(await prisma.contributionLimit.findUnique({ where: { id } })).toBeNull();
+
+    const entries = await prisma.changeLogEntry.findMany({ where: { subjectType: 'ContributionLimit', subjectId: id }, orderBy: { at: 'asc' } });
+    expect(entries.map((e) => e.reason)).toEqual(['2027 limit published', 'entered against the wrong year']);
+    expect(entries[1]).toMatchObject({ before: expect.objectContaining({ amountCents: 500_000 }), after: null });
   });
 
   it('a sysadmin can set a business-day calendar', async () => {
@@ -256,7 +290,7 @@ describe('admin routes (ticket 1.12)', () => {
   });
 
   it('lists the donor pre-check outbox for a sysadmin only (ticket 3.9)', async () => {
-    const contact = await prisma.contact.create({
+    const contact = await fixtureContact(prisma, {
       data: { qomonContactId: 999n, name: 'Pending Pat', email: 'pat@example.org' },
     });
     await prisma.donorCyclePreference.create({

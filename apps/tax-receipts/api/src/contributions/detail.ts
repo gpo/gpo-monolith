@@ -13,7 +13,15 @@ export interface ContributionDetail {
   id: string;
   status: string;
   supersedesId: string | null;
-  contact: { id: string; name: string; email: string | null; address: FormattedAddress | null };
+  contact: {
+    id: string;
+    name: string;
+    email: string | null;
+    address: FormattedAddress | null;
+    contributorType: string;
+    /** null for a tool-owned contact (D13) */
+    qomonContactId: string | null;
+  };
   amountCents: number;
   acceptedAt: string;
   note: string | null;
@@ -138,6 +146,8 @@ export async function getContributionDetail(
       name: row.contact.name,
       email: row.contact.email,
       address: formatAddress(row.contact.addresses),
+      contributorType: row.contact.contributorType,
+      qomonContactId: row.contact.qomonContactId === null ? null : String(row.contact.qomonContactId),
     },
     amountCents: row.amountCents,
     acceptedAt: row.acceptedAt.toISOString(),

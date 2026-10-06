@@ -13,6 +13,13 @@ export type EntityKind = z.infer<typeof EntityKind>;
 export const ReceivedBy = z.enum(['GPO', 'ENTITY']);
 export type ReceivedBy = z.infer<typeof ReceivedBy>;
 
+/** The kind of contributor (EO evaluation row 23). Ontario accepts political
+ *  contributions from individuals only, so this has one member; it is a
+ *  recorded field rather than an assumption so the record says so, and it
+ *  matches the ALL report's `Contributor_Type` of `I`. */
+export const ContributorType = z.enum(['INDIVIDUAL']);
+export type ContributorType = z.infer<typeof ContributorType>;
+
 export const ReceiptStatus = z.enum(['ISSUED', 'CANCELLED', 'VOID']);
 export type ReceiptStatus = z.infer<typeof ReceiptStatus>;
 

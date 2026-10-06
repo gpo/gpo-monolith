@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
-import { resetDb, seedBaseline, testPrisma, createTestContribution } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -36,7 +36,7 @@ describe('PATCH /contributions/:id/metadata (ticket 1.2)', () => {
       where: { id: baseline.adminUserId },
       data: { passwordHash: await hashPassword('admin-pass-phrase') },
     });
-    const contact = await prisma.contact.create({ data: { qomonContactId: 1n, name: 'Dana Donor' } });
+    const contact = await fixtureContact(prisma, { data: { qomonContactId: 1n, name: 'Dana Donor' } });
     const contribution = await createTestContribution(prisma, {
         qomonTransactionId: 1001n,
         qomonBundleId: 2001n,
@@ -184,7 +184,7 @@ describe('GET /contributions (ticket 1.3)', () => {
   });
 
   it('lists mirrored contributions for an authenticated user, filterable by query params', async () => {
-    const contact = await prisma.contact.create({ data: { qomonContactId: 99n, name: 'Dana Donor' } });
+    const contact = await fixtureContact(prisma, { data: { qomonContactId: 99n, name: 'Dana Donor' } });
     await createTestContribution(prisma, { contactId: contact.id, qomonTransactionId: 99n, amountCents: 1_000, acceptedAt: new Date('2026-03-01T00:00:00Z') });
 
     const login = await app.inject({
@@ -219,7 +219,7 @@ describe('POST /contributions/bulk-edit (ticket 1.4)', () => {
       where: { id: baseline.adminUserId },
       data: { passwordHash: await hashPassword('admin-pass-phrase') },
     });
-    const contact = await prisma.contact.create({ data: { qomonContactId: 500n, name: 'Dana Donor' } });
+    const contact = await fixtureContact(prisma, { data: { qomonContactId: 500n, name: 'Dana Donor' } });
     const contribution = await createTestContribution(prisma, {
         qomonTransactionId: 501n,
         qomonBundleId: 502n,

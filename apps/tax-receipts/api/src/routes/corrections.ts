@@ -334,37 +334,4 @@ export async function correctionRoutes(
       return reply.send(await proposeReallocation(app.prisma, request.params.id));
     },
   });
-
-  // The donor picker for move, split, and merge. Merged-away contacts are not
-  // offered: nothing can be attributed to them any more.
-  r.route({
-    method: 'GET',
-    url: '/contacts',
-    schema: {
-      querystring: z.object({
-        query: z.string().min(2),
-        limit: z.coerce.number().int().min(1).max(50).default(20),
-      }),
-    },
-    handler: async (request, reply) => {
-      const user = request.user as SessionUser | undefined;
-      if (!user) return reply.code(401).send({ error: 'authentication required' });
-      if (!request.ability.can('read', 'Contribution')) {
-        return reply.code(403).send({ error: 'not permitted to read contributions' });
-      }
-      const { query, limit } = request.query;
-      const rows = await app.prisma.contact.findMany({
-        where: {
-          mergedIntoId: null,
-          OR: [{ name: { contains: query, mode: 'insensitive' } }, { email: { contains: query, mode: 'insensitive' } }],
-        },
-        orderBy: { name: 'asc' },
-        take: limit,
-        select: { id: true, name: true, email: true, qomonContactId: true },
-      });
-      return reply.send({
-        data: rows.map((c) => ({ ...c, qomonContactId: c.qomonContactId === null ? null : String(c.qomonContactId) })),
-      });
-    },
-  });
 }
