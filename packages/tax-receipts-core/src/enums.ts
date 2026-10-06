@@ -6,8 +6,18 @@ import { z } from 'zod';
  * in sync (there is a test in the api package that asserts it).
  */
 
-export const EntityKind = z.enum(['CA', 'CAMPAIGN', 'PARTY']);
+/** Who a contribution is directed to (EO evaluation row 25): a
+ *  constituency association, a campaign, the party, or a leadership
+ *  contestant. CA and CAMPAIGN are riding-scoped; PARTY and LEADERSHIP carry
+ *  no riding, and a LEADERSHIP contribution names its contestant instead. */
+export const EntityKind = z.enum(['CA', 'CAMPAIGN', 'PARTY', 'LEADERSHIP']);
 export type EntityKind = z.infer<typeof EntityKind>;
+
+/** Whether an entity kind is tied to a riding (CA, CAMPAIGN) rather than
+ *  province-wide (PARTY, LEADERSHIP). */
+export function isRidingScoped(entityKind: EntityKind): boolean {
+  return entityKind === 'CA' || entityKind === 'CAMPAIGN';
+}
 
 /** Who physically received the money (data-model §2, invariant 8). */
 export const ReceivedBy = z.enum(['GPO', 'ENTITY']);
@@ -141,5 +151,6 @@ export const ChangeLogSubjectType = z.enum([
   'IssuanceKillSwitch',
   'EmailDeliverySettings',
   'Role',
+  'LeadershipContestant',
 ]);
 export type ChangeLogSubjectType = z.infer<typeof ChangeLogSubjectType>;

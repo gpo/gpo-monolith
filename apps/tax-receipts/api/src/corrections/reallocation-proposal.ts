@@ -60,7 +60,6 @@ export async function proposeReallocation(prisma: PrismaClient, contributionId: 
       ridingNumber: r.ridingNumber,
       year,
       candidateSelf: false,
-      leadership: false,
     }));
   const limits = await prisma.contributionLimit.findMany({ where: { year } });
   const evaluation = evaluateLimits({ year, limits, contributions: forLimits });

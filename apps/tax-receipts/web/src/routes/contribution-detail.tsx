@@ -23,6 +23,14 @@ import { api, ApiError, type ContributionDetail, type MetadataEditInput } from '
 import { describeRuleRef } from '../rule-labels.js';
 import { ContactFormModal } from '../components/contact-form-modal.js';
 import { CorrectionPanel } from '../components/correction-panel.js';
+import { LeadershipContestantSelect } from '../components/leadership-contestant-select.js';
+import {
+  AGENCY_HELP,
+  describeRecipient,
+  ENTITY_KIND_OPTIONS,
+  isRidingScoped,
+  leadershipLabelNote,
+} from '../entity-kind.js';
 import { PageHeader } from '../components/PageHeader.js';
 import { ReceiptActions } from '../components/receipt-actions.js';
 
@@ -30,9 +38,11 @@ import { ReceiptActions } from '../components/receipt-actions.js';
  * what the fields actually do (packages/tax-receipts-core/src/metadata.ts). */
 const METADATA_HELP = {
   entityKind:
-    'Who received the contribution: the party centrally (province-wide, no riding), a constituency association (tied to a riding), or a candidate’s campaign (tied to a riding).',
+    'Who received the contribution: the party centrally (province-wide, no riding), a constituency association (tied to a riding), a candidate’s campaign (tied to a riding), or a leadership contestant (no riding).',
   ridingNumber:
     'Electoral district (1–124) this contribution is attributed to. Required for a constituency association or campaign; not applicable when the recipient is the party (rule A2).',
+  leadershipContestantId:
+    'The leadership contestant this contribution is directed to. Their name prints on the receipt and in the EO reports (entity type LC). Add contestants under Admin.',
   receivedBy:
     'Who physically processed the contribution — independent of who it’s attributed to above. GPO: entered centrally by the party office. Entity: entered directly by a constituency association or campaign’s own CFO/subspace (this can happen even when the recipient kind above is Party, e.g. intake can’t yet always tell which subspace handled it).',
   periodId: 'The receipting period (tax year) this contribution is attributed to.',
@@ -43,15 +53,6 @@ const METADATA_HELP = {
   sourceCode:
     'Qomon/EO source code identifying the campaign or intake channel this contribution came in through; may also encode a riding number (rule A7).',
 } as const;
-
-/** Enum values stay PARTY/CA/CAMPAIGN on the wire (ContributionMetadata,
- * packages/tax-receipts-core/src/enums.ts) — only the on-screen labels are
- * natural language. */
-const RECIPIENT_KIND_OPTIONS = [
-  { value: 'PARTY', label: 'Party (province-wide)' },
-  { value: 'CA', label: 'Constituency association' },
-  { value: 'CAMPAIGN', label: 'Campaign' },
-];
 
 /** The ENTITY label for PARTY deliberately does NOT say "Party (central)" —
  * receivedBy tracks processing provenance (who entered it), not attribution.
@@ -66,7 +67,9 @@ function receivedByOptions(entityKind: string): { value: string; label: string }
       ? 'Constituency association'
       : entityKind === 'CAMPAIGN'
         ? 'Campaign'
-        : 'Entity / subspace entry (not GPO)';
+        : entityKind === 'LEADERSHIP'
+          ? 'Leadership contestant’s campaign'
+          : 'Entity / subspace entry (not GPO)';
   return [
     { value: 'GPO', label: 'GPO (party office, central)' },
     { value: 'ENTITY', label: entityLabel },
@@ -111,10 +114,10 @@ function a2RidingEntityWarning(
   entityKind: string,
   ridingNumber: number | null,
 ): string | null {
-  if (entityKind === 'PARTY' && ridingNumber !== null) {
-    return 'Entity kind PARTY must not carry a riding number.';
+  if (!isRidingScoped(entityKind) && ridingNumber !== null) {
+    return `Entity kind ${entityKind} must not carry a riding number.`;
   }
-  if (entityKind !== 'PARTY' && ridingNumber === null) {
+  if (isRidingScoped(entityKind) && ridingNumber === null) {
     return `Entity kind ${entityKind} requires a riding number.`;
   }
   return null;
@@ -150,7 +153,10 @@ function remainingEligibleCents(detail: ContributionDetail): number {
  * bake in silently (see PHASE-3-NOTES.md). Exported: the per-space issuance
  * page (ticket 3.12) needs the same default for the same reason. */
 export function defaultPoliticalEntityLabel(entityKind: string): string {
-  return entityKind === 'PARTY' ? 'Green Party of Ontario' : '';
+  if (entityKind === 'PARTY') return 'Green Party of Ontario';
+  // printed from the contestant registry instead (receiptEntityLabel in the api)
+  if (entityKind === 'LEADERSHIP') return 'Leadership contestant (name from the record)';
+  return '';
 }
 
 export function ContributionDetailPage({ id }: { id: string }) {
@@ -185,6 +191,7 @@ export function ContributionDetailPage({ id }: { id: string }) {
           periodId: detail.metadata.periodId,
           ridingNumber: detail.metadata.ridingNumber,
           entityKind: detail.metadata.entityKind,
+          leadershipContestantId: detail.metadata.leadershipContestantId,
           receivedBy: detail.metadata.receivedBy,
           goodsServices: detail.metadata.goodsServices,
           nonDeductibleCents: detail.metadata.nonDeductibleCents,
@@ -385,6 +392,61 @@ export function ContributionDetailPage({ id }: { id: string }) {
               : 'none — a receipt cannot be issued until this donor has an address on file'}
           </Text>
           <Text size="sm">Contributor type: Individual</Text>
+          {detail.metadata && (
+            <Group gap="xs">
+              <Text size="sm">Directed to: {describeRecipient(detail.metadata)}</Text>
+              <Tooltip label={AGENCY_HELP} multiline w={300} withArrow>
+                <Badge color={detail.metadata.agencyContribution ? 'grape' : 'gray'} variant="light">
+                  Agency contribution: {detail.metadata.agencyContribution ? 'Yes' : 'No'}
+                </Badge>
+              </Tooltip>
+            </Group>
+          )}
+          {detail.payment.contributions.length > 1 && (
+            <Stack gap={4}>
+              <Text size="sm" fw={500}>
+                This {money(detail.payment.amountCents)} payment is split across {detail.payment.contributions.length}{' '}
+                contributions:
+              </Text>
+              <Table withRowBorders={false} verticalSpacing={2}>
+                <Table.Tbody>
+                  {detail.payment.contributions.map((c) => (
+                    <Table.Tr key={c.id}>
+                      <Table.Td>
+                        {c.id === detail.id ? (
+                          <Text size="sm" fw={600}>
+                            this contribution
+                          </Text>
+                        ) : (
+                          <Link to="/contributions/$id" params={{ id: c.id }}>
+                            <Text size="sm" span c="blue">
+                              {c.contactName}
+                            </Text>
+                          </Link>
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{money(c.amountCents)}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{describeRecipient(c)}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">Received by {c.receivedBy ?? '—'}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        {c.agencyContribution && (
+                          <Badge color="grape" variant="light" size="sm">
+                            agency
+                          </Badge>
+                        )}
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Stack>
+          )}
           {(detail.note ?? detail.payment.note) && (
             <Text size="sm">Note: {detail.note ?? detail.payment.note}</Text>
           )}
@@ -403,47 +465,60 @@ export function ContributionDetailPage({ id }: { id: string }) {
               <Group grow align="flex-start">
                 <NativeSelect
                   label={<FieldLabel label="Recipient kind" help={METADATA_HELP.entityKind} />}
-                  data={RECIPIENT_KIND_OPTIONS}
+                  data={ENTITY_KIND_OPTIONS}
                   value={activeForm.entityKind}
                   onChange={(e) => {
                     const entityKind = e.currentTarget.value;
                     setForm({
                       ...activeForm,
                       entityKind,
-                      // Rule A2: a party-level recipient never carries a riding number.
-                      ridingNumber: entityKind === 'PARTY' ? null : activeForm.ridingNumber,
+                      // Rule A2: a party or leadership recipient never carries a
+                      // riding number, and only a leadership one names a contestant.
+                      ridingNumber: isRidingScoped(entityKind) ? activeForm.ridingNumber : null,
+                      leadershipContestantId: entityKind === 'LEADERSHIP' ? activeForm.leadershipContestantId : null,
                     });
                   }}
                 />
-                <Select
-                  label={
-                    <FieldLabel
-                      label="Riding number"
-                      help={METADATA_HELP.ridingNumber}
-                      required={activeForm.entityKind !== 'PARTY'}
-                    />
-                  }
-                  data={ridingSelectData}
-                  searchable
-                  clearable
-                  nothingFoundMessage="No matching riding"
-                  required={activeForm.entityKind !== 'PARTY'}
-                  withAsterisk={false}
-                  disabled={activeForm.entityKind === 'PARTY' || ridings.isLoading}
-                  placeholder={
-                    activeForm.entityKind === 'PARTY'
-                      ? 'N/A for party'
-                      : ridings.isLoading
-                        ? 'Loading ridings…'
-                        : 'Search by number or name'
-                  }
-                  value={activeForm.ridingNumber !== null ? String(activeForm.ridingNumber) : null}
-                  onChange={(v) => updateForm('ridingNumber', v !== null ? Number(v) : null)}
-                  error={
-                    a2RidingEntityWarning(activeForm.entityKind, activeForm.ridingNumber) ??
-                    (ridingUnknown ? `Riding ${activeForm.ridingNumber} — Unknown (no matching riding on file)` : null)
-                  }
-                />
+                {activeForm.entityKind === 'LEADERSHIP' ? (
+                  <LeadershipContestantSelect
+                    label={
+                      <FieldLabel label="Leadership contestant" help={METADATA_HELP.leadershipContestantId} required />
+                    }
+                    value={activeForm.leadershipContestantId}
+                    onChange={(v) => updateForm('leadershipContestantId', v)}
+                    error={activeForm.leadershipContestantId === null ? 'Choose the contestant (rule A2).' : null}
+                  />
+                ) : (
+                  <Select
+                    label={
+                      <FieldLabel
+                        label="Riding number"
+                        help={METADATA_HELP.ridingNumber}
+                        required={isRidingScoped(activeForm.entityKind)}
+                      />
+                    }
+                    data={ridingSelectData}
+                    searchable
+                    clearable
+                    nothingFoundMessage="No matching riding"
+                    required={isRidingScoped(activeForm.entityKind)}
+                    withAsterisk={false}
+                    disabled={!isRidingScoped(activeForm.entityKind) || ridings.isLoading}
+                    placeholder={
+                      !isRidingScoped(activeForm.entityKind)
+                        ? 'N/A for party'
+                        : ridings.isLoading
+                          ? 'Loading ridings…'
+                          : 'Search by number or name'
+                    }
+                    value={activeForm.ridingNumber !== null ? String(activeForm.ridingNumber) : null}
+                    onChange={(v) => updateForm('ridingNumber', v !== null ? Number(v) : null)}
+                    error={
+                      a2RidingEntityWarning(activeForm.entityKind, activeForm.ridingNumber) ??
+                      (ridingUnknown ? `Riding ${activeForm.ridingNumber} — Unknown (no matching riding on file)` : null)
+                    }
+                  />
+                )}
                 <NativeSelect
                   label={<FieldLabel label="Received by" help={METADATA_HELP.receivedBy} />}
                   data={receivedByOptions(activeForm.entityKind)}
@@ -616,6 +691,7 @@ export function ContributionDetailPage({ id }: { id: string }) {
                     <TextInput
                       label="Received-by label (as it should print on the receipt)"
                       placeholder="e.g. Green Party of Ontario"
+                      description={leadershipLabelNote(detail.metadata.entityKind)}
                       value={politicalEntityLabel ?? defaultPoliticalEntityLabel(detail.metadata.entityKind)}
                       onChange={(e) => setPoliticalEntityLabel(e.currentTarget.value)}
                     />

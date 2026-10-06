@@ -43,6 +43,7 @@ const Part = z.object({
   contactId: z.string().optional(),
   entityKind: EntityKind.optional(),
   ridingNumber: z.number().int().nullable().optional(),
+  leadershipContestantId: z.string().nullable().optional(),
   periodId: z.number().int().nullable().optional(),
   nonDeductibleCents: z.number().int().min(0).optional(),
 });

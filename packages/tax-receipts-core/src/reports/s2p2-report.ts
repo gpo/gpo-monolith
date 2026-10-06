@@ -63,6 +63,10 @@ export interface S2p2SourceRow {
    *  other in the grouping key (the group is per SPECIFIC entity, not just
    *  per entity kind). */
   ridingNumber: number | null;
+  /** a LEADERSHIP row's contestant: like the riding for a CA, it tells two
+   *  contestants apart in the grouping key, and its name is the row's
+   *  Political_Entity. Omitted or null for every other kind. */
+  leadershipContestant?: { id: string; name: string } | null;
   periodId: number;
   amountCents: number;
   /** the grouping key's donor identity. Deliberately NOT
@@ -84,11 +88,16 @@ export interface S2p2SourceRow {
   postalCode: string;
 }
 
-export type PoliticalEntitySpace = { ridingNumber: number | null; entityKind: EntityKind };
+export type PoliticalEntitySpace = {
+  ridingNumber: number | null;
+  entityKind: EntityKind;
+  leadershipContestant?: { id: string; name: string } | null;
+};
 
 interface Group {
   entityKind: EntityKind;
   ridingNumber: number | null;
+  leadershipContestant: { id: string; name: string } | null;
   periodId: number;
   eoContributorId: string | null;
   contributorLastName: string;
@@ -128,7 +137,7 @@ export function buildS2p2Rows(
 
   for (const source of sources) {
     if (source.status !== 'ISSUED') continue; // REP7
-    const key = `${source.contactId}:${source.entityKind}:${source.ridingNumber ?? 'party'}`;
+    const key = `${source.contactId}:${source.entityKind}:${source.ridingNumber ?? 'party'}:${source.leadershipContestant?.id ?? ''}`;
     const existing = groups.get(key);
     if (existing) {
       existing.amountCents += source.amountCents;
@@ -144,6 +153,7 @@ export function buildS2p2Rows(
       groups.set(key, {
         entityKind: source.entityKind,
         ridingNumber: source.ridingNumber,
+        leadershipContestant: source.leadershipContestant ?? null,
         periodId: source.periodId,
         eoContributorId: source.eoContributorId,
         contributorLastName: source.contributorLastName,
@@ -164,7 +174,11 @@ export function buildS2p2Rows(
     if (group.amountCents <= S2P2_THRESHOLD_CENTS) continue; // strictly > $200
     includedReceiptIds.push(...group.receiptIds);
     const entityTypeLetter = politicalEntityTypeLetter(group.entityKind);
-    const politicalEntity = politicalEntityLabel({ ridingNumber: group.ridingNumber, entityKind: group.entityKind });
+    const politicalEntity = politicalEntityLabel({
+      ridingNumber: group.ridingNumber,
+      entityKind: group.entityKind,
+      leadershipContestant: group.leadershipContestant,
+    });
     rows.push({
       Party_ID: ALL_REPORT_PARTY_ID,
       Contributor_ID: group.eoContributorId ?? '',

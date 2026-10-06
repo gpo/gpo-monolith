@@ -73,6 +73,9 @@ export interface Me {
   };
 }
 
+/** Who a contribution is directed to (EntityKind in @gpo/tax-receipts-core). */
+export type EntityKindKey = 'PARTY' | 'CA' | 'CAMPAIGN' | 'LEADERSHIP';
+
 export interface ContributionListRow {
   id: string;
   /** null for manual and legacy-imported payments */
@@ -87,7 +90,10 @@ export interface ContributionListRow {
   periodId: number | null;
   ridingNumber: number | null;
   entityKind: string | null;
+  leadershipContestantName: string | null;
   receivedBy: string | null;
+  /** derived: received by GPO for another entity (EO evaluation row 26) */
+  agencyContribution: boolean | null;
   sourceCode: string | null;
   nonDeductibleCents: number | null;
   hasReceipt: boolean;
@@ -106,6 +112,8 @@ export interface ContributionListFilters {
   partyLevelOnly?: boolean;
   entityKind?: string;
   receivedBy?: string;
+  /** agency contributions only (true) or only the rest (false) */
+  agency?: boolean;
   contactQuery?: string;
   minAmountCents?: number;
   maxAmountCents?: number;
@@ -157,6 +165,18 @@ export interface ContributionDetail {
     note: string | null;
     /** what no ACTIVE contribution on this payment covers yet */
     unattributedCents: number;
+    /** every ACTIVE contribution on this payment, this one included (EO evaluation row 28) */
+    contributions: Array<{
+      id: string;
+      contactName: string;
+      amountCents: number;
+      periodId: number | null;
+      entityKind: string | null;
+      ridingNumber: number | null;
+      leadershipContestantName: string | null;
+      receivedBy: string | null;
+      agencyContribution: boolean | null;
+    }>;
   };
   /** import provenance; null for manual and legacy-imported payments */
   qomon: {
@@ -172,7 +192,11 @@ export interface ContributionDetail {
     periodId: number;
     ridingNumber: number | null;
     entityKind: string;
+    leadershipContestantId: string | null;
+    leadershipContestantName: string | null;
     receivedBy: string;
+    /** derived: received by GPO for another entity (EO evaluation row 26) */
+    agencyContribution: boolean;
     goodsServices: boolean;
     nonDeductibleCents: number;
     processedDate: string | null;
@@ -212,8 +236,9 @@ export interface ContributionDetail {
 export interface CorrectionPart {
   amountCents: number;
   contactId?: string;
-  entityKind?: 'PARTY' | 'CA' | 'CAMPAIGN';
+  entityKind?: EntityKindKey;
   ridingNumber?: number | null;
+  leadershipContestantId?: string | null;
   nonDeductibleCents?: number;
 }
 
@@ -373,7 +398,7 @@ export interface ReallocationProposal {
   amountCents: number;
   overLimitBucket: { bucket: string; limitCents: number; aggregateCents: number; overageCents: number } | null;
   options: Array<{
-    entityKind: 'PARTY' | 'CA' | 'CAMPAIGN';
+    entityKind: EntityKindKey;
     ridingNumber: number | null;
     needsRiding: boolean;
     headroomCents: number;
@@ -396,7 +421,8 @@ export type PaymentMethodKey = 'CARD' | 'CHEQUE' | 'CASH' | 'PAD' | 'EFT' | 'IN_
 export interface DescriptiveOverrides {
   period_id?: number;
   riding_number?: number | null;
-  entity_kind?: 'PARTY' | 'CA' | 'CAMPAIGN';
+  entity_kind?: EntityKindKey;
+  leadership_contestant_id?: string | null;
   received_by?: 'GPO' | 'ENTITY';
   goods_services?: boolean;
   non_deductible_cents?: number;
@@ -467,6 +493,7 @@ export interface MetadataEditInput {
   periodId: number;
   ridingNumber: number | null;
   entityKind: string;
+  leadershipContestantId: string | null;
   receivedBy: string;
   goodsServices: boolean;
   nonDeductibleCents: number;
@@ -753,6 +780,16 @@ export interface RidingRow {
   updatedAt: string;
 }
 
+/** A leadership contestant (EO evaluation row 25; api/src/leadership). */
+export interface LeadershipContestantRow {
+  id: string;
+  name: string;
+  contestName: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RidingImportRow {
   ridingNumber: number;
   name: string;
@@ -773,7 +810,7 @@ export interface EntityReportSummaryRow {
   kind: 'ALL' | 'S2P2';
   periodId: number;
   ridingNumber: number | null;
-  entityKind: 'PARTY' | 'CA' | 'CAMPAIGN' | null;
+  entityKind: EntityKindKey | null;
   generatedAt: string;
   sentToCfoAt: string | null;
   artifactId: string | null;
@@ -810,7 +847,7 @@ export interface EntityReportDetail {
     kind: 'ALL' | 'S2P2';
     periodId: number;
     ridingNumber: number | null;
-    entityKind: 'PARTY' | 'CA' | 'CAMPAIGN' | null;
+    entityKind: EntityKindKey | null;
     generatedAt: string;
     sentToCfoAt: string | null;
     artifactId: string | null;
@@ -820,7 +857,7 @@ export interface EntityReportDetail {
 
 export interface GenerateEntityReportInput {
   kind: 'ALL' | 'S2P2';
-  entityKind: 'PARTY' | 'CA' | 'CAMPAIGN';
+  entityKind: EntityKindKey;
   ridingNumber: number | null;
   politicalEntityLabel: string;
   reason: string;
@@ -1169,6 +1206,17 @@ export const api = {
       body: JSON.stringify({ ...(mode ? { mode } : {}), ...(ridingNumber ? { ridingNumber } : {}) }),
     }),
   listRidings: () => request<{ data: RidingRow[] }>('/admin/ridings'),
+  listLeadershipContestants: () => request<{ data: LeadershipContestantRow[] }>('/admin/leadership-contestants'),
+  createLeadershipContestant: (input: { name: string; contestName: string; reason: string }) =>
+    request<LeadershipContestantRow>('/admin/leadership-contestants', { method: 'POST', body: JSON.stringify(input) }),
+  updateLeadershipContestant: (
+    id: string,
+    input: Partial<{ name: string; contestName: string; active: boolean }> & { reason: string },
+  ) =>
+    request<LeadershipContestantRow>(`/admin/leadership-contestants/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
   saveRiding: (
     ridingNumber: number,
     input: { name: string; qomonApiKey: string; qomonApiBase?: string | null; active?: boolean },

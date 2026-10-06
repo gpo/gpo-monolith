@@ -58,8 +58,11 @@ export type AllReportRow = Record<AllReportColumn, string | number>;
 
 /** Political_Entity_Type letter (glossary.md "Directed to"; letter/count
  *  correspondence to entity kind pinned against the filed 2025 ALL's
- *  P/A/C distribution in research/fixtures/README.md). */
-export function politicalEntityTypeLetter(entityKind: EntityKind): 'P' | 'A' | 'C' {
+ *  P/A/C distribution in research/fixtures/README.md). LC for a leadership
+ *  contestant is from EO's written technical spec (eo/reporting-technical-
+ *  specifications.md, "Political entity type codes"); GPO has never filed
+ *  one. */
+export function politicalEntityTypeLetter(entityKind: EntityKind): 'P' | 'A' | 'C' | 'LC' {
   switch (entityKind) {
     case 'PARTY':
       return 'P';
@@ -67,6 +70,8 @@ export function politicalEntityTypeLetter(entityKind: EntityKind): 'P' | 'A' | '
       return 'A';
     case 'CAMPAIGN':
       return 'C';
+    case 'LEADERSHIP':
+      return 'LC';
   }
 }
 
@@ -83,7 +88,9 @@ export function receiptStatusLetter(status: ReceiptStatus, lost = false): 'I' | 
 }
 
 /** Agency_Contribution derivation (data-model.md §2, point 8, verbatim):
- *  `received_by = GPO AND entity_kind != PARTY`. */
+ *  `received_by = GPO AND entity_kind != PARTY`: the party received money
+ *  directed to another entity (a CA, a campaign, or a leadership contestant)
+ *  as its agent (EO evaluation row 26). */
 export function isAgencyContribution(receivedBy: ReceivedBy, entityKind: EntityKind): boolean {
   return receivedBy === 'GPO' && entityKind !== 'PARTY';
 }

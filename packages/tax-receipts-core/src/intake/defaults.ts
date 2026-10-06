@@ -126,6 +126,7 @@ export function deriveIntakeDefaults(input: IntakeDefaultsInput): IntakeDefaults
     period_id: period.id,
     riding_number: ridingNumber,
     entity_kind: entityKind,
+    leadership_contestant_id: null,
     received_by: receivedBy,
     goods_services: false,
     non_deductible_cents: 0,

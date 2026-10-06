@@ -24,7 +24,6 @@ function c(over: Partial<ContributionForLimits>): ContributionForLimits {
     ridingNumber: null,
     year: YEAR,
     candidateSelf: false,
-    leadership: false,
     ...over,
   };
 }
@@ -66,6 +65,20 @@ describe('evaluateLimits', () => {
     const r = evaluateLimits({ year: YEAR, limits: limits2026, contributions });
     expect(r.overLimit).toBe(false);
     expect(r.results.map((x) => x.groupKey).sort()).toEqual(['ca:12', 'ca:84']);
+  });
+
+  it('leadership contributions aggregate in one leadership bucket, apart from the party', () => {
+    const withLeadership = [...limits2026, { year: YEAR, bucket: 'LEADERSHIP' as const, amountCents: 342_500 }];
+    const contributions = [
+      c({ entityKind: 'LEADERSHIP', amountCents: 200_000 }),
+      c({ entityKind: 'LEADERSHIP', amountCents: 200_000 }),
+      c({ entityKind: 'PARTY', amountCents: 100_000 }),
+    ];
+    const r = evaluateLimits({ year: YEAR, limits: withLeadership, contributions });
+    const leadership = r.results.find((x) => x.groupKey === 'leadership')!;
+    expect(leadership.aggregateCents).toBe(400_000);
+    expect(leadership.overLimit).toBe(true);
+    expect(r.results.find((x) => x.groupKey === 'party')!.aggregateCents).toBe(100_000);
   });
 
   it('candidate-self contributions use the candidate-self bucket, not campaign', () => {

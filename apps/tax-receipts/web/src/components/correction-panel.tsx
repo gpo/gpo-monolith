@@ -26,7 +26,9 @@ import {
   type ReallocationProposal,
 } from '../api.js';
 import { DonorPicker } from './donor-picker.js';
-import type { ContactHit } from '../api.js';
+import { LeadershipContestantSelect } from './leadership-contestant-select.js';
+import type { ContactHit, EntityKindKey } from '../api.js';
+import { ENTITY_KIND_OPTIONS, entityKindLabel, isRidingScoped } from '../entity-kind.js';
 
 /**
  * Correct a contribution (screens.md screen 8, corrections.md actions 4, 5, 8,
@@ -52,14 +54,16 @@ function money(cents: number): string {
 }
 
 function entityText(entityKind: string, ridingNumber: number | null): string {
-  return entityKind === 'PARTY' ? 'Party' : `${entityKind} ${ridingNumber ?? '?'}`;
+  return isRidingScoped(entityKind) ? `${entityKind} ${ridingNumber ?? '?'}` : entityKindLabel(entityKind);
 }
 
 interface PartDraft {
   amount: number | '';
   contact: ContactHit | null;
-  entityKind: 'PARTY' | 'CA' | 'CAMPAIGN';
+  entityKind: EntityKindKey;
   ridingNumber: string | null;
+  /** a LEADERSHIP part's contestant */
+  leadershipContestantId: string | null;
 }
 
 function CascadeView({ plan }: { plan: CorrectionPlan }) {
@@ -191,6 +195,14 @@ export function CorrectionPanel({
 
   const currentEntity = (detail.metadata?.entityKind ?? 'PARTY') as PartDraft['entityKind'];
   const currentRiding = detail.metadata?.ridingNumber ?? null;
+  const currentContestant = detail.metadata?.leadershipContestantId ?? null;
+  const currentPart = (amount: number | ''): PartDraft => ({
+    amount,
+    contact: null,
+    entityKind: currentEntity,
+    ridingNumber: currentRiding === null ? null : String(currentRiding),
+    leadershipContestantId: currentContestant,
+  });
 
   /** any input change invalidates a preview: the commit is exactly what was previewed */
   function edit<T>(setter: (v: T) => void) {
@@ -209,11 +221,13 @@ export function CorrectionPanel({
     setError(null);
     if (next === 'SPLIT_CONTRIBUTION') {
       setParts([
-        { amount: '', contact: null, entityKind: currentEntity, ridingNumber: currentRiding === null ? null : String(currentRiding) },
-        { amount: '', contact: null, entityKind: currentEntity, ridingNumber: currentRiding === null ? null : String(currentRiding) },
+        currentPart(''),
+        currentPart(''),
       ]);
     } else if (next === 'REALLOCATE') {
-      setParts([{ amount: detail.amountCents / 100, contact: null, entityKind: 'CA', ridingNumber: null }]);
+      setParts([
+        { amount: detail.amountCents / 100, contact: null, entityKind: 'CA', ridingNumber: null, leadershipContestantId: null },
+      ]);
     }
   }
 
@@ -222,7 +236,8 @@ export function CorrectionPanel({
       amountCents: Math.round((p.amount === '' ? 0 : p.amount) * 100),
       ...(p.contact ? { contactId: p.contact.id } : {}),
       entityKind: p.entityKind,
-      ridingNumber: p.entityKind === 'PARTY' ? null : p.ridingNumber === null ? null : Number(p.ridingNumber),
+      ridingNumber: !isRidingScoped(p.entityKind) || p.ridingNumber === null ? null : Number(p.ridingNumber),
+      leadershipContestantId: p.entityKind === 'LEADERSHIP' ? p.leadershipContestantId : null,
     }));
   }
 
@@ -252,7 +267,10 @@ export function CorrectionPanel({
       case 'SPLIT_CONTRIBUTION':
       case 'REALLOCATE':
         if (parts.some((p) => p.amount === '' || p.amount <= 0)) return 'Every part needs an amount.';
-        if (parts.some((p) => p.entityKind !== 'PARTY' && p.ridingNumber === null)) return 'A CA or campaign part needs its riding number.';
+        if (parts.some((p) => isRidingScoped(p.entityKind) && p.ridingNumber === null)) return 'A CA or campaign part needs its riding number.';
+        if (parts.some((p) => p.entityKind === 'LEADERSHIP' && p.leadershipContestantId === null)) {
+          return 'A leadership part needs its leadership contestant.';
+        }
         return { ...common, action, contributionId: detail.id, parts: toParts() };
       case 'REFUND':
         return { ...common, action, paymentId: detail.payment.id };
@@ -308,9 +326,15 @@ export function CorrectionPanel({
     const keep = detail.amountCents - o.moveCents;
     const next: PartDraft[] = [];
     if (keep > 0) {
-      next.push({ amount: keep / 100, contact: null, entityKind: currentEntity, ridingNumber: currentRiding === null ? null : String(currentRiding) });
+      next.push(currentPart(keep / 100));
     }
-    next.push({ amount: o.moveCents / 100, contact: null, entityKind: o.entityKind, ridingNumber: o.ridingNumber === null ? null : String(o.ridingNumber) });
+    next.push({
+      amount: o.moveCents / 100,
+      contact: null,
+      entityKind: o.entityKind,
+      ridingNumber: o.ridingNumber === null ? null : String(o.ridingNumber),
+      leadershipContestantId: null,
+    });
     setParts(next);
     setPlan(null);
   }
@@ -338,11 +362,7 @@ export function CorrectionPanel({
             )}
             <NativeSelect
               label="Entity"
-              data={[
-                { value: 'PARTY', label: 'Party' },
-                { value: 'CA', label: 'Constituency association' },
-                { value: 'CAMPAIGN', label: 'Campaign' },
-              ]}
+              data={ENTITY_KIND_OPTIONS}
               value={p.entityKind}
               onChange={(e) =>
                 edit(setParts)(
@@ -350,21 +370,28 @@ export function CorrectionPanel({
                 )
               }
             />
-            <NumberInput
-              label="Riding (1 to 124)"
-              min={1}
-              max={124}
-              disabled={p.entityKind === 'PARTY'}
-              value={p.entityKind === 'PARTY' ? '' : (p.ridingNumber ?? '')}
-              onChange={(v) =>
-                edit(setParts)(parts.map((x, j) => (j === i ? { ...x, ridingNumber: typeof v === 'number' ? String(v) : null } : x)))
-              }
-            />
+            {p.entityKind === 'LEADERSHIP' ? (
+              <LeadershipContestantSelect
+                value={p.leadershipContestantId}
+                onChange={(id) => edit(setParts)(parts.map((x, j) => (j === i ? { ...x, leadershipContestantId: id } : x)))}
+              />
+            ) : (
+              <NumberInput
+                label="Riding (1 to 124)"
+                min={1}
+                max={124}
+                disabled={!isRidingScoped(p.entityKind)}
+                value={!isRidingScoped(p.entityKind) ? '' : (p.ridingNumber ?? '')}
+                onChange={(v) =>
+                  edit(setParts)(parts.map((x, j) => (j === i ? { ...x, ridingNumber: typeof v === 'number' ? String(v) : null } : x)))
+                }
+              />
+            )}
           </Group>
         ))}
         <Group>
           {action === 'SPLIT_CONTRIBUTION' && (
-            <Button size="xs" variant="light" onClick={() => edit(setParts)([...parts, { amount: '', contact: null, entityKind: currentEntity, ridingNumber: currentRiding === null ? null : String(currentRiding) }])}>
+            <Button size="xs" variant="light" onClick={() => edit(setParts)([...parts, currentPart('')])}>
               Add a part
             </Button>
           )}
@@ -539,7 +566,9 @@ export function CorrectionPanel({
         </Group>
 
         {plan?.labelsNeeded
-          .filter((n) => n.entityKind !== 'PARTY')
+          // party receipts default to the party's name, and a leadership
+          // receipt prints its contestant's name from the registry
+          .filter((n) => isRidingScoped(n.entityKind))
           .map((n) => (
             <TextInput
               key={n.key}

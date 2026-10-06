@@ -37,6 +37,9 @@ describe('politicalEntityTypeLetter', () => {
     expect(politicalEntityTypeLetter('CA')).toBe('A');
     expect(politicalEntityTypeLetter('CAMPAIGN')).toBe('C');
   });
+  it('maps LEADERSHIP to LC per EO\'s technical spec', () => {
+    expect(politicalEntityTypeLetter('LEADERSHIP')).toBe('LC');
+  });
 });
 
 describe('receiptStatusLetter', () => {
@@ -63,6 +66,9 @@ describe('isAgencyContribution', () => {
   });
   it('is Y when GPO received centrally on behalf of a campaign', () => {
     expect(isAgencyContribution('GPO', 'CAMPAIGN')).toBe(true);
+  });
+  it('is Y when GPO received centrally on behalf of a leadership contestant', () => {
+    expect(isAgencyContribution('GPO', 'LEADERSHIP')).toBe(true);
   });
   it('is N when GPO received a party-directed contribution (not agency)', () => {
     expect(isAgencyContribution('GPO', 'PARTY')).toBe(false);

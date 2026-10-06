@@ -27,6 +27,7 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       period_id: 67,
       riding_number: null,
       entity_kind: 'PARTY',
+      leadership_contestant_id: null,
       received_by: 'GPO',
       goods_services: false,
       non_deductible_cents: 0,

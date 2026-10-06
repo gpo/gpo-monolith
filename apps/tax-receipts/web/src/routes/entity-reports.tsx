@@ -14,8 +14,9 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
-import { api, ApiError, type EntityReportDrift, type EntityReportSummaryRow } from '../api.js';
+import { api, ApiError, type EntityKindKey, type EntityReportDrift, type EntityReportSummaryRow } from '../api.js';
 import { PageHeader } from '../components/PageHeader.js';
+import { entityKindLabel, leadershipLabelNote } from '../entity-kind.js';
 import { defaultPoliticalEntityLabel } from './contribution-detail.js';
 
 /**
@@ -35,7 +36,7 @@ interface EntityReportsParams {
 }
 
 function spaceLabel({ periodId, ridingNumber, entityKind }: EntityReportsParams): string {
-  return `Period ${periodId} · ${ridingNumber !== null ? `Riding ${ridingNumber}` : 'Party'} · ${entityKind}`;
+  return `Period ${periodId} · ${ridingNumber !== null ? `Riding ${ridingNumber} · ` : ''}${entityKindLabel(entityKind)}`;
 }
 
 function driftBadge(status: EntityReportDrift['status'] | null) {
@@ -133,7 +134,7 @@ export function EntityReportsPage(params: EntityReportsParams) {
     mutationFn: () =>
       api.generateEntityReport(periodId, {
         kind,
-        entityKind: entityKind as 'PARTY' | 'CA' | 'CAMPAIGN',
+        entityKind: entityKind as EntityKindKey,
         ridingNumber,
         politicalEntityLabel: effectiveLabel,
         reason,
@@ -179,6 +180,7 @@ export function EntityReportsPage(params: EntityReportsParams) {
           <TextInput
             label="Political entity label (as it should print on the file)"
             placeholder="e.g. Green Party of Ontario"
+            description={leadershipLabelNote(entityKind)}
             value={politicalEntityLabel ?? defaultPoliticalEntityLabel(entityKind)}
             onChange={(e) => setPoliticalEntityLabel(e.currentTarget.value)}
           />

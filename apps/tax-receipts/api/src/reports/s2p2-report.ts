@@ -8,8 +8,14 @@ import {
 } from '@gpo/tax-receipts-core';
 import { storeArtifact } from '../artifacts/store.js';
 import { withChangeLog } from '../changelog/write.js';
-import type { EntityKind, Prisma, PrismaClient } from '../generated/prisma/index.js';
-import { loadReportReceipts, type EntityReportIncludedSet, type ReportScope } from './load-receipts.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/index.js';
+import {
+  loadReportReceipts,
+  withLeadershipContestantLabel,
+  type EntityReportIncludedSet,
+  type PoliticalEntityLabelResolver,
+  type ReportScope,
+} from './load-receipts.js';
 
 /**
  * S2P2 report generator (ticket 4.2): Schedule 2 Part 2, the per-entity
@@ -35,7 +41,7 @@ export interface GenerateS2p2ReportInput extends ReportScope {
   reason: string;
   /** same resolver shape as the ALL generator's — a single resolver can be
    *  shared between both calls for the same scope. */
-  politicalEntityLabel: (space: { ridingNumber: number | null; entityKind: EntityKind }) => string;
+  politicalEntityLabel: PoliticalEntityLabelResolver;
 }
 
 export interface GeneratedS2p2Report {
@@ -61,6 +67,7 @@ export async function generateS2p2Report(
     status: row.status,
     entityKind: row.entityKind,
     ridingNumber: row.ridingNumber,
+    leadershipContestant: row.leadershipContestant,
     periodId: row.periodId,
     amountCents: row.amountCents,
     contactId: row.contactId,
@@ -74,7 +81,7 @@ export async function generateS2p2Report(
     receiptId: row.receiptId,
   }));
 
-  const { rows, includedReceiptIds } = buildS2p2Rows(sources, input.politicalEntityLabel);
+  const { rows, includedReceiptIds } = buildS2p2Rows(sources, withLeadershipContestantLabel(input.politicalEntityLabel));
 
   if (rows.length === 0) {
     return { entityReportId: null, artifactId: null, rowCount: 0, csv: null, receivable };

@@ -19,6 +19,8 @@ import {
   Title,
 } from '@mantine/core';
 import { api, type ContributionListFilters, type ContributionListRow } from '../api.js';
+import { LeadershipContestantSelect } from '../components/leadership-contestant-select.js';
+import { ENTITY_KIND_OPTIONS } from '../entity-kind.js';
 
 /**
  * Contributions list (ticket 1.3, screens.md 2) with bulk edit (ticket 1.4,
@@ -69,9 +71,26 @@ const COLUMNS: Column[] = [
     render: (r) => `$${(r.amountCents / 100).toFixed(2)}`,
   },
   { key: 'period', label: 'Period', render: (r) => r.periodId ?? '—' },
-  { key: 'riding', label: 'Riding', render: (r) => r.ridingNumber ?? 'Party' },
-  { key: 'entityKind', label: 'Entity', render: (r) => r.entityKind ?? '—' },
+  { key: 'riding', label: 'Riding', render: (r) => r.ridingNumber ?? '—' },
+  {
+    key: 'entityKind',
+    label: 'Entity',
+    render: (r) =>
+      r.entityKind === 'LEADERSHIP' ? `LEADERSHIP: ${r.leadershipContestantName ?? 'no contestant'}` : (r.entityKind ?? '—'),
+  },
   { key: 'receivedBy', label: 'Received by', render: (r) => r.receivedBy ?? '—' },
+  {
+    key: 'agency',
+    label: 'Agency',
+    render: (r) =>
+      r.agencyContribution ? (
+        <Badge color="grape" variant="light">
+          agency
+        </Badge>
+      ) : (
+        '—'
+      ),
+  },
   { key: 'sourceCode', label: 'Source code', render: (r) => r.sourceCode || '—' },
   {
     key: 'nonDeductible',
@@ -152,6 +171,7 @@ export function ContributionsListPage() {
   const [bulkField, setBulkField] = useState<BulkField | ''>('');
   const [bulkValue, setBulkValue] = useState('');
   const [bulkPartyLevel, setBulkPartyLevel] = useState(false);
+  const [bulkContestantId, setBulkContestantId] = useState<string | null>(null);
   const [bulkReason, setBulkReason] = useState('');
 
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -170,7 +190,9 @@ export function ContributionsListPage() {
           ? { ridingNumber: bulkPartyLevel ? null : Number(bulkValue) }
           : bulkField === 'periodId' || bulkField === 'nonDeductibleCents'
             ? { [bulkField]: bulkField === 'nonDeductibleCents' ? Math.round(Number(bulkValue) * 100) : Number(bulkValue) }
-            : { [bulkField as string]: bulkValue };
+            : bulkField === 'entityKind' && bulkValue === 'LEADERSHIP'
+              ? { entityKind: bulkValue, leadershipContestantId: bulkContestantId }
+              : { [bulkField as string]: bulkValue };
       return api.bulkEditContributions({
         contributionIds: [...selected],
         reason: bulkReason,
@@ -286,9 +308,21 @@ export function ContributionsListPage() {
             />
             <NativeSelect
               label="Entity kind"
-              data={['', 'PARTY', 'CA', 'CAMPAIGN']}
+              data={[{ value: '', label: '' }, ...ENTITY_KIND_OPTIONS]}
               value={filters.entityKind ?? ''}
               onChange={(e) => updateFilter('entityKind', e.currentTarget.value || undefined)}
+            />
+            <NativeSelect
+              label="Agency contribution"
+              data={[
+                { value: '', label: '' },
+                { value: 'true', label: 'Agency only' },
+                { value: 'false', label: 'Not agency' },
+              ]}
+              value={filters.agency === undefined ? '' : String(filters.agency)}
+              onChange={(e) =>
+                updateFilter('agency', e.currentTarget.value === '' ? undefined : e.currentTarget.value === 'true')
+              }
             />
           </Group>
           <Group grow align="flex-end">
@@ -433,12 +467,17 @@ export function ContributionsListPage() {
                       )}
                     </Group>
                   ) : bulkField === 'entityKind' ? (
-                    <NativeSelect
-                      label="New entity kind"
-                      data={['', 'PARTY', 'CA', 'CAMPAIGN']}
-                      value={bulkValue}
-                      onChange={(e) => setBulkValue(e.currentTarget.value)}
-                    />
+                    <Group grow>
+                      <NativeSelect
+                        label="New entity kind"
+                        data={[{ value: '', label: '' }, ...ENTITY_KIND_OPTIONS]}
+                        value={bulkValue}
+                        onChange={(e) => setBulkValue(e.currentTarget.value)}
+                      />
+                      {bulkValue === 'LEADERSHIP' && (
+                        <LeadershipContestantSelect value={bulkContestantId} onChange={setBulkContestantId} />
+                      )}
+                    </Group>
                   ) : bulkField === 'receivedBy' ? (
                     <NativeSelect
                       label="New received by"
@@ -467,7 +506,12 @@ export function ContributionsListPage() {
                   <Button
                     onClick={() => bulkEdit.mutate()}
                     loading={bulkEdit.isPending}
-                    disabled={!bulkField || (!bulkValue && !bulkPartyLevel) || bulkReason.trim().length < 3}
+                    disabled={
+                      !bulkField ||
+                      (!bulkValue && !bulkPartyLevel) ||
+                      (bulkField === 'entityKind' && bulkValue === 'LEADERSHIP' && !bulkContestantId) ||
+                      bulkReason.trim().length < 3
+                    }
                   >
                     Apply to {selected.size} row{selected.size === 1 ? '' : 's'}
                   </Button>

@@ -494,7 +494,7 @@ function parseIncomingMetadata(transaction: QomonTransaction): QomonSyncedFields
   return qomonToSyncedFields(transaction.extra_json);
 }
 
-/** Combines Qomon's six synced fields with this tool's five local-only
+/** Combines Qomon's six synced fields with this tool's six local-only
  *  fields (see transaction-extra-fields.ts) to produce a full descriptive
  *  object. The local-only fields take the same static defaults
  *  intake-derivation uses (intake/defaults.ts) — never guessed beyond that. */
@@ -504,6 +504,9 @@ function mergeSyncedWithLocalDefaults(
 ): GpoMetadataDescriptive {
   return {
     ...synced,
+    // Qomon has no contestant field: an imported leadership contribution
+    // arrives without one and rule A2 flags it for an operator
+    leadership_contestant_id: null,
     received_by: 'GPO',
     non_deductible_cents: 0,
     eo_contributor_id: null,

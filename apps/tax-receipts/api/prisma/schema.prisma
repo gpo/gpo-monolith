@@ -29,6 +29,9 @@ enum EntityKind {
   CA
   CAMPAIGN
   PARTY
+  /// a leadership contestant (EO entity type LC); the contestant is
+  /// Contribution.leadershipContestantId. No riding.
+  LEADERSHIP
 }
 
 enum ReceivedBy {
@@ -214,6 +217,7 @@ enum ChangeLogSubjectType {
   IssuanceKillSwitch
   EmailDeliverySettings
   Role
+  LeadershipContestant
 }
 
 // ---------------------------------------------------------------------------
@@ -366,9 +370,13 @@ model Contribution {
   /// default): a row with no period is awaiting intake derivation and belongs
   /// to no processing space.
   periodId           Int?
-  /// null = party-level (no riding)
+  /// null = party-level or leadership (no riding)
   ridingNumber       Int?
   entityKind         EntityKind @default(PARTY)
+  /// the contestant a LEADERSHIP contribution is directed to (EO evaluation
+  /// row 25); null for every other entity kind. Rule A2 flags a LEADERSHIP
+  /// row without one.
+  leadershipContestantId String?
   receivedBy         ReceivedBy @default(GPO)
   goodsServices      Boolean    @default(false)
   nonDeductibleCents Int        @default(0)
@@ -384,6 +392,7 @@ model Contribution {
 
   payment               Payment               @relation(fields: [paymentId], references: [id])
   period                Period?               @relation(fields: [periodId], references: [id])
+  leadershipContestant  LeadershipContestant? @relation(fields: [leadershipContestantId], references: [id])
   contact               Contact               @relation(fields: [contactId], references: [id])
   createdBy             User?                 @relation(fields: [createdByUserId], references: [id])
   supersedes            Contribution?         @relation("ContributionSupersedes", fields: [supersedesId], references: [id])
@@ -398,7 +407,30 @@ model Contribution {
   @@index([status])
   @@index([periodId])
   @@index([ridingNumber, entityKind])
+  @@index([leadershipContestantId])
   @@map("contribution")
+}
+
+/// A leadership contestant (EO evaluation row 25): the recipient of a
+/// LEADERSHIP contribution. EO treats each contestant as a political entity
+/// (type LC) with its own limit bucket; the party CFO issues the receipts
+/// (s. 25.1(6)). Added and edited under Admin, change-logged under subject
+/// type LeadershipContestant. Never hard-deleted: a contestant who withdraws
+/// is made inactive.
+model LeadershipContestant {
+  id          String   @id @default(cuid())
+  /// the contestant's name as it prints on the receipt and in the EO
+  /// reports' Political_Entity column
+  name        String
+  /// the contest this contestant ran in, e.g. "2027 Leadership Contest"
+  contestName String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contributions Contribution[]
+
+  @@map("leadership_contestant")
 }
 
 model ReceiptSequence {

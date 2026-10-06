@@ -132,6 +132,26 @@ describe('A2 riding/entity consistency', () => {
     expect(checkA2RidingEntityConsistency(c, byElectionPeriod, activeRiding)).toBeNull();
   });
 
+  it('passes LEADERSHIP with no riding and a named contestant', () => {
+    const c = contribution({}, { entityKind: 'LEADERSHIP', ridingNumber: null, leadershipContestantId: 'lc1' });
+    expect(checkA2RidingEntityConsistency(c, period, undefined)).toBeNull();
+  });
+
+  it('flags LEADERSHIP with no contestant', () => {
+    const c = contribution({}, { entityKind: 'LEADERSHIP', ridingNumber: null });
+    expect(checkA2RidingEntityConsistency(c)?.message).toMatch(/requires a leadership contestant/);
+  });
+
+  it('flags LEADERSHIP carrying a riding number', () => {
+    const c = contribution({}, { entityKind: 'LEADERSHIP', ridingNumber: 84, leadershipContestantId: 'lc1' });
+    expect(checkA2RidingEntityConsistency(c)?.message).toMatch(/must not carry a riding number/);
+  });
+
+  it('flags a non-LEADERSHIP contribution naming a contestant', () => {
+    const c = contribution({}, { entityKind: 'PARTY', ridingNumber: null, leadershipContestantId: 'lc1' });
+    expect(checkA2RidingEntityConsistency(c)?.message).toMatch(/must not name a leadership contestant/);
+  });
+
   it('flags CAMPAIGN in a by-election period that does not name the riding', () => {
     const c = contribution({}, { entityKind: 'CAMPAIGN', ridingNumber: 12 });
     expect(checkA2RidingEntityConsistency(c, byElectionPeriod, { ridingNumber: 12, active: true })?.ruleRef).toBe(
@@ -283,10 +303,9 @@ describe('B2 over limit', () => {
         ridingNumber: null,
         year: 2026,
         candidateSelf: false,
-        leadership: false,
       },
       otherContributionsThisYear: [
-        { id: 'c0', amountCents: 200_000, goodsServices: false, entityKind: 'PARTY', ridingNumber: null, year: 2026, candidateSelf: false, leadership: false },
+        { id: 'c0', amountCents: 200_000, goodsServices: false, entityKind: 'PARTY', ridingNumber: null, year: 2026, candidateSelf: false },
       ],
       limits: [{ year: 2026, bucket: 'PARTY', amountCents: 500_000 }],
     });
@@ -295,7 +314,7 @@ describe('B2 over limit', () => {
 
   it('passes when under the limit', () => {
     const finding = checkB2OverLimit({
-      contribution: { id: 'c1', amountCents: 100, goodsServices: false, entityKind: 'PARTY', ridingNumber: null, year: 2026, candidateSelf: false, leadership: false },
+      contribution: { id: 'c1', amountCents: 100, goodsServices: false, entityKind: 'PARTY', ridingNumber: null, year: 2026, candidateSelf: false },
       otherContributionsThisYear: [],
       limits: [{ year: 2026, bucket: 'PARTY', amountCents: 500_000 }],
     });

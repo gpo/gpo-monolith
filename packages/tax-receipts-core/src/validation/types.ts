@@ -16,6 +16,9 @@ export interface ContributionMetadataForValidation {
   periodId: number;
   ridingNumber: number | null;
   entityKind: EntityKind;
+  /** the contestant a LEADERSHIP contribution names (rule A2); omitted or
+   *  null for every other entity kind */
+  leadershipContestantId?: string | null;
   receivedBy: ReceivedBy;
   goodsServices: boolean;
   nonDeductibleCents: number;

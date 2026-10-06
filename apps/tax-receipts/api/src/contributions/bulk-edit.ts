@@ -24,6 +24,7 @@ export interface BulkMetadataChanges {
   periodId?: number;
   ridingNumber?: number | null;
   entityKind?: GpoMetadataDescriptive['entity_kind'];
+  leadershipContestantId?: string | null;
   receivedBy?: GpoMetadataDescriptive['received_by'];
   goodsServices?: boolean;
   nonDeductibleCents?: number;
@@ -38,6 +39,7 @@ const CHANGE_KEYS = [
   'periodId',
   'ridingNumber',
   'entityKind',
+  'leadershipContestantId',
   'receivedBy',
   'goodsServices',
   'nonDeductibleCents',
@@ -94,6 +96,7 @@ function mergeDescriptive(
     periodId: number;
     ridingNumber: number | null;
     entityKind: string;
+    leadershipContestantId: string | null;
     receivedBy: string;
     goodsServices: boolean;
     nonDeductibleCents: number;
@@ -105,10 +108,18 @@ function mergeDescriptive(
   externalRefCurrent: string | null,
   changes: BulkMetadataChanges,
 ): GpoMetadataDescriptive {
+  const entityKind = (changes.entityKind ?? current.entityKind) as GpoMetadataDescriptive['entity_kind'];
   return {
     period_id: changes.periodId ?? current.periodId,
     riding_number: 'ridingNumber' in changes ? (changes.ridingNumber ?? null) : current.ridingNumber,
-    entity_kind: (changes.entityKind ?? current.entityKind) as GpoMetadataDescriptive['entity_kind'],
+    entity_kind: entityKind,
+    // moving a row off LEADERSHIP drops its contestant rather than failing it
+    leadership_contestant_id:
+      entityKind !== 'LEADERSHIP'
+        ? null
+        : 'leadershipContestantId' in changes
+          ? (changes.leadershipContestantId ?? null)
+          : current.leadershipContestantId,
     received_by: (changes.receivedBy ?? current.receivedBy) as GpoMetadataDescriptive['received_by'],
     goods_services: changes.goodsServices ?? current.goodsServices,
     non_deductible_cents: changes.nonDeductibleCents ?? current.nonDeductibleCents,

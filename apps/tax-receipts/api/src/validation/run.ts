@@ -105,7 +105,6 @@ export async function runValidationForContribution(
       ridingNumber: r.ridingNumber,
       year,
       candidateSelf: false,
-      leadership: false,
     }));
   const limitRows = await prisma.contributionLimit.findMany({ where: { year } });
 
@@ -139,6 +138,7 @@ export async function runValidationForContribution(
         periodId: contribution.periodId,
         ridingNumber: contribution.ridingNumber,
         entityKind: contribution.entityKind,
+        leadershipContestantId: contribution.leadershipContestantId,
         receivedBy: contribution.receivedBy,
         goodsServices: contribution.goodsServices,
         nonDeductibleCents: contribution.nonDeductibleCents,

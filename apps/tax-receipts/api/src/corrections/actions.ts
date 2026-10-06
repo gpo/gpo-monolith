@@ -1,3 +1,4 @@
+import { isRidingScoped } from '@gpo/tax-receipts-core';
 import type { EntityKind, PrismaClient, ReceiptDelivery } from '../generated/prisma/index.js';
 import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
 import { ReceiptNotFoundError } from '../receipts/allocate.js';
@@ -151,6 +152,7 @@ export interface SplitPart {
   contactId?: string;
   entityKind?: EntityKind;
   ridingNumber?: number | null;
+  leadershipContestantId?: string | null;
   periodId?: number | null;
   nonDeductibleCents?: number;
 }
@@ -160,7 +162,8 @@ function partToSpec(part: SplitPart): ReplacementSpec {
     amountCents: part.amountCents,
     contactId: part.contactId,
     entityKind: part.entityKind,
-    ridingNumber: part.entityKind === 'PARTY' ? null : part.ridingNumber,
+    ridingNumber: part.entityKind && !isRidingScoped(part.entityKind) ? null : part.ridingNumber,
+    leadershipContestantId: part.leadershipContestantId,
     periodId: part.periodId,
     nonDeductibleCents: part.nonDeductibleCents,
   };
@@ -202,8 +205,11 @@ export async function reallocate(
 ): Promise<CorrectionInput> {
   if (input.parts.length < 1) throw new CorrectionValidationError('a reallocation needs at least one part');
   for (const p of input.parts) {
-    if (p.entityKind && p.entityKind !== 'PARTY' && (p.ridingNumber === undefined || p.ridingNumber === null)) {
+    if (p.entityKind && isRidingScoped(p.entityKind) && (p.ridingNumber === undefined || p.ridingNumber === null)) {
       throw new CorrectionValidationError('a CA or campaign part needs its riding number');
+    }
+    if (p.entityKind === 'LEADERSHIP' && !p.leadershipContestantId) {
+      throw new CorrectionValidationError('a leadership part needs its leadership contestant');
     }
   }
   return dividedInput(prisma, 'REALLOCATE', input);

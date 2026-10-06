@@ -8,8 +8,14 @@ import {
 } from '@gpo/tax-receipts-core';
 import { storeArtifact } from '../artifacts/store.js';
 import { withChangeLog } from '../changelog/write.js';
-import type { EntityKind, Prisma, PrismaClient } from '../generated/prisma/index.js';
-import { loadReportReceipts, type EntityReportIncludedSet, type ReportScope } from './load-receipts.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/index.js';
+import {
+  loadReportReceipts,
+  withLeadershipContestantLabel,
+  type EntityReportIncludedSet,
+  type PoliticalEntityLabelResolver,
+  type ReportScope,
+} from './load-receipts.js';
 
 /**
  * ALL report generator (ticket 4.1): screens.md screen 10's per-entity file,
@@ -49,7 +55,7 @@ export interface GenerateAllReportInput extends ReportScope {
    *  caller-supplied rather than guessed on a document filed with a
    *  regulator. Called once per distinct (ridingNumber, entityKind) pair the
    *  scope's receipts actually carry. */
-  politicalEntityLabel: (space: { ridingNumber: number | null; entityKind: EntityKind }) => string;
+  politicalEntityLabel: PoliticalEntityLabelResolver;
 }
 
 export interface GeneratedAllReport {
@@ -69,6 +75,7 @@ export async function generateAllReport(
   const { prisma } = deps;
   const { rows: loaded, receivable } = await loadReportReceipts(prisma, input);
 
+  const labelFor = withLeadershipContestantLabel(input.politicalEntityLabel);
   const rows = loaded.map((row) => {
     const source: AllReportSourceRow = {
       receiptNumber: row.receiptNumber,
@@ -89,7 +96,11 @@ export async function generateAllReport(
       province: row.province,
       postalCode: row.postalCode,
     };
-    const label = input.politicalEntityLabel({ ridingNumber: row.ridingNumber, entityKind: row.entityKind });
+    const label = labelFor({
+      ridingNumber: row.ridingNumber,
+      entityKind: row.entityKind,
+      leadershipContestant: row.leadershipContestant,
+    });
     return buildAllReportRow(source, label);
   });
 

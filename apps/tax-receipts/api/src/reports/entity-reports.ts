@@ -8,7 +8,12 @@ import {
 } from '@gpo/tax-receipts-core';
 import { withChangeLog } from '../changelog/write.js';
 import type { EntityKind, EntityReportKind, PrismaClient } from '../generated/prisma/index.js';
-import { loadReportReceipts, ReportExportBlockedError, type EntityReportIncludedSet } from './load-receipts.js';
+import {
+  loadReportReceipts,
+  ReportExportBlockedError,
+  withLeadershipContestantLabel,
+  type EntityReportIncludedSet,
+} from './load-receipts.js';
 
 /**
  * Entity reports screen (ticket 4.5, screens.md screen 10): list generated
@@ -66,7 +71,8 @@ function rowKeyOf(kind: EntityReportKind, row: Record<string, string | number>):
 
 /**
  * Rebuilds a per-entity report's rows fresh, right now, reusing the label
- * every stored row already carries (one space has one label; no new
+ * every stored row already carries (one space has one label, except that a
+ * leadership row always carries its contestant's name; no new
  * resolver input is needed to check for drift, only to generate a brand
  * new report). Returns `null` when the report's own scope is currently
  * blocked by the REP4/REP6 gate (e.g. a period was edited after
@@ -114,7 +120,7 @@ async function rebuildCurrentRows(
           province: row.province,
           postalCode: row.postalCode,
         },
-        label,
+        row.leadershipContestant?.name ?? label,
       ),
     );
   }
@@ -124,6 +130,7 @@ async function rebuildCurrentRows(
       status: row.status,
       entityKind: row.entityKind,
       ridingNumber: row.ridingNumber,
+      leadershipContestant: row.leadershipContestant,
       periodId: row.periodId,
       amountCents: row.amountCents,
       contactId: row.contactId,
@@ -136,7 +143,7 @@ async function rebuildCurrentRows(
       postalCode: row.postalCode,
       receiptId: row.receiptId,
     })),
-    () => label,
+    withLeadershipContestantLabel(() => label),
   );
   return rows;
 }
