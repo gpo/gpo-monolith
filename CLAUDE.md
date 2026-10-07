@@ -5,8 +5,9 @@
 The `gpo-monolith` is the Green Party of Ontario's backend code repo. The legacy
 NestJS + MySQL application that used to live in `src/` was **removed in #89**;
 what remains today is the tax-receipt tooling that survives it (the receipt-PDF
-generation script in `scripts/`, the EO-report Apps Script in
-`google-workspace/`, and the Cypress e2e tests in `gpoAutoTests/`) plus the
+generation script in `scripts/`, the Apps Scripts in
+`google-workspace/` (EO reports, plus small Gmail, Docs, and Sheets
+utilities), and the Cypress e2e tests in `gpoAutoTests/`) plus the
 doc-memory system in `docs/`. The tax-receipt project knowledge base has moved
 to the private `gpo/qomon-migration-documents` repo (see below).
 
