@@ -3,6 +3,8 @@ import { PrismaClient, type EntityKind, type Prisma, type ReceivedBy } from '../
 import { allocateToReceipt } from '../src/receipts/allocate.js';
 import { issueReceipt } from '../src/receipts/issue.js';
 import { withChangeLog } from '../src/changelog/write.js';
+import { reissueReceipt } from '../src/corrections/cancel.js';
+import { reprintReceipt } from '../src/corrections/reprint.js';
 import { createLeadershipContestant } from '../src/leadership/contestants.js';
 import { enterManualPayment } from '../src/payments/manual-entry.js';
 import { runValidationForAllContributions } from '../src/validation/run.js';
@@ -75,10 +77,11 @@ import { resolveWorkItem } from '../src/work-items/resolve.js';
  * | Riding 100 (real: Simcoe North) | Used as-is, active — "riding B," kept distinct from 121 so a fixture needing two different ridings (Space D) still demonstrates that. |
  * | Period 9501 | Fixture-only by-election period (`BY_ELECTION`), scoped to riding 121 — periods have no such 1-124 constraint, so a reserved block works fine here. |
  * | Period 9502 | Fixture-only annual period ("Space A"), dated 2028 so it can never collide with a real period's date range or with real Qomon-mirrored data landing in the real 2026 Annual party space. |
- * | Contacts/contributions 800001-800018 | Group 1: one contribution per validation rule (ticket 2.1), plus a three-deposit RTD row-inclusion case reused by Group 2 below. |
+ * | Contacts/contributions 800001-800022 | Group 1: one contribution per validation rule (ticket 2.1), plus a three-deposit RTD row-inclusion case reused by Group 2 below, and the B4 and A6 duplicate pairs (EO evaluation rows 34-37). |
  * | Contacts/contributions 900001-900012, 900101-900102 | Group 2: five issuance spaces (ticket 3.12) - clean, blocked, partial-failure, multi-space donor. |
  * | Contacts/contributions 910001-910002 | Group 3 (new): one donor, two contributions, consolidated onto one receipt (ticket 3.2). |
- * | Period 9503 | Fixture-only annual period for Group 4 (EO evaluation rows 25, 26, 28), dated 2029 so it cannot collide with 9502 or a real period. |
+ * | Period 9503 | Fixture-only annual period for Group 4 (EO evaluation), dated 2029 so it cannot collide with 9502 or a real period. |
+ * | Period 9504 | Fixture-only annual period holding only Group 3, dated 2030. Its consolidated receipt makes ALL/S2P2 generation throw `MultiAllocationReceiptError` (O44), so it is kept out of 9502, whose reports should work. |
  * | Contacts `*@g4.fixture.test`, payments noted `fixture-g4-*` | Group 4: tool-owned contacts (no Qomon id, so editable without Qomon) and MANUAL payments, keyed by email and payment note rather than an id range. |
  * | Leadership contest "Fixture leadership contest (not real)" | Group 4's two leadership contestants, keyed by name. |
  *
@@ -94,6 +97,7 @@ const ANNUAL_2025 = 63; // '2025 Annual', from prisma/seed.ts
 const BY_ELECTION_PERIOD_ID = 9501;
 const SPACE_A_PERIOD_ID = 9502; // see header comment: why this can't be the real 2026 Annual period
 const EO_EVALUATION_PERIOD_ID = 9503; // Group 4, fully issued so its reports can be generated on the call
+const CONSOLIDATION_PERIOD_ID = 9504; // Group 3 alone: its multi-allocation receipt breaks report generation for its period
 
 // Real riding numbers, borrowed for fixture use — see header comment for
 // why there's no such thing as a "fixture-only" riding number here.
@@ -346,6 +350,66 @@ const GROUP_1_FIXTURES: Group1Fixture[] = [
     entityKind: 'LEADERSHIP',
     receivedBy: 'ENTITY',
   },
+  // --- B4 pair: two contacts sharing an email (EO evaluation rows 34-35).
+  //     Each contact's contribution gets its own B4 finding; resolve with
+  //     MERGE_CONTACTS (or unmerge to show it is reversible). ---
+  {
+    demonstrates: 'B4 — duplicate contributor, contact 1/2: shares an email with Morgan Elis',
+    qomonContactId: 800_019n,
+    contactName: 'Morgan Ellis',
+    email: 'morgan.ellis@fixture.test',
+    address: ONTARIO_ADDRESS,
+    qomonTransactionId: 800_019n,
+    amountCents: 4_000,
+    acceptedAt: '2026-03-15T12:00:00Z',
+    periodId: ANNUAL_2026,
+    ridingNumber: null,
+    entityKind: 'PARTY',
+    receivedBy: 'GPO',
+  },
+  {
+    demonstrates: 'B4 — duplicate contributor, contact 2/2: a misspelt second record with the same email as Morgan Ellis',
+    qomonContactId: 800_020n,
+    contactName: 'Morgan Elis',
+    email: 'morgan.ellis@fixture.test',
+    address: ONTARIO_ADDRESS,
+    qomonTransactionId: 800_020n,
+    amountCents: 6_000,
+    acceptedAt: '2026-08-15T12:00:00Z',
+    periodId: ANNUAL_2026,
+    ridingNumber: null,
+    entityKind: 'PARTY',
+    receivedBy: 'GPO',
+  },
+  // --- A6 pair: one donor, the same $50 to the party a day apart (EO
+  //     evaluation rows 36-37). Both contributions get an A6 finding;
+  //     resolve by REFUNDing one, or EXCEPTION ("distinct gifts"). ---
+  {
+    demonstrates: 'A6 — duplicate contribution 1/2: $50 PARTY on 2026-05-01',
+    qomonContactId: 800_021n,
+    contactName: 'Double Dana',
+    address: ONTARIO_ADDRESS,
+    qomonTransactionId: 800_021n,
+    amountCents: 5_000,
+    acceptedAt: '2026-05-01T12:00:00Z',
+    periodId: ANNUAL_2026,
+    ridingNumber: null,
+    entityKind: 'PARTY',
+    receivedBy: 'GPO',
+  },
+  {
+    demonstrates: 'A6 — duplicate contribution 2/2: the same $50 PARTY a day later, a separate payment',
+    qomonContactId: 800_021n,
+    contactName: 'Double Dana',
+    address: ONTARIO_ADDRESS,
+    qomonTransactionId: 800_022n,
+    amountCents: 5_000,
+    acceptedAt: '2026-05-02T12:00:00Z',
+    periodId: ANNUAL_2026,
+    ridingNumber: null,
+    entityKind: 'PARTY',
+    receivedBy: 'GPO',
+  },
   // --- RTD fixtures: one contact, three deposits, crossing the $200 RTD
   //     threshold on the second. Raw material for the RTD-flow walkthrough
   //     (tickets 2.2-2.8) below, in addition to their original 2.1 purpose
@@ -406,6 +470,8 @@ interface Group2Fixture {
   demonstrates: string;
   qomonContactId: bigint;
   contactName: string;
+  /** backfilled onto an already-seeded contact too (see backfillSeedContactEmail) */
+  email?: string;
   address?: RawAddress | null;
   qomonTransactionId: bigint;
   amountCents: number;
@@ -450,6 +516,7 @@ const GROUP_2_FIXTURES: Group2Fixture[] = [
     demonstrates: 'clean, confirmed email delivery preference — shows up in the preview totals',
     qomonContactId: 900_002n,
     contactName: 'Ready Raj',
+    email: 'ready.raj@fixture.test',
     address: ONTARIO_ADDRESS,
     qomonTransactionId: 900_002n,
     amountCents: 7_500,
@@ -609,9 +676,10 @@ const GROUP_2_FIXTURES: Group2Fixture[] = [
 // ===========================================================================
 // Group 3 (new) — allocation consolidation (ticket 3.2): one donor, two
 // contributions in the same space, consolidated onto a single receipt via
-// `allocateToReceipt` rather than one receipt each. Lands in Space A so the
-// per-space wizard's preview correctly excludes both (fully allocated), same
-// as Already Issued Ivy above.
+// `allocateToReceipt` rather than one receipt each. In a period of its own
+// (9504): ALL/S2P2 generation refuses a multi-allocation receipt (O44), so in
+// Space A it would block that period's reports. Its PDF prints only the
+// first leg ($40, not $65) until it is reissued (EO evaluation row 43).
 // ===========================================================================
 
 const GROUP_3_CONTACT = { qomonContactId: 910_001n, name: 'Consolidating Chris' };
@@ -681,8 +749,8 @@ async function createSeedContribution(args: {
 }
 
 const GROUP_3_CONTRIBUTIONS = [
-  { qomonTransactionId: 910_001n, amountCents: 4_000, acceptedAt: '2028-03-05T12:00:00Z' },
-  { qomonTransactionId: 910_002n, amountCents: 2_500, acceptedAt: '2028-03-10T12:00:00Z' },
+  { qomonTransactionId: 910_001n, amountCents: 4_000, acceptedAt: '2030-03-05T12:00:00Z' },
+  { qomonTransactionId: 910_002n, amountCents: 2_500, acceptedAt: '2030-03-10T12:00:00Z' },
 ];
 
 /** A fixture contact, change-logged like any contact write (`contact` is a
@@ -719,7 +787,7 @@ async function ensureGroup3(cfoUserId: string): Promise<void> {
       paymentMethodKind: 'card',
       reason: 'phase-3 fixture: allocation consolidation (ticket 3.2)',
       descriptive: {
-        periodId: SPACE_A_PERIOD_ID,
+        periodId: CONSOLIDATION_PERIOD_ID,
         entityKind: 'PARTY',
         receivedBy: 'GPO',
       },
@@ -750,18 +818,21 @@ async function ensureGroup3(cfoUserId: string): Promise<void> {
     `  created + consolidated ${receipt.receiptNumber}: Consolidating Chris — two contributions ($40.00 + $25.00), one receipt ($65.00 total)`,
   );
   console.log(
-    '    NOTE: generating an ALL/S2P2 entity report for period 9502 will now throw MultiAllocationReceiptError',
+    '    NOTE: generating an ALL/S2P2 entity report for period 9504 will throw MultiAllocationReceiptError',
   );
   console.log('    (reports/load-receipts.ts) — that is expected, see open-questions.md O44. Try it deliberately.');
 }
 
 // ===========================================================================
-// Group 4 — EO evaluation rows 25, 26, 28 (eo/evaluation-readiness.md):
-// which entity a contribution is directed to (including a leadership
-// contestant), the agency flag, and one payment split across entities. All
-// in fixture period 9503 and entered through the real manual-entry path
-// (MANUAL cheques), then issued, so the ALL and S2P2 reports for each 9503
-// space can be generated on the call with no setup: the CA 121 file shows
+// Group 4 — EO evaluation (eo/evaluation-readiness.md): which entity a
+// contribution is directed to (including a leadership contestant), the
+// agency flag, and one payment split across entities (rows 25, 26, 28); a
+// donor over the $200 S2P2 threshold (67, 69); a reissued and a lost receipt
+// (59 to 63); an email-delivery donor (64, 65); and a goods-and-services gift
+// (29, 57). All in fixture period 9503 and entered through the real
+// manual-entry path (MANUAL cheques), then issued, so the ALL and S2P2
+// reports for each 9503 space can be generated on the call with no setup:
+// the PARTY file has statuses I, C, and L, the CA 121 file shows
 // Agency_Contribution Y and N side by side, and the LEADERSHIP file shows
 // entity type LC with each contestant's name.
 //
@@ -779,9 +850,15 @@ interface Group4Part {
   ridingNumber?: number;
   contestant?: ContestantName;
   receivedBy: ReceivedBy;
+  /** a goods-and-services gift's non-deductible portion */
+  nonDeductibleCents?: number;
   /** issued as the party CFO right after entry; false leaves it for a live
    *  issue (the leadership space wizard) */
   issue: boolean;
+  /** a correction applied to the issued receipt: reissued (the original
+   *  becomes status C, its replacement cites it), or marked lost with a
+   *  COPY reprint (status L) */
+  then?: 'reissue' | 'lost-copy';
 }
 
 interface Group4Fixture {
@@ -793,6 +870,10 @@ interface Group4Fixture {
   key: string;
   firstName: string;
   lastName: string;
+  /** defaults to 2029-03-01; set when one donor gives several times */
+  receivedAt?: string;
+  /** upserts a DonorCyclePreference for 2029 and issues the receipt for that delivery */
+  deliveryPreference?: 'EMAIL';
   /** one part = an unsplit payment; several = one cheque split across entities */
   parts: Group4Part[];
 }
@@ -843,6 +924,61 @@ const GROUP_4_FIXTURES: Group4Fixture[] = [
     lastName: 'Pat',
     parts: [{ amountCents: 7_500, entityKind: 'LEADERSHIP', contestant: 'Jordan Rivers', receivedBy: 'GPO', issue: false }],
   },
+  // --- rows 67 + 69: one donor, three PARTY gifts, each issued on its own
+  //     receipt; $225 for the year, so the donor is on the 9503 PARTY S2P2 ---
+  {
+    demonstrates: 'rows 67 + 69 — PARTY gift 1/3, $100',
+    key: 'fixture-g4-7',
+    firstName: 'Threshold',
+    lastName: 'Theo',
+    receivedAt: '2029-02-01T17:00:00Z',
+    parts: [{ amountCents: 10_000, entityKind: 'PARTY', receivedBy: 'GPO', issue: true }],
+  },
+  {
+    demonstrates: 'rows 67 + 69 — PARTY gift 2/3, $75 (year to date $175)',
+    key: 'fixture-g4-8',
+    firstName: 'Threshold',
+    lastName: 'Theo',
+    receivedAt: '2029-04-01T16:00:00Z',
+    parts: [{ amountCents: 7_500, entityKind: 'PARTY', receivedBy: 'GPO', issue: true }],
+  },
+  {
+    demonstrates: 'rows 67 + 69 — PARTY gift 3/3, $50 (year to date $225, over $200)',
+    key: 'fixture-g4-9',
+    firstName: 'Threshold',
+    lastName: 'Theo',
+    receivedAt: '2029-06-01T16:00:00Z',
+    parts: [{ amountCents: 5_000, entityKind: 'PARTY', receivedBy: 'GPO', issue: true }],
+  },
+  {
+    demonstrates: 'rows 61 + 63 + 68 — issued, then reissued: the original is status C, the replacement reads "This cancels and replaces receipt #…"',
+    key: 'fixture-g4-10',
+    firstName: 'Reissued',
+    lastName: 'Rory',
+    parts: [{ amountCents: 6_000, entityKind: 'PARTY', receivedBy: 'GPO', issue: true, then: 'reissue' }],
+  },
+  {
+    demonstrates: 'rows 59 + 60 + 68 — issued, then marked lost with a COPY reprint (status L)',
+    key: 'fixture-g4-11',
+    firstName: 'Lost',
+    lastName: 'Lena',
+    parts: [{ amountCents: 4_500, entityKind: 'PARTY', receivedBy: 'GPO', issue: true, then: 'lost-copy' }],
+  },
+  {
+    demonstrates: 'rows 64 + 65 — email address on file and an EMAIL preference; issued for email, ready for Deliver → Send emails',
+    key: 'fixture-g4-12',
+    firstName: 'Email',
+    lastName: 'Emma',
+    deliveryPreference: 'EMAIL',
+    parts: [{ amountCents: 3_500, entityKind: 'PARTY', receivedBy: 'GPO', issue: true }],
+  },
+  {
+    demonstrates: 'rows 29 + 57 + 68 — goods and services, $100 with $20 non-deductible, issued for $80',
+    key: 'fixture-g4-13',
+    firstName: 'Goods',
+    lastName: 'Gita',
+    parts: [{ amountCents: 10_000, nonDeductibleCents: 2_000, entityKind: 'PARTY', receivedBy: 'GPO', issue: true }],
+  },
 ];
 
 /** The fixture contest's contestants, created (change-logged) if absent. */
@@ -886,13 +1022,23 @@ async function ensureGroup4Fixture(
     addresses: [ONTARIO_ADDRESS],
   });
 
+  const receivedAt = new Date(f.receivedAt ?? '2029-03-01T17:00:00Z');
+  if (f.deliveryPreference) {
+    const year = contributionYear(receivedAt);
+    await prisma.donorCyclePreference.upsert({
+      where: { contactId_year: { contactId: contact.id, year } },
+      create: { contactId: contact.id, year, delivery: f.deliveryPreference },
+      update: { delivery: f.deliveryPreference },
+    });
+  }
+
   const amountCents = f.parts.reduce((sum, p) => sum + p.amountCents, 0);
   const { contributions } = await enterManualPayment(prisma, {
     actorUserId: cfoUserId,
     reason: `fixture: ${f.demonstrates}`,
     contactId: contact.id,
     amountCents,
-    receivedAt: new Date('2029-03-01T17:00:00Z'),
+    receivedAt,
     method: 'CHEQUE',
     note: f.key,
     contributions: f.parts.map((p) => ({
@@ -903,6 +1049,8 @@ async function ensureGroup4Fixture(
         riding_number: p.ridingNumber ?? null,
         leadership_contestant_id: p.contestant ? contestantIds.get(p.contestant)! : null,
         received_by: p.receivedBy,
+        goods_services: (p.nonDeductibleCents ?? 0) > 0,
+        non_deductible_cents: p.nonDeductibleCents ?? 0,
       },
     })),
   });
@@ -910,17 +1058,44 @@ async function ensureGroup4Fixture(
   const issued: string[] = [];
   for (const [i, p] of f.parts.entries()) {
     if (!p.issue) continue;
+    // a leadership receipt prints its contestant's name instead
+    const politicalEntityLabel = p.entityKind === 'CA' ? `York-Simcoe ${p.ridingNumber}` : 'Green Party of Ontario';
     const receipt = await issueReceipt(
       { prisma, storageDir: STORAGE_DIR },
       {
         contributionId: contributions[i]!.id,
         actorUserId: cfoUserId,
         reason: `fixture: issued so the 9503 reports can be generated (${f.demonstrates})`,
-        // a leadership receipt prints its contestant's name instead
-        politicalEntityLabel: p.entityKind === 'CA' ? `York-Simcoe ${p.ridingNumber}` : 'Green Party of Ontario',
+        politicalEntityLabel,
+        delivery: f.deliveryPreference,
       },
     );
     issued.push(receipt.receiptNumber);
+
+    if (p.then === 'reissue') {
+      const reissued = await reissueReceipt(
+        { prisma, storageDir: STORAGE_DIR },
+        {
+          receiptId: receipt.id,
+          actorUserId: cfoUserId,
+          reason: `fixture: reissued, so the 9503 PARTY ALL report has a status C row and its replacement (${f.demonstrates})`,
+          politicalEntityLabel,
+        },
+      );
+      issued.push(`${reissued.newReceiptNumber} (replaces ${receipt.receiptNumber})`);
+    } else if (p.then === 'lost-copy') {
+      await reprintReceipt(
+        { prisma, storageDir: STORAGE_DIR },
+        {
+          receiptId: receipt.id,
+          actorUserId: cfoUserId,
+          reason: `fixture: donor reported the receipt lost (${f.demonstrates})`,
+          kind: 'LOST_COPY',
+          politicalEntityLabel,
+        },
+      );
+      issued.push(`(${receipt.receiptNumber} marked lost, COPY reprinted)`);
+    }
   }
 
   console.log(
@@ -1000,7 +1175,20 @@ async function ensureGroup1Fixture(f: Group1Fixture): Promise<void> {
   console.log(`  created: ${f.demonstrates}`);
 }
 
+/** Adds an email to a seeded contact that was created before its fixture
+ *  had one, so a re-run fixes an existing dev database without a reset. */
+async function backfillSeedContactEmail(qomonContactId: bigint, email: string): Promise<void> {
+  const contact = await prisma.contact.findUnique({ where: { qomonContactId } });
+  if (!contact || contact.email) return;
+  await withChangeLog(prisma, { userId: null, reason: 'fixture: email added to a seeded contact' }, async (ctx) => {
+    const after = await ctx.tx.contact.update({ where: { id: contact.id }, data: { email } });
+    await ctx.log({ subjectType: 'Contact', subjectId: contact.id, before: contact, after });
+  });
+  console.log(`  ${contact.name}: email ${email} added`);
+}
+
 async function ensureGroup2Fixture(f: Group2Fixture, cfoUserId: string): Promise<void> {
+  if (f.email) await backfillSeedContactEmail(f.qomonContactId, f.email);
   const existingContribution = await findSeededContribution(f.qomonTransactionId);
   if (existingContribution) {
     console.log(`  skip (already seeded): ${f.contactName} — ${f.demonstrates}`);
@@ -1012,6 +1200,7 @@ async function ensureGroup2Fixture(f: Group2Fixture, cfoUserId: string): Promise
     contact = await createSeedContact({
       qomonContactId: f.qomonContactId,
       name: f.contactName,
+      email: f.email ?? null,
       addresses: f.address ? [f.address] : [],
     });
   }
@@ -1070,6 +1259,7 @@ async function main(): Promise<void> {
   await ensurePeriod(BY_ELECTION_PERIOD_ID, 'Fixture by-election (not a real EO period)', 'BY_ELECTION', [FIXTURE_ACTIVE_RIDING_A], '2026-06-01T05:00:00Z', '2026-09-01T04:00:00Z');
   await ensurePeriod(SPACE_A_PERIOD_ID, 'Fixture — clean space (not a real EO period)', 'ANNUAL', [], '2028-01-01T05:00:00Z', '2029-01-01T05:00:00Z');
   await ensurePeriod(EO_EVALUATION_PERIOD_ID, 'Fixture — EO evaluation (not a real EO period)', 'ANNUAL', [], '2029-01-01T05:00:00Z', '2030-01-01T05:00:00Z');
+  await ensurePeriod(CONSOLIDATION_PERIOD_ID, 'Fixture — consolidated receipt (not a real EO period)', 'ANNUAL', [], '2030-01-01T05:00:00Z', '2031-01-01T05:00:00Z');
 
   console.log('Group 1 — validation rule coverage + RTD row-inclusion prep:');
   for (const fixture of GROUP_1_FIXTURES) {
@@ -1089,7 +1279,7 @@ async function main(): Promise<void> {
   console.log('Group 3 — allocation consolidation (ticket 3.2):');
   await ensureGroup3(cfo.id);
 
-  console.log('Group 4 — EO evaluation rows 25, 26, 28 (period 9503):');
+  console.log('Group 4 — EO evaluation (period 9503):');
   const admin = await prisma.user.findUnique({ where: { email: 'admin@gpo.test' } });
   const contestantIds = await ensureLeadershipContestants(admin?.id ?? cfo.id);
   for (const fixture of GROUP_4_FIXTURES) {
