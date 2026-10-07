@@ -2,6 +2,7 @@
   "name": "gpo-monolith",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=22.13.0"
