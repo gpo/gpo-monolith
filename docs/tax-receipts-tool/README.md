@@ -10,3 +10,9 @@ under `tax-receipts/` (engineering docs in `tax-receipts/design/`, specs in
 They were moved out of this public repo because they include internal strategy,
 stakeholder detail, and vendor material shared in confidence. Ask the tech team
 for access.
+
+What stays here is public:
+
+- [`user-guide/`](user-guide/README.md): what the tool does and how to use
+  it, area by area, for the people who use it.
+- [`architecture.md`](architecture.md): code layout and how to run it.
