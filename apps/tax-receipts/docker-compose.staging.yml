@@ -73,7 +73,7 @@ services:
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-dev}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
-      EMAIL_FROM: ${EMAIL_FROM:-GPO Tax Receipts <receipts@localhost>}
+      EMAIL_FROM: ${EMAIL_FROM:-}
     volumes:
       - artifacts:/data
     depends_on:
