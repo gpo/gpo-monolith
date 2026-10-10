@@ -4,7 +4,7 @@ import path from 'node:path';
 import { PDFParse } from 'pdf-parse';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { TerminalReceiptError } from '../receipts/allocate.js';
+import { TerminalReceiptError } from '../receipts/errors.js';
 import { issueReceipt } from '../receipts/issue.js';
 import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 import { cancelReceipt } from './cancel.js';

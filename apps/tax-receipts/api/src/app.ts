@@ -21,24 +21,20 @@ import {
   DonorPrecheckTokenNotFoundError,
 } from './donors/precheck.js';
 import { EntityReportNotFoundError } from './reports/entity-reports.js';
-import {
-  AllocationContactMismatchError,
-  DuplicateAllocationError,
-  ReceiptNotFoundError,
-  TerminalReceiptError,
-} from './receipts/allocate.js';
+import { ReceiptNotFoundError, TerminalReceiptError } from './receipts/errors.js';
 import {
   DuplicateForeignReceiptNumberError,
   ForeignReceiptNumberFormatError,
 } from './receipts/foreign.js';
 import {
   AllocationOverageError,
+  CombinedReceiptConflictError,
   MissingAddressError,
   ReceiptIssuanceValidationError,
 } from './receipts/issue.js';
 import {
+  InconsistentCombinedReceiptError,
   MissingContributionMetadataError,
-  MultiAllocationReceiptError,
   ReportExportBlockedError,
   ReportScopeError,
 } from './reports/load-receipts.js';
@@ -131,14 +127,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     ) {
       return reply.code(404).send({ error: error.message });
     }
-    if (
-      error instanceof TerminalReceiptError ||
-      error instanceof DuplicateAllocationError
-    ) {
+    if (error instanceof TerminalReceiptError) {
       return reply.code(409).send({ error: error.message });
-    }
-    if (error instanceof AllocationContactMismatchError) {
-      return reply.code(400).send({ error: error.message });
     }
     if (error instanceof WorkItemAlreadyClosedError) {
       return reply.code(409).send({ error: error.message });
@@ -149,7 +139,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     if (error instanceof AllocationOverageError) {
       return reply.code(409).send({ error: error.message });
     }
-    if (error instanceof ReceiptIssuanceValidationError) {
+    if (error instanceof ReceiptIssuanceValidationError || error instanceof CombinedReceiptConflictError) {
       return reply.code(400).send({ error: error.message });
     }
     if (error instanceof MissingAddressError) {
@@ -190,7 +180,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     if (error instanceof ReportScopeError) {
       return reply.code(400).send({ error: error.message });
     }
-    if (error instanceof MultiAllocationReceiptError || error instanceof MissingContributionMetadataError) {
+    if (error instanceof InconsistentCombinedReceiptError || error instanceof MissingContributionMetadataError) {
       return reply.code(422).send({ error: error.message });
     }
     if (error instanceof BulkEditTooLargeError) {

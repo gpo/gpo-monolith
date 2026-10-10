@@ -3,7 +3,8 @@ import { storeArtifact } from '../artifacts/store.js';
 import { withChangeLog } from '../changelog/write.js';
 import { receiptEntityLabel } from '../leadership/contestants.js';
 import type { ReceiptReprint, ReceiptReprintKind } from '../generated/prisma/index.js';
-import { ReceiptNotFoundError, TerminalReceiptError } from '../receipts/allocate.js';
+import { ReceiptNotFoundError, TerminalReceiptError } from '../receipts/errors.js';
+import { receiptPrintedFields } from '../receipts/combined.js';
 import { renderReceiptPdf } from '../receipts/pdf.js';
 import { getReceiptSettings } from '../receipts/settings.js';
 
@@ -137,18 +138,20 @@ export async function reprintReceipt(deps: ArtifactStoreDeps, input: ReprintInpu
     throw new ReprintNotAllowedError('a lost-receipt copy is reprinted unaltered; it takes no corrected name');
   }
 
-  // The first allocated contribution stands in for the printed date and
-  // goods-and-services flag on a multi-line receipt (O44, same as reissue).
-  const primary = receipt.allocations[0]!.contribution;
+  // A combined receipt reprints its date range and shared fields
+  // (`receipts/combined.ts`), exactly as it was issued.
+  const printed = receiptPrintedFields(receipt.allocations.map((a) => a.contribution));
+  const primary = printed.primary;
   const snapshot = receipt.addressSnapshot;
   const bytes = await renderReceiptPdf({
     receiptNumber: receipt.receiptNumber,
     issueDate: receipt.issueDate,
-    acceptedAt: primary.acceptedAt,
+    acceptedAt: printed.acceptedFrom,
+    acceptedThrough: printed.acceptedThrough,
     eligibleAmountCents: receipt.allocations.reduce((sum, a) => sum + a.amountCents, 0),
-    isGoodsServices: primary.goodsServices,
+    isGoodsServices: printed.goodsServices,
     politicalEntityLabel: await receiptEntityLabel(prisma, primary, input.politicalEntityLabel),
-    eoContributorId: primary.eoContributorId,
+    eoContributorId: printed.eoContributorId,
     contributorName,
     addressLine1: snapshot.line1,
     addressLine2: snapshot.line2,

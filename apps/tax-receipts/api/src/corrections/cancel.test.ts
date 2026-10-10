@@ -11,7 +11,7 @@ import { markRtdFilingSent } from '../rtd/mark-sent.js';
 import { prepareRtdFiling } from '../rtd/prepare.js';
 import { IssuanceDisabledError } from '../auth/kill-switch.js';
 import { MissingAddressError, issueReceipt } from '../receipts/issue.js';
-import { TerminalReceiptError } from '../receipts/allocate.js';
+import { TerminalReceiptError } from '../receipts/errors.js';
 import { resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact, fixtureContactUpdate } from '../test/db.js';
 import { cancelReceipt, previewReceiptCorrection, reissueReceipt } from './cancel.js';
 
@@ -213,12 +213,10 @@ describe('correction actions 1 & 2: cancel / reissue (ticket 3.10)', () => {
     const second = await seedContribution(contact.id, 2_500);
     await seedMetadata(first.id);
     await seedMetadata(second.id);
-    const issued = await issue(first.id);
-
-    const { allocateToReceipt } = await import('../receipts/allocate.js');
-    await allocateToReceipt(
-      { prisma },
-      { receiptId: issued.id, contributionId: second.id, actorUserId: baseline.cfoUserId, reason: 'consolidate' },
+    const { issueCombinedReceipt } = await import('../receipts/issue.js');
+    const issued = await issueCombinedReceipt(
+      { prisma, storageDir },
+      { contributionIds: [first.id, second.id], actorUserId: baseline.cfoUserId, reason: 'combine', politicalEntityLabel: 'Green Party of Ontario' },
     );
 
     const preview = await previewReceiptCorrection(prisma, issued.id);

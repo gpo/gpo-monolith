@@ -18,7 +18,9 @@ email. Open a contributor to see:
 - **Details**: name, email, address, and contributor type (always
   Individual: Ontario accepts contributions from individuals only).
 - **Contributions**: everything they have given, with period, entity,
-  amount, and status.
+  amount, status, and what is left to receipt. With *Issue receipts*, tick
+  two or more to issue one receipt for all of them (see
+  [Combined receipts](issuing-receipts.md#combined-receipts)).
 - **Change history**: every change to their record, with before and after.
 
 ## Adding a contributor

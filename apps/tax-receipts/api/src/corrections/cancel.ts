@@ -13,9 +13,10 @@ import { withChangeLog } from '../changelog/write.js';
 import { receiptEntityLabel } from '../leadership/contestants.js';
 import { addressFrom } from '../contacts/address.js';
 import type { PrismaClient, Receipt, ReceiptDelivery } from '../generated/prisma/index.js';
+import { receiptPrintedFields } from '../receipts/combined.js';
 import { renderReceiptPdf } from '../receipts/pdf.js';
 import { getReceiptSettings } from '../receipts/settings.js';
-import { ReceiptNotFoundError, TerminalReceiptError } from '../receipts/allocate.js';
+import { ReceiptNotFoundError, TerminalReceiptError } from '../receipts/errors.js';
 import { MissingAddressError, ReceiptIssuanceValidationError } from '../receipts/issue.js';
 import { renderCancellationNoticePdf } from './cancellation-notice.js';
 import { OWED_DC1A, openOwedToEo } from './owed-to-eo.js';
@@ -392,19 +393,19 @@ export async function reissueReceipt(
     },
   );
 
-  // O44 (open-questions.md): which contribution's acceptedAt/goodsServices
-  // prints on a multi-allocation receipt has no answer yet -- same call
-  // ticket 3.2 already declined to make. Uses the first line's contribution
-  // as a stand-in rather than inventing a rule.
-  const primary = contributions.find((c) => c.id === lines[0]!.contributionId)!;
+  // A combined receipt prints its date range and shared fields
+  // (`receipts/combined.ts`).
+  const printed = receiptPrintedFields(contributions);
+  const primary = printed.primary;
   const pdfBytes = await renderReceiptPdf({
     receiptNumber: created.newReceipt.receiptNumber,
     issueDate: created.newReceipt.issueDate,
-    acceptedAt: primary.acceptedAt,
+    acceptedAt: printed.acceptedFrom,
+    acceptedThrough: printed.acceptedThrough,
     eligibleAmountCents: created.totalAmountCents,
-    isGoodsServices: primary.goodsServices,
+    isGoodsServices: printed.goodsServices,
     politicalEntityLabel: await receiptEntityLabel(deps.prisma, primary, input.politicalEntityLabel),
-    eoContributorId: primary.eoContributorId,
+    eoContributorId: printed.eoContributorId,
     contributorName: receipt.contactNameSnapshot,
     replacesReceiptNumber: receipt.receiptNumber,
     addressLine1,

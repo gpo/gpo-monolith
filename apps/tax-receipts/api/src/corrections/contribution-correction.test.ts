@@ -428,15 +428,17 @@ describe('contribution correction engine (corrections.md actions 4, 5, 6, 8, 9, 
     it('moves a whole receipt: every active contribution on it goes to the new donor', async () => {
       const dana = await seedContact('Dana Donor');
       const robin = await seedContact('Robin Recipient');
-      const first = await seedContribution(dana.id, { amountCents: 4_000, receipted: true });
+      const first = await seedContribution(dana.id, { amountCents: 4_000 });
       const second = await seedContribution(dana.id, { amountCents: 3_000 });
-      const { allocateToReceipt } = await import('../receipts/allocate.js');
-      await allocateToReceipt(
-        { prisma },
-        { receiptId: first.receiptId!, contributionId: second.contribution.id, actorUserId: baseline.cfoUserId, reason: 'consolidate' },
-      );
+      const { issueCombinedReceipt } = await import('../receipts/issue.js');
+      const combined = await issueCombinedReceipt(deps(), {
+        contributionIds: [first.contribution.id, second.contribution.id],
+        actorUserId: baseline.cfoUserId,
+        reason: 'combine',
+        politicalEntityLabel: 'Green Party of Ontario',
+      });
 
-      const input = await moveReceipt(prisma, { ...common(), receiptId: first.receiptId!, toContactId: robin.id });
+      const input = await moveReceipt(prisma, { ...common(), receiptId: combined.id, toContactId: robin.id });
       const result = await applyCorrection(deps(), input);
 
       expect(result.supersededContributionIds.sort()).toEqual([first.contribution.id, second.contribution.id].sort());

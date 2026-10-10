@@ -4,7 +4,7 @@ import {
   type AllocationRow,
 } from '@gpo/tax-receipts-core';
 import { advanceSpaceStage } from '../delivery/space-delivery.js';
-import { issueReceipt, type IssueReceiptDeps } from '../receipts/issue.js';
+import { issueCombinedReceipt, issueReceipt, type IssueReceiptDeps } from '../receipts/issue.js';
 import type { PrismaClient, ReceiptDelivery } from '../generated/prisma/index.js';
 import type { SpaceKey } from './space-state.js';
 
@@ -19,8 +19,14 @@ import type { SpaceKey } from './space-state.js';
  * This deliberately reuses `issueReceipt` per contribution rather than
  * duplicating its invariant/kill-switch/change-log logic: a space is just
  * "every still-eligible contribution in this (period, riding, entity)
- * bucket," and one contribution still means one receipt (3.1's scoping,
- * unchanged here).
+ * bucket," and by default one contribution means one receipt.
+ *
+ * With `combinePerDonor` (opt-in, EO evaluation rows 43 and 46), each
+ * donor's contributions that may share a receipt (`receipts/combined.ts`:
+ * same contribution type, agency status, and leadership contestant) become
+ * one combined receipt via `issueCombinedReceipt`, so a monthly donor gets
+ * one receipt for the period rather than twelve. They are also grouped by
+ * calendar year, since the delivery preference is per donor per year.
  */
 
 export interface SpaceIssuanceBlocker {
@@ -59,13 +65,18 @@ export async function getSpaceIssuanceGate(
   }));
 }
 
+/** One receipt the run would issue. */
 export interface SpaceIssuanceLine {
+  /** the first of `contributionIds` (kept for single-contribution callers) */
   contributionId: string;
+  /** every contribution the receipt carries: one, or several when combined */
+  contributionIds: string[];
   contactId: string;
   contactName: string;
-  /** what would issue: the contribution's full remaining eligible amount
-   *  (invariant 1) — this pass never issues a partial amount (that is a
-   *  single-receipt override, ticket 3.1's own `amountCents` input). */
+  /** what would issue: the full remaining eligible amount of every
+   *  contribution on the receipt (invariant 1) — this pass never issues a
+   *  partial amount (that is a single-receipt override, ticket 3.1's own
+   *  `amountCents` input). */
   amountCents: number;
   delivery: ReceiptDelivery;
 }
@@ -83,7 +94,11 @@ async function spaceContributionIds(prisma: PrismaClient, space: SpaceKey): Prom
   return rows.map((r) => r.id);
 }
 
-async function spaceIssuanceLines(prisma: PrismaClient, space: SpaceKey): Promise<SpaceIssuanceLine[]> {
+async function spaceIssuanceLines(
+  prisma: PrismaClient,
+  space: SpaceKey,
+  combinePerDonor: boolean,
+): Promise<SpaceIssuanceLine[]> {
   const contributions = await prisma.contribution.findMany({
     where: {
       status: 'ACTIVE',
@@ -92,6 +107,7 @@ async function spaceIssuanceLines(prisma: PrismaClient, space: SpaceKey): Promis
       entityKind: space.entityKind,
     },
     include: { contact: true, allocations: { include: { receipt: true } } },
+    orderBy: [{ acceptedAt: 'asc' }, { id: 'asc' }],
   });
 
   const contactIds = [...new Set(contributions.map((c) => c.contactId))];
@@ -102,6 +118,7 @@ async function spaceIssuanceLines(prisma: PrismaClient, space: SpaceKey): Promis
   const prefByKey = new Map(prefs.map((p) => [`${p.contactId}:${p.year}`, p]));
 
   const lines: SpaceIssuanceLine[] = [];
+  const combinedByKey = new Map<string, SpaceIssuanceLine>();
   for (const c of contributions) {
     const allocationRows: AllocationRow[] = c.allocations.map((a) => ({
       receiptId: a.receiptId,
@@ -115,14 +132,29 @@ async function spaceIssuanceLines(prisma: PrismaClient, space: SpaceKey): Promis
     );
     if (remaining <= 0) continue; // already fully receipted
 
-    const pref = prefByKey.get(`${c.contactId}:${contributionYear(c.acceptedAt)}`);
-    lines.push({
+    const year = contributionYear(c.acceptedAt);
+    if (combinePerDonor) {
+      const key = [c.contactId, year, c.goodsServices, c.receivedBy, c.leadershipContestantId].join(':');
+      const combined = combinedByKey.get(key);
+      if (combined) {
+        combined.contributionIds.push(c.id);
+        combined.amountCents += remaining;
+        continue;
+      }
+    }
+    const pref = prefByKey.get(`${c.contactId}:${year}`);
+    const line: SpaceIssuanceLine = {
       contributionId: c.id,
+      contributionIds: [c.id],
       contactId: c.contactId,
       contactName: c.contact.name,
       amountCents: remaining,
       delivery: pref?.delivery ?? 'MAIL',
-    });
+    };
+    lines.push(line);
+    if (combinePerDonor) {
+      combinedByKey.set([c.contactId, year, c.goodsServices, c.receivedBy, c.leadershipContestantId].join(':'), line);
+    }
   }
   return lines;
 }
@@ -148,9 +180,10 @@ export interface SpaceIssuancePreview {
 export async function previewSpaceIssuance(
   prisma: PrismaClient,
   space: SpaceKey,
+  opts: { combinePerDonor?: boolean } = {},
 ): Promise<SpaceIssuancePreview> {
   const blockers = await getSpaceIssuanceGate(prisma, space);
-  const lines = blockers.length === 0 ? await spaceIssuanceLines(prisma, space) : [];
+  const lines = blockers.length === 0 ? await spaceIssuanceLines(prisma, space, opts.combinePerDonor ?? false) : [];
   const totals = lines.reduce<SpaceIssuanceTotals>(
     (acc, line) => {
       acc.receiptCount += 1;
@@ -184,10 +217,14 @@ export interface IssueSpaceReceiptsInput extends SpaceKey {
   /** overrides every line's resolved delivery preference; omit to use each
    *  donor's `DonorCyclePreference` (defaulting to MAIL). */
   delivery?: ReceiptDelivery;
+  /** one combined receipt per donor rather than one per contribution (see
+   *  the header comment); off by default */
+  combinePerDonor?: boolean;
 }
 
 export interface SpaceIssuanceRowResult {
   contributionId: string;
+  contributionIds: string[];
   ok: boolean;
   receiptId?: string;
   receiptNumber?: string;
@@ -221,19 +258,23 @@ export async function issueReceiptsForSpace(
   const blockers = await getSpaceIssuanceGate(deps.prisma, space);
   if (blockers.length > 0) throw new SpaceIssuanceBlockedError(blockers);
 
-  const lines = await spaceIssuanceLines(deps.prisma, space);
+  const lines = await spaceIssuanceLines(deps.prisma, space, input.combinePerDonor ?? false);
   const results: SpaceIssuanceRowResult[] = [];
   for (const line of lines) {
     try {
-      const receipt = await issueReceipt(deps, {
-        contributionId: line.contributionId,
+      const common = {
         actorUserId: input.actorUserId,
         reason: input.reason,
         delivery: input.delivery ?? line.delivery,
         politicalEntityLabel: input.politicalEntityLabel,
-      });
+      };
+      const receipt =
+        line.contributionIds.length > 1
+          ? await issueCombinedReceipt(deps, { ...common, contributionIds: line.contributionIds })
+          : await issueReceipt(deps, { ...common, contributionId: line.contributionId });
       results.push({
         contributionId: line.contributionId,
+        contributionIds: line.contributionIds,
         ok: true,
         receiptId: receipt.id,
         receiptNumber: receipt.receiptNumber,
@@ -242,6 +283,7 @@ export async function issueReceiptsForSpace(
     } catch (err) {
       results.push({
         contributionId: line.contributionId,
+        contributionIds: line.contributionIds,
         ok: false,
         error: err instanceof Error ? err.message : 'unknown error',
       });

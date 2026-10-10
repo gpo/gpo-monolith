@@ -7,8 +7,8 @@ import type { EntityKind } from '../generated/prisma/index.js';
 import { makeContribution, issueReceipt as fixtureIssueReceipt, resetDb, seedBaseline, testPrisma } from '../test/db.js';
 import {
   AllReportScopeError,
+  InconsistentCombinedReceiptError,
   MissingContributionMetadataError,
-  MultiAllocationReceiptError,
   generateAllReport,
 } from './all-report.js';
 
@@ -323,37 +323,52 @@ describe('ALL report generator (ticket 4.1)', () => {
     ).rejects.toThrow(MissingContributionMetadataError);
   });
 
-  it('throws MultiAllocationReceiptError on a consolidated receipt (not yet supported)', async () => {
-    const { contactId, contributionId } = await seedReportableReceipt({});
-    const { contributionId: secondContributionId } = await makeContribution(prisma, {
+  async function addAllocation(receiptId: string, contributionId: string, amountCents: number) {
+    await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'combine onto one receipt' }, async (ctx) => {
+      const allocation = await ctx.tx.receiptAllocation.create({ data: { receiptId, contributionId, amountCents } });
+      await ctx.log({ subjectType: 'ReceiptAllocation', subjectId: allocation.id, after: allocation });
+    });
+  }
+
+  const partyScope = () => ({
+    periodId: baseline.periodId,
+    entityKind: 'PARTY' as const,
+    ridingNumber: null,
+    actorUserId: baseline.cfoUserId,
+    reason: 'generate',
+    politicalEntityLabel: label,
+  });
+
+  it('reports a combined receipt as one row: its total and the latest acceptance date (rows 43, 46)', async () => {
+    const { contactId, receiptId } = await seedReportableReceipt({}); // $50.00 accepted 2026-03-01
+    const { contributionId: laterId } = await makeContribution(prisma, {
+      contactId,
+      qomonTransactionId: nextTxId++,
+      amountCents: 1_000,
+      acceptedAt: new Date('2026-05-02T12:00:00Z'),
+    });
+    await seedMetadata(laterId);
+    await addAllocation(receiptId, laterId, 1_000);
+
+    const result = await generateAllReport({ prisma, storageDir }, partyScope());
+
+    expect(result.rowCount).toBe(1);
+    const row = result.csv.trimEnd().split('\n')[1]!;
+    expect(row).toContain(',60.00,MO,05022026,'); // the total, dated to the later contribution
+  });
+
+  it('refuses a combined receipt whose contributions disagree on a reported field', async () => {
+    const { receiptId } = await seedReportableReceipt({});
+    const { contributionId: otherDonorsId } = await makeContribution(prisma, {
       qomonContactId: nextContactId++,
       qomonTransactionId: nextTxId++,
       amountCents: 1_000,
     });
-    await seedMetadata(secondContributionId);
+    await seedMetadata(otherDonorsId);
+    await addAllocation(receiptId, otherDonorsId, 1_000);
 
-    const receipt = await prisma.receipt.findFirst({ where: { contactId } });
-    await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'consolidate onto one receipt' }, async (ctx) => {
-      const allocation = await ctx.tx.receiptAllocation.create({
-        data: { receiptId: receipt!.id, contributionId: secondContributionId, amountCents: 1_000 },
-      });
-      await ctx.log({ subjectType: 'ReceiptAllocation', subjectId: allocation.id, after: allocation });
-    });
-
-    await expect(
-      generateAllReport(
-        { prisma, storageDir },
-        {
-          periodId: baseline.periodId,
-          entityKind: 'PARTY',
-          ridingNumber: null,
-          actorUserId: baseline.cfoUserId,
-          reason: 'generate',
-          politicalEntityLabel: label,
-        },
-      ),
-    ).rejects.toThrow(MultiAllocationReceiptError);
-    void contributionId;
+    await expect(generateAllReport({ prisma, storageDir }, partyScope())).rejects.toThrow(InconsistentCombinedReceiptError);
+    await expect(generateAllReport({ prisma, storageDir }, partyScope())).rejects.toThrow('contributor');
   });
 
   it('falls back to the joined display name when Qomon never supplied a name split', async () => {

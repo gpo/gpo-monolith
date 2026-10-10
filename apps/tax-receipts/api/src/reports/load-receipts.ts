@@ -12,6 +12,7 @@ import type {
   ReceivedBy,
   ReceiptStatus,
 } from '../generated/prisma/index.js';
+import { combinationConflicts, receiptPrintedFields } from '../receipts/combined.js';
 
 /**
  * Shared receipt loading for the EO annual reports (ALL, ticket 4.1; S2P2,
@@ -19,7 +20,8 @@ import type {
  * scope — REP2 ("per-entity contribution sum equals... the filed return
  * total") only holds if they agree on what's included — so this is the one
  * place that decides which receipts are in scope, enforces the guards
- * (single allocation, metadata present) both reports need identically, and
+ * (consistent combined receipts, metadata present) both reports need
+ * identically, and
  * — ticket 4.3 — runs the REP4/REP6 export gate before returning anything,
  * throwing `ReportExportBlockedError` if it finds a blocking problem. Both
  * generators get this for free; neither can accidentally skip it.
@@ -47,30 +49,23 @@ export class ReportScopeError extends Error {
 }
 
 /**
- * A receipt with more than one allocation (several contributions consolidated
- * onto one receipt) can't be reported yet: which contribution's accepted date
- * prints, and whose non-deductible amount governs, is an open question ticket
- * 3.1 already declined to guess at for issuance itself — it belongs with the
- * correction/consolidation workflow (tickets 3.10/3.11), not these
- * generators. Such a receipt can exist now: ticket 3.2's
- * `allocateToReceipt` (`receipts/allocate.ts`) can attach a second
- * contribution to an already-issued receipt, deliberately without deciding
- * either question, so this guard is a live gap as of 3.2, not just a forward
- * one — nothing calls `allocateToReceipt` yet (no ticket before 3.10 has a
- * reason to), but a report run against a period where it has been used will
- * hit this error until 3.10/3.11 resolve the two questions above.
+ * A combined receipt (several allocations) reports as one row: its total, the
+ * latest acceptance date, and the fields its contributions share
+ * (`receipts/combined.ts`). Issuance refuses a combination whose
+ * contributions disagree on a reported field, so this only fires on a receipt
+ * built some other way, where any single value would be a guess on a filing.
  */
-export class MultiAllocationReceiptError extends Error {
+export class InconsistentCombinedReceiptError extends Error {
   constructor(
     readonly receiptId: string,
     readonly receiptNumber: string,
-    readonly allocationCount: number,
+    readonly conflicts: readonly string[],
   ) {
     super(
-      `receipt ${receiptNumber} has ${allocationCount} allocations; the EO report generators only ` +
-        'support one contribution per receipt so far (see this file\'s MultiAllocationReceiptError doc comment)',
+      `receipt ${receiptNumber} combines contributions that differ in ${conflicts.join(', ')}, so it has no ` +
+        'single value to report; reissue or split it first',
     );
-    this.name = 'MultiAllocationReceiptError';
+    this.name = 'InconsistentCombinedReceiptError';
   }
 }
 
@@ -109,12 +104,11 @@ export interface LoadedReceiptRow {
   leadershipContestant: { id: string; name: string } | null;
   periodId: number;
   issueDate: Date;
-  /** the receipt's total, already summed over its allocations (invariant: a
-   *  receipt has no stored total, data-model.md §2). Since only
-   *  single-allocation receipts are supported (see
-   *  `MultiAllocationReceiptError`), this is just that one allocation's
-   *  amount. */
+  /** the receipt's total, summed over its allocations (invariant: a
+   *  receipt has no stored total, data-model.md §2). */
   amountCents: number;
+  /** the latest acceptance date among the receipt's contributions (the ALL
+   *  report's deposit date for a combined receipt) */
   acceptedAt: Date;
   goodsServices: boolean;
   receivedBy: ReceivedBy;
@@ -123,10 +117,11 @@ export interface LoadedReceiptRow {
    *  spec calls this mandatory for GPO (eo-reporting.md §1); tracked as
    *  open-questions.md O38, not fabricated here. */
   eoContributorId: string | null;
-  /** Contribution.processedDate — feeds the REP6 receivable flag
-   *  (ticket 4.3). Null when the accounting date never differs from
-   *  acceptance. */
-  processedDate: Date | null;
+  /** each contribution's acceptance and processed dates: the REP4/REP6 gate
+   *  (ticket 4.3) checks every contribution on a combined receipt, not just
+   *  the one date the row reports. `processedDate` is null when the
+   *  accounting date never differs from acceptance. */
+  contributionDates: { acceptedAt: Date; processedDate: Date | null }[];
   contactId: string;
   /** from Contact.lastName/firstName (ticket 4.1's schema addition) —
    *  Qomon's own name split, not a heuristic parse of the joined display
@@ -186,14 +181,20 @@ export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScop
   });
 
   const rows = receipts.map((receipt): LoadedReceiptRow => {
-    if (receipt.allocations.length !== 1) {
-      throw new MultiAllocationReceiptError(receipt.id, receipt.receiptNumber, receipt.allocations.length);
+    const contributions = receipt.allocations.map((a) => a.contribution);
+    if (contributions.length === 0) {
+      throw new Error(`receipt ${receipt.receiptNumber} has no allocations`);
     }
-    const allocation = receipt.allocations[0]!;
-    const contribution = allocation.contribution;
-    if (contribution.periodId === null) {
-      throw new MissingContributionMetadataError(receipt.receiptNumber, contribution.id);
+    const unresolved = contributions.find((c) => c.periodId === null);
+    if (unresolved) {
+      throw new MissingContributionMetadataError(receipt.receiptNumber, unresolved.id);
     }
+    const conflicts = combinationConflicts(contributions);
+    if (conflicts.length > 0) {
+      throw new InconsistentCombinedReceiptError(receipt.id, receipt.receiptNumber, conflicts);
+    }
+    const printed = receiptPrintedFields(contributions);
+    const contribution = printed.primary;
 
     return {
       receiptId: receipt.id,
@@ -207,12 +208,12 @@ export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScop
         : null,
       periodId: receipt.periodId,
       issueDate: receipt.issueDate,
-      amountCents: allocation.amountCents,
-      acceptedAt: contribution.acceptedAt,
-      goodsServices: contribution.goodsServices,
+      amountCents: receipt.allocations.reduce((sum, a) => sum + a.amountCents, 0),
+      acceptedAt: printed.acceptedThrough,
+      goodsServices: printed.goodsServices,
       receivedBy: contribution.receivedBy,
-      eoContributorId: contribution.eoContributorId,
-      processedDate: contribution.processedDate,
+      eoContributorId: printed.eoContributorId,
+      contributionDates: contributions.map((c) => ({ acceptedAt: c.acceptedAt, processedDate: c.processedDate })),
       contactId: receipt.contact.id,
       contributorLastName: receipt.contact.lastName ?? receipt.contact.name,
       contributorFirstName: receipt.contact.firstName ?? '',
@@ -272,15 +273,17 @@ async function runReportExportGate(
   );
 
   return runRepGate(
-    rows.map((r) => ({
-      receiptId: r.receiptId,
-      receiptNumber: r.receiptNumber,
-      entityKind: r.entityKind,
-      ridingNumber: r.ridingNumber,
-      periodId: r.periodId,
-      acceptedAt: r.acceptedAt,
-      processedDate: r.processedDate,
-    })),
+    rows.flatMap((r) =>
+      r.contributionDates.map((dates) => ({
+        receiptId: r.receiptId,
+        receiptNumber: r.receiptNumber,
+        entityKind: r.entityKind,
+        ridingNumber: r.ridingNumber,
+        periodId: r.periodId,
+        acceptedAt: dates.acceptedAt,
+        processedDate: dates.processedDate,
+      })),
+    ),
     { periods, ridings },
   );
 }

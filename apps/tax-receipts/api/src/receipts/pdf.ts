@@ -21,7 +21,11 @@ import type { ReceiptLayout } from '../generated/prisma/index.js';
 export interface ReceiptPdfData {
   receiptNumber: string;
   issueDate: Date;
+  /** the acceptance date, or the first one on a combined receipt */
   acceptedAt: Date;
+  /** the last acceptance date on a combined receipt (`combined.ts`); a
+   *  later day than `acceptedAt` prints as a range */
+  acceptedThrough?: Date | null;
   eligibleAmountCents: number;
   isGoodsServices: boolean;
   politicalEntityLabel: string;
@@ -63,6 +67,14 @@ function formatIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** "2026-03-01", or "2026-03-01 to 2026-05-02" for a combined receipt whose
+ *  contributions were accepted on different days. */
+function formatReceivedOn(data: ReceiptPdfData): string {
+  const from = formatIsoDate(data.acceptedAt);
+  const through = data.acceptedThrough ? formatIsoDate(data.acceptedThrough) : from;
+  return through === from ? from : `${from} to ${through}`;
+}
+
 function formatDollars(cents: number): string {
   return (cents / 100).toFixed(2);
 }
@@ -70,7 +82,7 @@ function formatDollars(cents: number): string {
 function drawRow(position: number, page: PDFPage, font: PDFFont, data: ReceiptPdfData, width: number, height: number): void {
   page.drawText(
     `Issue Date: ${formatIsoDate(data.issueDate)}\n` +
-      `Received on: ${formatIsoDate(data.acceptedAt)}\n` +
+      `Received on: ${formatReceivedOn(data)}\n` +
       `Eligible Amount: $${formatDollars(data.eligibleAmountCents)}\n` +
       `Contribution Type: ${data.isGoodsServices ? 'Goods and Services' : 'Monetary'}\n` +
       `Received By: ${data.politicalEntityLabel}`,
@@ -127,7 +139,7 @@ function drawRowWithContributorType(
 ): void {
   page.drawText(
     `Issue Date: ${formatIsoDate(data.issueDate)}\n` +
-      `Received on: ${formatIsoDate(data.acceptedAt)}\n` +
+      `Received on: ${formatReceivedOn(data)}\n` +
       `Eligible Amount: $${formatDollars(data.eligibleAmountCents)}\n` +
       `Contributor Type: ${CONTRIBUTOR_TYPE_LABEL}\n` +
       `Contribution Type: ${data.isGoodsServices ? 'Goods and Services' : 'Monetary'}\n` +

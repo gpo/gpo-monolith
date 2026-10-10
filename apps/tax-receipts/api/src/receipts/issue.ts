@@ -10,19 +10,22 @@ import { addressFrom } from '../contacts/address.js';
 import { withChangeLog } from '../changelog/write.js';
 import { receiptEntityLabel } from '../leadership/contestants.js';
 import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
-import type { PrismaClient, Receipt, ReceiptDelivery } from '../generated/prisma/index.js';
+import type { Contact, Contribution, PrismaClient, Receipt, ReceiptDelivery } from '../generated/prisma/index.js';
 import { renderReceiptPdf } from './pdf.js';
+import { combinationConflicts, receiptPrintedFields } from './combined.js';
 import { getReceiptSettings } from './settings.js';
 
 /**
  * Individual receipt issuance (ticket 3.1, the first slice of Phase 3).
  * One contribution -> one receipt, covering some or all of what's still
  * eligible on it (invariant 1, checked via `remainingEligibleCents`).
- * Consolidating several contributions onto one receipt is a real case the
- * schema supports (`ReceiptAllocation` is many-to-many) but is deliberately
- * out of scope here — it raises questions (which accepted date prints? whose
- * non-deductible amount governs?) that belong with the correction/
- * consolidation workflow, not this first pass.
+ *
+ * `issueCombinedReceipt` is the other shape (EO evaluation rows 43 and 46):
+ * several of one donor's contributions on a single new receipt, one
+ * `ReceiptAllocation` each, each for its full remaining eligible amount.
+ * What such a receipt prints, and which contributions may share one, is
+ * `combined.ts`'s call. Both shapes share `issueForLines`, so the sequence,
+ * snapshot, change-log, and PDF steps cannot drift apart.
  *
  * Sequencing: the counter increment and the deferred change-log/invariant-3
  * triggers (ticket 0.3) are the actual guarantee; this function just has to
@@ -76,6 +79,16 @@ export class MissingAddressError extends Error {
   }
 }
 
+/** The contributions disagree on something a receipt prints or reports
+ *  once, so they cannot share one (`combined.ts`). */
+export class CombinedReceiptConflictError extends Error {
+  readonly statusCode = 400;
+  constructor(readonly conflicts: readonly string[]) {
+    super(`these contributions cannot share one receipt: they differ in ${conflicts.join(', ')}`);
+    this.name = 'CombinedReceiptConflictError';
+  }
+}
+
 export interface IssueReceiptDeps {
   prisma: PrismaClient;
   storageDir: string;
@@ -103,6 +116,38 @@ export interface IssuedReceipt {
   pdfArtifactId: string;
 }
 
+type ContributionForIssuance = Contribution & {
+  contact: Contact;
+  allocations: { receiptId: string; contributionId: string; amountCents: number; receipt: { status: Receipt['status'] } }[];
+};
+
+const ISSUANCE_INCLUDE = { contact: true, allocations: { include: { receipt: true } } } as const;
+
+function remainingFor(contribution: ContributionForIssuance): number {
+  const allocationRows: AllocationRow[] = contribution.allocations.map((a) => ({
+    receiptId: a.receiptId,
+    contributionId: a.contributionId,
+    amountCents: a.amountCents,
+    receiptStatus: a.receipt.status,
+  }));
+  return remainingEligibleCents(
+    {
+      id: contribution.id,
+      amountCents: contribution.amountCents,
+      nonDeductibleCents: contribution.nonDeductibleCents,
+    },
+    allocationRows,
+  );
+}
+
+function assertHasMetadata(contribution: Contribution): void {
+  if (contribution.periodId === null) {
+    throw new ReceiptIssuanceValidationError(
+      `contribution ${contribution.id} has no metadata yet; intake derivation has not resolved this row`,
+    );
+  }
+}
+
 export async function issueReceipt(
   deps: IssueReceiptDeps,
   input: IssueReceiptInput,
@@ -112,33 +157,12 @@ export async function issueReceipt(
 
   const contribution = await prisma.contribution.findUnique({
     where: { id: input.contributionId },
-    include: {
-      contact: true,
-      allocations: { include: { receipt: true } },
-    },
+    include: ISSUANCE_INCLUDE,
   });
   if (!contribution) throw new ContributionNotFoundError(input.contributionId);
-  if (contribution.periodId === null) {
-    throw new ReceiptIssuanceValidationError(
-      `contribution ${input.contributionId} has no metadata yet; intake derivation has not resolved this row`,
-    );
-  }
-  const periodId = contribution.periodId;
+  assertHasMetadata(contribution);
 
-  const allocationRows: AllocationRow[] = contribution.allocations.map((a) => ({
-    receiptId: a.receiptId,
-    contributionId: a.contributionId,
-    amountCents: a.amountCents,
-    receiptStatus: a.receipt.status,
-  }));
-  const remaining = remainingEligibleCents(
-    {
-      id: contribution.id,
-      amountCents: contribution.amountCents,
-      nonDeductibleCents: contribution.nonDeductibleCents,
-    },
-    allocationRows,
-  );
+  const remaining = remainingFor(contribution);
   const amountCents = input.amountCents ?? remaining;
   if (!Number.isInteger(amountCents) || amountCents <= 0) {
     throw new ReceiptIssuanceValidationError('amountCents must be a positive integer number of cents');
@@ -147,18 +171,82 @@ export async function issueReceipt(
     throw new AllocationOverageError(remaining, amountCents);
   }
 
-  const rawAddress = addressFrom(contribution.contact.addresses);
+  return issueForLines(deps, [{ contribution, amountCents }], input);
+}
+
+export interface IssueCombinedReceiptInput {
+  /** one donor's contributions, all agreeing on what a receipt prints once
+   *  (`combined.ts`); each is receipted for its full remaining amount */
+  contributionIds: string[];
+  actorUserId: string;
+  /** mandatory (invariant 5). */
+  reason: string;
+  delivery?: ReceiptDelivery;
+  politicalEntityLabel: string;
+}
+
+/** One new receipt for several contributions (EO evaluation rows 43, 46). */
+export async function issueCombinedReceipt(
+  deps: IssueReceiptDeps,
+  input: IssueCombinedReceiptInput,
+): Promise<IssuedReceipt> {
+  const { prisma } = deps;
+  await assertIssuanceEnabled(prisma);
+
+  const ids = [...new Set(input.contributionIds)];
+  if (ids.length === 0) {
+    throw new ReceiptIssuanceValidationError('a combined receipt needs at least one contribution');
+  }
+  const contributions = await prisma.contribution.findMany({
+    where: { id: { in: ids } },
+    include: ISSUANCE_INCLUDE,
+  });
+  const missing = ids.find((id) => !contributions.some((c) => c.id === id));
+  if (missing) throw new ContributionNotFoundError(missing);
+  contributions.forEach(assertHasMetadata);
+  const inactive = contributions.find((c) => c.status !== 'ACTIVE');
+  if (inactive) {
+    throw new ReceiptIssuanceValidationError(`contribution ${inactive.id} is ${inactive.status}, not active`);
+  }
+  const conflicts = combinationConflicts(contributions);
+  if (conflicts.length > 0) throw new CombinedReceiptConflictError(conflicts);
+
+  const lines = contributions
+    .sort((a, b) => a.acceptedAt.getTime() - b.acceptedAt.getTime() || a.id.localeCompare(b.id))
+    .map((contribution) => ({ contribution, amountCents: remainingFor(contribution) }));
+  const spent = lines.find((l) => l.amountCents <= 0);
+  if (spent) {
+    throw new ReceiptIssuanceValidationError(
+      `contribution ${spent.contribution.id} has nothing left to receipt; leave it out of the combined receipt`,
+    );
+  }
+
+  return issueForLines(deps, lines, input);
+}
+
+/** The shared issuance core: one receipt, one allocation per line. Callers
+ *  have already checked invariant 1 and that the lines may share a receipt. */
+async function issueForLines(
+  deps: IssueReceiptDeps,
+  lines: { contribution: ContributionForIssuance; amountCents: number }[],
+  input: { actorUserId: string; reason: string; delivery?: ReceiptDelivery; politicalEntityLabel: string },
+): Promise<IssuedReceipt> {
+  const { prisma } = deps;
+  const contributions = lines.map((l) => l.contribution);
+  const printed = receiptPrintedFields(contributions);
+  const primary = printed.primary;
+  const contact = primary.contact;
+  const periodId = primary.periodId!;
+  const amountCents = lines.reduce((sum, l) => sum + l.amountCents, 0);
+
+  const rawAddress = addressFrom(contact.addresses);
   const missingAddressFields = [
     !rawAddress?.street && 'a street',
     !rawAddress?.city && 'a city',
     !rawAddress?.postalcode && 'a postal code',
   ].filter((f): f is string => f !== false);
   if (missingAddressFields.length > 0) {
-    throw new MissingAddressError(
-      contribution.contact.name,
-      String(contribution.contact.qomonContactId),
-      missingAddressFields,
-    );
+    throw new MissingAddressError(contact.name, String(contact.qomonContactId), missingAddressFields);
   }
   const address = rawAddress!;
   const addressLine1 = [address.housenumber, address.street].filter(Boolean).join(' ');
@@ -175,7 +263,7 @@ export async function issueReceipt(
     async (ctx) => {
       const snapshot = await ctx.tx.addressSnapshot.create({
         data: {
-          contactId: contribution.contact.id,
+          contactId: contact.id,
           periodId: periodId,
           line1: addressLine1 || 'unknown',
           city: address.city!,
@@ -205,29 +293,34 @@ export async function issueReceipt(
         data: {
           receiptNumber,
           numberSource: 'SEQUENCE',
-          entityKind: contribution.entityKind,
-          ridingNumber: contribution.ridingNumber,
+          entityKind: primary.entityKind,
+          ridingNumber: primary.ridingNumber,
           periodId: periodId,
           issueDate: new Date(),
-          contactId: contribution.contact.id,
-          contactNameSnapshot: contribution.contact.name,
+          contactId: contact.id,
+          contactNameSnapshot: contact.name,
           addressSnapshotId: snapshot.id,
           delivery: input.delivery ?? 'MAIL',
         },
       });
-      const allocation = await ctx.tx.receiptAllocation.create({
-        data: { receiptId: receipt.id, contributionId: contribution.id, amountCents },
-      });
       await ctx.log({
         subjectType: 'Receipt',
         subjectId: receipt.id,
-        after: { receiptNumber, amountCents, contributionId: contribution.id },
+        after:
+          lines.length === 1
+            ? { receiptNumber, amountCents, contributionId: primary.id }
+            : { receiptNumber, amountCents, contributionIds: contributions.map((c) => c.id) },
       });
-      await ctx.log({
-        subjectType: 'ReceiptAllocation',
-        subjectId: allocation.id,
-        after: allocation,
-      });
+      for (const line of lines) {
+        const allocation = await ctx.tx.receiptAllocation.create({
+          data: { receiptId: receipt.id, contributionId: line.contribution.id, amountCents: line.amountCents },
+        });
+        await ctx.log({
+          subjectType: 'ReceiptAllocation',
+          subjectId: allocation.id,
+          after: allocation,
+        });
+      }
       return receipt;
     },
   );
@@ -235,12 +328,13 @@ export async function issueReceipt(
   const pdfBytes = await renderReceiptPdf({
     receiptNumber: created.receiptNumber,
     issueDate: created.issueDate,
-    acceptedAt: contribution.acceptedAt,
+    acceptedAt: printed.acceptedFrom,
+    acceptedThrough: printed.acceptedThrough,
     eligibleAmountCents: amountCents,
-    isGoodsServices: contribution.goodsServices,
-    politicalEntityLabel: await receiptEntityLabel(prisma, contribution, input.politicalEntityLabel),
-    eoContributorId: contribution.eoContributorId,
-    contributorName: contribution.contact.name,
+    isGoodsServices: printed.goodsServices,
+    politicalEntityLabel: await receiptEntityLabel(prisma, primary, input.politicalEntityLabel),
+    eoContributorId: printed.eoContributorId,
+    contributorName: contact.name,
     addressLine1,
     addressLine2: null,
     city: address.city!,

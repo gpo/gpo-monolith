@@ -129,6 +129,23 @@ describe('renderReceiptPdf text extraction (ticket 3.4, F4)', () => {
     expect(await extractText(await renderReceiptPdf(BASE_DATA))).not.toContain('cancels and replaces');
   });
 
+  it('prints a combined receipt\'s acceptance dates as a range on every copy, in both layouts', async () => {
+    for (const layout of ['LEGACY', 'CONTRIBUTOR_TYPE'] as const) {
+      const text = await extractText(
+        await renderReceiptPdf({ ...BASE_DATA, acceptedThrough: new Date('2026-05-02T00:00:00Z'), layout }),
+      );
+      expect(text.split('Received on: 2026-03-01 to 2026-05-02').length - 1).toBe(3);
+    }
+  });
+
+  it('prints a single date when the range starts and ends on the same day', async () => {
+    const text = await extractText(
+      await renderReceiptPdf({ ...BASE_DATA, acceptedThrough: new Date('2026-03-01T18:00:00Z') }),
+    );
+    expect(text).toContain('Received on: 2026-03-01');
+    expect(text).not.toContain(' to 2026');
+  });
+
   it('stamps every copy COPY for a lost-receipt reprint', async () => {
     const text = await extractText(await renderReceiptPdf({ ...BASE_DATA, isCopy: true }));
     expect(text.split('COPY').length - 1).toBe(3);

@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
-import { issueReceipt } from '../receipts/issue.js';
+import { cancelReceipt } from '../corrections/cancel.js';
+import { issueCombinedReceipt, issueReceipt } from '../receipts/issue.js';
 import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
@@ -235,8 +236,13 @@ describe('correction routes (corrections.md actions 4, 5, 6, 8, 9, 12)', () => {
         });
         await ctx.log({ subjectType: 'Contribution', subjectId: second.id, after });
       });
-      const { allocateToReceipt } = await import('../receipts/allocate.js');
-      await allocateToReceipt({ prisma }, { receiptId, contributionId: second.id, actorUserId: baseline.cfoUserId, reason: 'consolidate' });
+      // one receipt for both: cancel the single one and issue them combined
+      await cancelReceipt({ prisma, storageDir }, { receiptId, actorUserId: baseline.cfoUserId, reason: 'combine' });
+      const combined = await issueCombinedReceipt(
+        { prisma, storageDir },
+        { contributionIds: [contributionId, second.id], actorUserId: baseline.cfoUserId, reason: 'combine', politicalEntityLabel: 'Green Party of Ontario' },
+      );
+      receiptId = combined.id;
       return second.id;
     }
 

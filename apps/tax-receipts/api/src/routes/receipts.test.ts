@@ -168,12 +168,13 @@ describe('receipt routes (ticket 3.1)', () => {
   });
 });
 
-describe('receipt allocation route (ticket 3.2)', () => {
+describe('combined receipt route (EO evaluation rows 43, 46)', () => {
   let app: FastifyInstance;
   let baseline: Awaited<ReturnType<typeof seedBaseline>>;
   let storageDir: string;
-  let receiptId: string;
+  let firstContributionId: string;
   let secondContributionId: string;
+  let goodsContributionId: string;
 
   beforeEach(async () => {
     await resetDb(prisma);
@@ -207,10 +208,16 @@ describe('receipt allocation route (ticket 3.2)', () => {
     });
     const firstContribution = await createTestContribution(prisma, { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') });
     const secondContribution = await createTestContribution(prisma, { qomonTransactionId: 2n, contactId: contact.id, amountCents: 3_000, acceptedAt: new Date('2026-03-05T12:00:00Z') });
+    const goodsContribution = await createTestContribution(prisma, { qomonTransactionId: 3n, contactId: contact.id, amountCents: 2_000, acceptedAt: new Date('2026-03-07T12:00:00Z') });
+    firstContributionId = firstContribution.id;
     secondContributionId = secondContribution.id;
-    for (const contributionId of [firstContribution.id, secondContribution.id]) {
+    goodsContributionId = goodsContribution.id;
+    for (const contributionId of [firstContribution.id, secondContribution.id, goodsContribution.id]) {
       await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
-        const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' } });
+        const after = await ctx.tx.contribution.update({
+          where: { id: contributionId },
+          data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO', goodsServices: contributionId === goodsContribution.id },
+        });
         await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       });
     }
@@ -219,14 +226,6 @@ describe('receipt allocation route (ticket 3.2)', () => {
     app = await buildApp({ prisma, sessionSecret: SECRET, artifactStorageDir: storageDir });
     await app.ready();
 
-    const cookie = await login('cfo@gpo.test', 'cfo-pass-phrase');
-    const issued = await app.inject({
-      method: 'POST',
-      url: `/contributions/${firstContribution.id}/receipts`,
-      cookies: { [cookie.name]: cookie.value },
-      payload: { reason: 'first receipt', politicalEntityLabel: 'Green Party of Ontario' },
-    });
-    receiptId = issued.json().id;
   });
 
   afterEach(async () => {
@@ -242,52 +241,85 @@ describe('receipt allocation route (ticket 3.2)', () => {
   it('requires authentication', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/receipts/${receiptId}/allocations`,
-      payload: { contributionId: secondContributionId, reason: 'no session' },
+      url: '/receipts',
+      payload: { contributionIds: [firstContributionId, secondContributionId], reason: 'no session', politicalEntityLabel: 'GPO' },
     });
     expect(res.statusCode).toBe(401);
   });
 
-  it('403s a role with no correct ability on Receipt', async () => {
-    const cookie = await login('bookkeeper@gpo.test', 'bookkeeper-pass-phrase');
+  it('403s a role that may correct but not issue', async () => {
+    const cookie = await login('admin@gpo.test', 'admin-pass-phrase');
     const res = await app.inject({
       method: 'POST',
-      url: `/receipts/${receiptId}/allocations`,
+      url: '/receipts',
       cookies: { [cookie.name]: cookie.value },
-      payload: { contributionId: secondContributionId, reason: 'not allowed' },
+      payload: { contributionIds: [firstContributionId, secondContributionId], reason: 'not allowed', politicalEntityLabel: 'GPO' },
     });
     expect(res.statusCode).toBe(403);
   });
 
-  it('lets an administrator (who may correct but not issue) attach a second contribution', async () => {
-    const cookie = await login('admin@gpo.test', 'admin-pass-phrase');
+  it('issues one receipt carrying both contributions, one allocation each', async () => {
+    const cookie = await login('cfo@gpo.test', 'cfo-pass-phrase');
     const res = await app.inject({
       method: 'POST',
-      url: `/receipts/${receiptId}/allocations`,
+      url: '/receipts',
       cookies: { [cookie.name]: cookie.value },
-      payload: { contributionId: secondContributionId, reason: 'consolidate' },
+      payload: {
+        contributionIds: [secondContributionId, firstContributionId],
+        reason: 'combine for the year',
+        politicalEntityLabel: 'Green Party of Ontario',
+      },
     });
     expect(res.statusCode).toBe(201);
-    const body = res.json();
-    expect(body.amountCents).toBe(3_000);
-    expect(body.receiptTotalCents).toBe(8_000);
+    expect(res.json().amountCents).toBe(8_000);
+
+    const allocations = await prisma.receiptAllocation.findMany({ where: { receiptId: res.json().id }, orderBy: { amountCents: 'desc' } });
+    expect(allocations.map((a) => [a.contributionId, a.amountCents])).toEqual([
+      [firstContributionId, 5_000],
+      [secondContributionId, 3_000],
+    ]);
   });
 
-  it('409s a duplicate allocation of the same contribution', async () => {
+  it('400s a combination that mixes monetary and goods and services', async () => {
+    const cookie = await login('cfo@gpo.test', 'cfo-pass-phrase');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/receipts',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { contributionIds: [firstContributionId, goodsContributionId], reason: 'mixed', politicalEntityLabel: 'GPO' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('contribution type');
+    expect(await prisma.receipt.count()).toBe(0);
+  });
+
+  it('400s fewer than two contributions (one is an ordinary receipt)', async () => {
+    const cookie = await login('cfo@gpo.test', 'cfo-pass-phrase');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/receipts',
+      cookies: { [cookie.name]: cookie.value },
+      payload: { contributionIds: [firstContributionId], reason: 'just one', politicalEntityLabel: 'GPO' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('400s a contribution already fully receipted', async () => {
     const cookie = await login('cfo@gpo.test', 'cfo-pass-phrase');
     await app.inject({
       method: 'POST',
-      url: `/receipts/${receiptId}/allocations`,
+      url: `/contributions/${firstContributionId}/receipts`,
       cookies: { [cookie.name]: cookie.value },
-      payload: { contributionId: secondContributionId, reason: 'first attach' },
+      payload: { reason: 'single first', politicalEntityLabel: 'GPO' },
     });
     const res = await app.inject({
       method: 'POST',
-      url: `/receipts/${receiptId}/allocations`,
+      url: '/receipts',
       cookies: { [cookie.name]: cookie.value },
-      payload: { contributionId: secondContributionId, reason: 'duplicate attach' },
+      payload: { contributionIds: [firstContributionId, secondContributionId], reason: 'too late', politicalEntityLabel: 'GPO' },
     });
-    expect(res.statusCode).toBe(409);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('nothing left to receipt');
   });
 });
 

@@ -4,8 +4,8 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { Alert, Badge, Button, Card, Group, Loader, Stack, Table, Text, TextInput } from '@mantine/core';
 import { api, type ContactSource, type FormattedAddress } from '../api.js';
 import { ContactFormModal, ownershipNote } from '../components/contact-form-modal.js';
+import { ContributorContributions } from '../components/contributor-contributions.js';
 import { PageHeader } from '../components/PageHeader.js';
-import { money } from './contribution-detail.js';
 
 /**
  * Contributors (D13; EO evaluation rows 20 to 23): find a contributor, add
@@ -180,46 +180,11 @@ export function ContributorDetailPage({ id }: { id: string }) {
         </Stack>
       </Card>
 
-      <Card withBorder>
-        <Stack gap="xs">
-          <Text fw={600}>Contributions</Text>
-          {c.contributions.length === 0 ? (
-            <Text size="sm" c="dimmed">
-              None yet.
-            </Text>
-          ) : (
-            <Table>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Accepted</Table.Th>
-                  <Table.Th>Amount</Table.Th>
-                  <Table.Th>Entity</Table.Th>
-                  <Table.Th>Period</Table.Th>
-                  <Table.Th>Status</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {c.contributions.map((k) => (
-                  <Table.Tr key={k.id}>
-                    <Table.Td>
-                      <Link to="/contributions/$id" params={{ id: k.id }}>
-                        {new Date(k.acceptedAt).toLocaleDateString()}
-                      </Link>
-                    </Table.Td>
-                    <Table.Td>{money(k.amountCents)}</Table.Td>
-                    <Table.Td>
-                      {k.entityKind ?? '—'}
-                      {k.ridingNumber !== null ? ` (riding ${k.ridingNumber})` : ''}
-                    </Table.Td>
-                    <Table.Td>{k.periodId ?? '—'}</Table.Td>
-                    <Table.Td>{k.status}</Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          )}
-        </Stack>
-      </Card>
+      <ContributorContributions
+        contactId={c.id}
+        contributions={c.contributions}
+        canIssue={(me.data?.can.issueReceipts ?? false) && !c.mergedIntoId}
+      />
 
       <Card withBorder>
         <Stack gap="xs">
