@@ -77,6 +77,13 @@ environment variables, rollout order, and the single-instance constraint
 the generated Prisma client into `dist/`, so `node dist/server.js` runs on
 its own.
 
+Note: this setup makes use of [multi platform builds](https://docs.docker.com/build/building/multi-platform/)
+which require some [specific prerequisites](https://docs.docker.com/build/building/multi-platform/#prerequisites)
+to leverage. Namely: Docker Engine > v29.0 and ensure that the option
+"Use containerd for pulling and storing images" is enabled under Settings->General.
+
+You can then build the images by running `docker buildx bake`.
+
 ## Data model and invariants
 
 The Prisma schema (`apps/tax-receipts/api/prisma/schema.prisma`) is the 20
