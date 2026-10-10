@@ -67,7 +67,7 @@ Required:
 |---|---|
 | `DATABASE_URL` | `postgresql://USER:PASSWORD@HOST:5432/DB?schema=public` (URL-encode special characters in the password). Also needed by `api-tools`. |
 | `SESSION_SECRET` | At least 32 random characters (`openssl rand -base64 48`). Secret. |
-| `PUBLIC_WEB_URL` | The public HTTPS origin, e.g. `https://tax-receipts-staging.example.org`. Used in links in donor email. |
+| `PUBLIC_WEB_URL` | The public HTTPS origin, e.g. `https://tax-receipts-staging.example.org`. Used in links in donor email. The api refuses to start without it when `NODE_ENV=production`. |
 | `NODE_ENV` | `production` |
 | `TRUST_PROXY` | `true` |
 
@@ -79,14 +79,15 @@ Optional:
 | Name | Default | Notes |
 |---|---|---|
 | `EMAIL_LIVE_SENDING_ALLOWED` | `false` | **Keep `false` in staging.** Every send is then simulated end to end. Production only. |
-| `EMAIL_PROVIDER` | `dev` | `resend` needs `RESEND_API_KEY`. |
+| `EMAIL_PROVIDER` | `dev` | `resend` needs `RESEND_API_KEY` and `EMAIL_FROM`. |
 | `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` | unset | Secrets. Webhook URL: `https://<host>/api/webhooks/email`. |
-| `EMAIL_FROM`, `EMAIL_REPLY_TO` | placeholder | Sender on a domain verified in Resend. |
+| `EMAIL_FROM`, `EMAIL_REPLY_TO` | placeholder, unset | Sender on a domain verified in Resend. `EMAIL_FROM` is required with `EMAIL_PROVIDER=resend`. |
 | `QOMON_API_KEY`, `QOMON_API_BASE` | unset | Party-level Qomon space. Secret. Unset disables the mirror sweep, and the tool then owns its contributors (D13): ones added in the tool stay in the tool, and Qomon-linked ones cannot be edited. Set, a contributor added or edited in the tool is written to Qomon first. |
 | `EMAIL_RATE_PER_SECOND`, `EMAIL_DAILY_LIMIT`, `EMAIL_DISPATCH_INTERVAL_MS` | 5, none, 15000 | Send throttling. |
 
-The api validates its environment at start and exits with a list of what is
-wrong.
+The api validates its environment at start and exits non-zero with a list of
+every missing or invalid variable, so a misconfigured container fails its
+first start instead of serving traffic.
 
 ## First run: users
 
