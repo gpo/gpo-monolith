@@ -5,9 +5,8 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { cancelReceipt, previewReceiptCorrection, reissueReceipt } from '../corrections/cancel.js';
-import { allocateToReceipt } from '../receipts/allocate.js';
 import { recordForeignReceipt } from '../receipts/foreign.js';
-import { issueReceipt } from '../receipts/issue.js';
+import { issueCombinedReceipt, issueReceipt } from '../receipts/issue.js';
 import type { SessionUser } from '../plugins/auth.js';
 
 /**
@@ -16,13 +15,13 @@ import type { SessionUser } from '../plugins/auth.js';
  * everyone else, including sysadmin, gets 403 here on purpose (sysadmin's
  * `manage: all` is for config, not for acting as the CFO).
  *
- * The allocations route (ticket 3.2) is gated on `correct` rather than
- * `issue`: attaching another contribution to an already-issued receipt is a
- * correction-adjacent action on existing money, not the act of originating a
- * new receipt — the same `correct` action `abilities.ts` already reserves
- * for administrators and the party CFO alike. `cancel`/`reissue` (ticket
- * 3.10, corrections.md actions 1/2) are gated the same way for the same
- * reason.
+ * `POST /receipts` issues one combined receipt for several of a donor's
+ * contributions (EO evaluation rows 43 and 46) and is gated on `issue` like
+ * any other new receipt. A contribution is never added to a receipt already
+ * issued: its PDF would no longer match it, so the way to grow a receipt is
+ * to cancel it and issue a combined one. `cancel`/`reissue` (ticket 3.10,
+ * corrections.md actions 1/2) are gated on `correct`: they act on existing
+ * money rather than originating a new receipt.
  */
 export async function receiptRoutes(
   app: FastifyInstance,
@@ -104,34 +103,32 @@ export async function receiptRoutes(
     },
   });
 
-  const AllocateBody = z.object({
-    contributionId: z.string(),
+  const IssueCombinedReceiptBody = z.object({
+    contributionIds: z.array(z.string()).min(2),
     reason: z.string().min(3),
-    amountCents: z.number().int().positive().optional(),
+    delivery: ReceiptDelivery.optional(),
+    politicalEntityLabel: z.string().min(1),
   });
 
   r.route({
     method: 'POST',
-    url: '/receipts/:id/allocations',
-    schema: {
-      params: z.object({ id: z.string() }),
-      body: AllocateBody,
-    },
+    url: '/receipts',
+    schema: { body: IssueCombinedReceiptBody },
     handler: async (request, reply) => {
       const user = request.user as SessionUser | undefined;
       if (!user) return reply.code(401).send({ error: 'authentication required' });
-      if (!request.ability.can('correct', 'Receipt')) {
-        return reply.code(403).send({ error: 'not permitted to correct receipts' });
+      if (!request.ability.can('issue', 'Receipt')) {
+        return reply.code(403).send({ error: 'not permitted to issue receipts' });
       }
 
-      const result = await allocateToReceipt(
-        { prisma: app.prisma },
+      const result = await issueCombinedReceipt(
+        { prisma: app.prisma, storageDir: opts.storageDir },
         {
-          receiptId: request.params.id,
-          contributionId: request.body.contributionId,
+          contributionIds: request.body.contributionIds,
           actorUserId: user.id,
           reason: request.body.reason,
-          amountCents: request.body.amountCents,
+          delivery: request.body.delivery,
+          politicalEntityLabel: request.body.politicalEntityLabel,
         },
       );
       return reply.code(201).send(result);

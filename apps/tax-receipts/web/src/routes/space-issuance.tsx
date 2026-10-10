@@ -12,6 +12,7 @@ import {
   SimpleGrid,
   Stack,
   Stepper,
+  Switch,
   Table,
   Text,
   Textarea,
@@ -63,9 +64,12 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
   const { periodId, entityKind, ridingNumber } = params;
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+  // One combined receipt per donor (EO evaluation rows 43, 46): opt-in, and
+  // the preview shows exactly what the toggle would issue.
+  const [combinePerDonor, setCombinePerDonor] = useState(false);
   const preview = useQuery({
-    queryKey: ['space-issuance-preview', periodId, entityKind, ridingNumber],
-    queryFn: () => api.previewSpaceIssuance(periodId, entityKind, ridingNumber),
+    queryKey: ['space-issuance-preview', periodId, entityKind, ridingNumber, combinePerDonor],
+    queryFn: () => api.previewSpaceIssuance(periodId, entityKind, ridingNumber, combinePerDonor),
   });
 
   const delivery = useQuery({
@@ -111,6 +115,7 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
         reason,
         politicalEntityLabel: effectiveLabel,
         delivery: deliveryOverride || undefined,
+        combinePerDonor,
       }),
     onSuccess: (result) => {
       setGenError(null);
@@ -201,6 +206,16 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
                 </Card>
               ) : (
                 <>
+                  <Switch
+                    label="One receipt per donor"
+                    description={
+                      "Combine each donor's contributions in this space onto a single receipt (for example, a " +
+                      'monthly donor gets one receipt for the period). Monetary and goods-and-services ' +
+                      'contributions stay on separate receipts.'
+                    }
+                    checked={combinePerDonor}
+                    onChange={(e) => setCombinePerDonor(e.currentTarget.checked)}
+                  />
                   <SimpleGrid cols={{ base: 2, sm: 4 }}>
                     <Card withBorder>
                       <Text size="xs" c="dimmed">
@@ -239,6 +254,7 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th>Donor</Table.Th>
+                        <Table.Th>Contributions</Table.Th>
                         <Table.Th>Amount</Table.Th>
                         <Table.Th>Delivery</Table.Th>
                       </Table.Tr>
@@ -253,6 +269,7 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
                               </Text>
                             </Link>
                           </Table.Td>
+                          <Table.Td>{l.contributionIds.length}</Table.Td>
                           <Table.Td>{money(l.amountCents)}</Table.Td>
                           <Table.Td>
                             <Badge color={l.delivery === 'EMAIL' ? 'blue' : 'gray'}>{l.delivery}</Badge>
@@ -435,6 +452,12 @@ function GenerateResults({ result }: { result: SpaceIssuanceResult }) {
                     {r.contributionId}
                   </Text>
                 </Link>
+                {r.contributionIds.length > 1 && (
+                  <Text span size="sm" c="dimmed">
+                    {' '}
+                    and {r.contributionIds.length - 1} more (one combined receipt)
+                  </Text>
+                )}
               </Table.Td>
               <Table.Td>
                 {r.ok ? (

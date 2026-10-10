@@ -38,7 +38,6 @@ gap still being there.
 
 | Gap | Meanwhile |
 |---|---|
-| The issuance wizard issues one receipt per contribution; it does not consolidate a donor's contributions onto one receipt. | |
 | Receipts issued outside the tool (EO stock, handwritten) can be recorded through the API only. | |
 | The received-by label is typed in at issuance rather than coming from a registry of entity names (except leadership contestants). | Type it consistently; it prints on every receipt in the run. |
 | The cover letter and email wording are typed in each time; there is no stored template. | Keep the agreed wording somewhere to paste from. |

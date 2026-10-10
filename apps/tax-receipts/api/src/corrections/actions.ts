@@ -1,7 +1,7 @@
 import { isRidingScoped } from '@gpo/tax-receipts-core';
 import type { EntityKind, PrismaClient, ReceiptDelivery } from '../generated/prisma/index.js';
 import { ContributionNotFoundError } from '../contributions/metadata-edit.js';
-import { ReceiptNotFoundError } from '../receipts/allocate.js';
+import { ReceiptNotFoundError } from '../receipts/errors.js';
 import {
   CorrectionValidationError,
   type ContributionChange,

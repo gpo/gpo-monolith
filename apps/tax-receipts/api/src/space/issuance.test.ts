@@ -173,6 +173,54 @@ describe('per-space issuance (ticket 3.12, first slice)', () => {
     expect(await prisma.receipt.count()).toBe(3);
   });
 
+  /** another contribution from an existing donor, in the space */
+  async function addContribution(contactId: string, amountCents: number, acceptedAt: string, overrides: Record<string, unknown> = {}) {
+    const contribution = await createTestContribution(prisma, {
+      qomonTransactionId: BigInt(nextTransactionId++),
+      contactId,
+      amountCents,
+      acceptedAt: new Date(acceptedAt),
+    });
+    await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
+      const after = await ctx.tx.contribution.update({
+        where: { id: contribution.id },
+        data: { periodId: SPACE.periodId, ridingNumber: SPACE.ridingNumber, entityKind: SPACE.entityKind, receivedBy: 'GPO', ...overrides },
+      });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
+    });
+    return contribution.id;
+  }
+
+  it('combines each donor\'s contributions onto one receipt when asked, keeping goods and services apart (rows 43, 46)', async () => {
+    const dana = await seedContribution('Dana Donor', 5_000); // 2026-03-01
+    const danaApril = await addContribution(dana.contactId, 2_000, '2026-04-01T12:00:00Z');
+    const danaGoods = await addContribution(dana.contactId, 3_000, '2026-04-15T12:00:00Z', { goodsServices: true });
+    const sam = await seedContribution('Sam Supporter', 1_000);
+
+    const separate = await previewSpaceIssuance(prisma, SPACE);
+    expect(separate.totals.receiptCount).toBe(4);
+
+    const preview = await previewSpaceIssuance(prisma, SPACE, { combinePerDonor: true });
+    expect(preview.totals).toMatchObject({ receiptCount: 3, amountCents: 11_000 });
+    const danaLine = preview.lines.find((l) => l.contributionIds.length === 2)!;
+    expect(danaLine.contributionIds).toEqual([dana.contributionId, danaApril]);
+    expect(danaLine.amountCents).toBe(7_000);
+
+    const result = await issueReceiptsForSpace(
+      { prisma, storageDir },
+      { ...SPACE, actorUserId: baseline.cfoUserId, reason: 'annual run', politicalEntityLabel: 'Green Party of Ontario', combinePerDonor: true },
+    );
+    expect(result).toMatchObject({ succeeded: 3, failed: 0 });
+
+    const combined = result.results.find((r) => r.contributionIds.length === 2)!;
+    const allocations = await prisma.receiptAllocation.findMany({ where: { receiptId: combined.receiptId } });
+    expect(allocations.map((a) => a.contributionId).sort()).toEqual([dana.contributionId, danaApril].sort());
+    expect(combined.amountCents).toBe(7_000);
+    for (const id of [danaGoods, sam.contributionId]) {
+      expect(await prisma.receiptAllocation.count({ where: { contributionId: id } })).toBe(1);
+    }
+  });
+
   it('keeps going past a per-row failure (missing address) and reports it', async () => {
     const good = await seedContribution('Dana Donor', 5_000);
     const noAddress = await fixtureContact(prisma, {

@@ -59,6 +59,9 @@ beforeEach(() => {
       if (u.endsWith('/contacts') && init?.method === 'POST') return jsonResponse({ ...ADA, id: 'ct9' }, 201);
       if (u.endsWith('/contacts/ct1') && init?.method === 'PATCH') return jsonResponse(ADA);
       if (/\/contacts\/ct\d$/.test(u)) return jsonResponse(detail);
+      if (u.endsWith('/receipts') && init?.method === 'POST') {
+        return jsonResponse({ id: 'r1', receiptNumber: 'GPO-00402600', amountCents: 7_000, pdfArtifactId: 'a1' }, 201);
+      }
       return jsonResponse({ data: [] });
     }),
   );
@@ -200,4 +203,48 @@ test('hides add and edit from a user without contact.manage', async () => {
   renderAt('/contributors');
   expect(await screen.findByText('Ada Lovelace')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Add a contributor' })).toBeNull();
+});
+
+test('issues one receipt for two contributions that may share it (EO rows 43, 46)', async () => {
+  const contribution = (id: string, acceptedAt: string, amountCents: number, goodsServices = false) => ({
+    id,
+    amountCents,
+    acceptedAt,
+    status: 'ACTIVE',
+    periodId: 67,
+    entityKind: 'PARTY',
+    ridingNumber: null,
+    goodsServices,
+    receivedBy: 'GPO',
+    leadershipContestantId: null,
+    remainingCents: amountCents,
+  });
+  detail = {
+    ...ADA,
+    contributions: [
+      contribution('k1', '2026-03-01T12:00:00.000Z', 5_000),
+      contribution('k2', '2026-04-01T12:00:00.000Z', 2_000),
+      contribution('k3', '2026-04-15T12:00:00.000Z', 3_000, true),
+    ],
+  };
+  renderAt('/contributors/ct1');
+
+  const boxes = await screen.findAllByRole('checkbox');
+  expect(boxes).toHaveLength(3);
+  fireEvent.click(boxes[0]!);
+  expect(boxes[2]).toBeDisabled(); // goods and services cannot share a monetary receipt
+  fireEvent.click(boxes[1]!);
+
+  expect(await screen.findByText(/One receipt for 2 contributions, totalling \$70\.00/)).toBeTruthy();
+  type(/^Reason/, 'donor asked for one receipt');
+  fireEvent.click(screen.getByRole('button', { name: 'Issue one receipt' }));
+
+  await waitFor(() => expect(calls.some((c) => c.url.endsWith('/receipts') && c.method === 'POST')).toBe(true));
+  const call = calls.find((c) => c.url.endsWith('/receipts') && c.method === 'POST')!;
+  expect(JSON.parse(call.body!)).toEqual({
+    contributionIds: ['k1', 'k2'],
+    reason: 'donor asked for one receipt',
+    politicalEntityLabel: 'Green Party of Ontario',
+  });
+  expect(await screen.findByText(/Issued GPO-00402600/)).toBeTruthy();
 });

@@ -1,4 +1,5 @@
 import { QomonError, QomonValidationError, type QomonApi } from '@gpo/qomon-client';
+import { remainingEligibleCents } from '@gpo/tax-receipts-core';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -176,11 +177,16 @@ export async function contactRoutes(app: FastifyInstance, opts: { qomon?: QomonA
           select: {
             id: true,
             amountCents: true,
+            nonDeductibleCents: true,
             acceptedAt: true,
             status: true,
             periodId: true,
             entityKind: true,
             ridingNumber: true,
+            goodsServices: true,
+            receivedBy: true,
+            leadershipContestantId: true,
+            allocations: { select: { receiptId: true, contributionId: true, amountCents: true, receipt: { select: { status: true } } } },
           },
         }),
         app.prisma.changeLogEntry.findMany({
@@ -193,7 +199,16 @@ export async function contactRoutes(app: FastifyInstance, opts: { qomon?: QomonA
       return reply.send({
         ...serializeContact(contact),
         editable: contact.qomonContactId === null || deps.qomon !== undefined,
-        contributions: contributions.map((c) => ({ ...c, acceptedAt: c.acceptedAt.toISOString() })),
+        contributions: contributions.map(({ allocations, nonDeductibleCents, ...c }) => ({
+          ...c,
+          acceptedAt: c.acceptedAt.toISOString(),
+          // what a new receipt could still cover (invariant 1): drives the
+          // "issue one receipt for these" selection (EO evaluation rows 43, 46)
+          remainingCents: remainingEligibleCents(
+            { id: c.id, amountCents: c.amountCents, nonDeductibleCents },
+            allocations.map((a) => ({ ...a, receiptStatus: a.receipt.status })),
+          ),
+        })),
         changeLog: changeLog.map((e) => ({
           id: e.id,
           actorUserId: e.actorUserId,

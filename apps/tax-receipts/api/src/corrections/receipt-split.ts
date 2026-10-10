@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ArtifactStoreDeps } from '../artifacts/store.js';
 import { withChangeLog } from '../changelog/write.js';
 import type { Contribution, PrismaClient, ReceiptDelivery } from '../generated/prisma/index.js';
-import { ReceiptNotFoundError, TerminalReceiptError } from '../receipts/allocate.js';
+import { ReceiptNotFoundError, TerminalReceiptError } from '../receipts/errors.js';
 import {
   RECEIPT_CORRECTION_INCLUDE,
   CorrectionBlockedError,

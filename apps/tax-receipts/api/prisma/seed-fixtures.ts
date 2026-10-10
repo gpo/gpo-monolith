@@ -1,7 +1,6 @@
 import { contributionYear, paymentMethodFromQomon } from '@gpo/tax-receipts-core';
 import { PrismaClient, type EntityKind, type Prisma, type ReceivedBy } from '../src/generated/prisma/index.js';
-import { allocateToReceipt } from '../src/receipts/allocate.js';
-import { issueReceipt } from '../src/receipts/issue.js';
+import { issueCombinedReceipt, issueReceipt } from '../src/receipts/issue.js';
 import { withChangeLog } from '../src/changelog/write.js';
 import { reissueReceipt } from '../src/corrections/cancel.js';
 import { reprintReceipt } from '../src/corrections/reprint.js';
@@ -79,9 +78,9 @@ import { resolveWorkItem } from '../src/work-items/resolve.js';
  * | Period 9502 | Fixture-only annual period ("Space A"), dated 2028 so it can never collide with a real period's date range or with real Qomon-mirrored data landing in the real 2026 Annual party space. |
  * | Contacts/contributions 800001-800022 | Group 1: one contribution per validation rule (ticket 2.1), plus a three-deposit RTD row-inclusion case reused by Group 2 below, and the B4 and A6 duplicate pairs (EO evaluation rows 34-37). |
  * | Contacts/contributions 900001-900012, 900101-900102 | Group 2: five issuance spaces (ticket 3.12) - clean, blocked, partial-failure, multi-space donor. |
- * | Contacts/contributions 910001-910002 | Group 3 (new): one donor, two contributions, consolidated onto one receipt (ticket 3.2). |
+ * | Contacts/contributions 910001-910002 | Group 3 (new): one donor, two contributions, issued as one combined receipt (EO evaluation rows 43, 46). |
  * | Period 9503 | Fixture-only annual period for Group 4 (EO evaluation), dated 2029 so it cannot collide with 9502 or a real period. |
- * | Period 9504 | Fixture-only annual period holding only Group 3, dated 2030. Its consolidated receipt makes ALL/S2P2 generation throw `MultiAllocationReceiptError` (O44), so it is kept out of 9502, whose reports should work. |
+ * | Period 9504 | Fixture-only annual period holding only Group 3, dated 2030. Its combined receipt reports as one ALL row ($65.00, dated 2030-03-10). |
  * | Contacts `*@g4.fixture.test`, payments noted `fixture-g4-*` | Group 4: tool-owned contacts (no Qomon id, so editable without Qomon) and MANUAL payments, keyed by email and payment note rather than an id range. |
  * | Leadership contest "Fixture leadership contest (not real)" | Group 4's two leadership contestants, keyed by name. |
  *
@@ -97,7 +96,7 @@ const ANNUAL_2025 = 63; // '2025 Annual', from prisma/seed.ts
 const BY_ELECTION_PERIOD_ID = 9501;
 const SPACE_A_PERIOD_ID = 9502; // see header comment: why this can't be the real 2026 Annual period
 const EO_EVALUATION_PERIOD_ID = 9503; // Group 4, fully issued so its reports can be generated on the call
-const CONSOLIDATION_PERIOD_ID = 9504; // Group 3 alone: its multi-allocation receipt breaks report generation for its period
+const CONSOLIDATION_PERIOD_ID = 9504; // Group 3 alone: its combined receipt
 
 // Real riding numbers, borrowed for fixture use — see header comment for
 // why there's no such thing as a "fixture-only" riding number here.
@@ -674,12 +673,12 @@ const GROUP_2_FIXTURES: Group2Fixture[] = [
 ];
 
 // ===========================================================================
-// Group 3 (new) — allocation consolidation (ticket 3.2): one donor, two
-// contributions in the same space, consolidated onto a single receipt via
-// `allocateToReceipt` rather than one receipt each. In a period of its own
-// (9504): ALL/S2P2 generation refuses a multi-allocation receipt (O44), so in
-// Space A it would block that period's reports. Its PDF prints only the
-// first leg ($40, not $65) until it is reissued (EO evaluation row 43).
+// Group 3 (new) — combined receipt (EO evaluation rows 43, 46): one donor,
+// two contributions in the same space, issued as one receipt via
+// `issueCombinedReceipt` rather than one receipt each. Its PDF prints $65.00
+// and "Received on: 2030-03-05 to 2030-03-10"; its period (9504) reports it as
+// one ALL row. A database seeded before combined receipts existed still holds
+// the old version (a $40.00 PDF): reset and seed again.
 // ===========================================================================
 
 const GROUP_3_CONTACT = { qomonContactId: 910_001n, name: 'Consolidating Chris' };
@@ -766,7 +765,7 @@ async function createSeedContact(data: Prisma.ContactUncheckedCreateInput) {
 async function ensureGroup3(cfoUserId: string): Promise<void> {
   const existing = await findSeededContribution(GROUP_3_CONTRIBUTIONS[0]!.qomonTransactionId);
   if (existing) {
-    console.log('  skip (already seeded): Consolidating Chris — allocation consolidation (ticket 3.2)');
+    console.log('  skip (already seeded): Consolidating Chris — combined receipt (rows 43, 46)');
     return;
   }
 
@@ -785,7 +784,7 @@ async function ensureGroup3(cfoUserId: string): Promise<void> {
       amountCents: c.amountCents,
       acceptedAt: new Date(c.acceptedAt),
       paymentMethodKind: 'card',
-      reason: 'phase-3 fixture: allocation consolidation (ticket 3.2)',
+      reason: 'phase-3 fixture: combined receipt (EO evaluation rows 43, 46)',
       descriptive: {
         periodId: CONSOLIDATION_PERIOD_ID,
         entityKind: 'PARTY',
@@ -795,32 +794,19 @@ async function ensureGroup3(cfoUserId: string): Promise<void> {
     contributionIds.push(contribution.id);
   }
 
-  const receipt = await issueReceipt(
+  const receipt = await issueCombinedReceipt(
     { prisma, storageDir: STORAGE_DIR },
     {
-      contributionId: contributionIds[0]!,
+      contributionIds,
       actorUserId: cfoUserId,
-      reason: 'phase-3 fixture: first leg of a consolidated receipt (ticket 3.2)',
+      reason: 'phase-3 fixture: one receipt for both contributions (EO evaluation rows 43, 46)',
       politicalEntityLabel: 'Green Party of Ontario',
-    },
-  );
-  await allocateToReceipt(
-    { prisma },
-    {
-      receiptId: receipt.id,
-      contributionId: contributionIds[1]!,
-      actorUserId: cfoUserId,
-      reason: 'phase-3 fixture: second leg consolidated onto the same receipt (ticket 3.2)',
     },
   );
 
   console.log(
-    `  created + consolidated ${receipt.receiptNumber}: Consolidating Chris — two contributions ($40.00 + $25.00), one receipt ($65.00 total)`,
+    `  created ${receipt.receiptNumber}: Consolidating Chris — two contributions ($40.00 + $25.00), one combined receipt ($65.00 total)`,
   );
-  console.log(
-    '    NOTE: generating an ALL/S2P2 entity report for period 9504 will throw MultiAllocationReceiptError',
-  );
-  console.log('    (reports/load-receipts.ts) — that is expected, see open-questions.md O44. Try it deliberately.');
 }
 
 // ===========================================================================
@@ -1276,7 +1262,7 @@ async function main(): Promise<void> {
     await ensureGroup2Fixture(fixture, cfo.id);
   }
 
-  console.log('Group 3 — allocation consolidation (ticket 3.2):');
+  console.log('Group 3 — combined receipt (EO evaluation rows 43, 46):');
   await ensureGroup3(cfo.id);
 
   console.log('Group 4 — EO evaluation (period 9503):');

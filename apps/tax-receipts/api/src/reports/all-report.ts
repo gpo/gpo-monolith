@@ -35,7 +35,7 @@ import {
 export type { ReportScope as AllReportScope };
 export {
   ReportScopeError as AllReportScopeError,
-  MultiAllocationReceiptError,
+  InconsistentCombinedReceiptError,
   MissingContributionMetadataError,
   ReportExportBlockedError,
 } from './load-receipts.js';

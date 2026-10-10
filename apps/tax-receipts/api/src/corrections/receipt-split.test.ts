@@ -4,8 +4,8 @@ import path from 'node:path';
 import { PDFParse } from 'pdf-parse';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
-import { allocateToReceipt, TerminalReceiptError } from '../receipts/allocate.js';
-import { issueReceipt } from '../receipts/issue.js';
+import { TerminalReceiptError } from '../receipts/errors.js';
+import { issueCombinedReceipt } from '../receipts/issue.js';
 import { markRtdFilingSent } from '../rtd/mark-sent.js';
 import { prepareRtdFiling } from '../rtd/prepare.js';
 import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact, fixtureContactUpdate } from '../test/db.js';
@@ -48,15 +48,11 @@ describe('correction action 7: split a receipt', () => {
     contactId = contact.id;
     first = await seedContribution(25_000); // over the $200 RTD threshold on its own
     second = await seedContribution(2_500);
-    const issued = await issueReceipt(
+    const issued = await issueCombinedReceipt(
       { prisma, storageDir },
-      { contributionId: first, actorUserId: baseline.cfoUserId, reason: 'issue', politicalEntityLabel: 'Green Party of Ontario' },
+      { contributionIds: [first, second], actorUserId: baseline.cfoUserId, reason: 'issue', politicalEntityLabel: 'Green Party of Ontario' },
     );
     receiptId = issued.id;
-    await allocateToReceipt(
-      { prisma },
-      { receiptId, contributionId: second, actorUserId: baseline.cfoUserId, reason: 'consolidate' },
-    );
   });
 
   afterEach(async () => {

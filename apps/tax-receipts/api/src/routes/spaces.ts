@@ -32,11 +32,14 @@ export async function spaceRoutes(
   const SpaceQuery = z.object({
     ridingNumber: z.coerce.number().int().min(1).max(124).optional(),
   });
+  const PreviewQuery = SpaceQuery.extend({
+    combinePerDonor: z.enum(['true', 'false']).optional(),
+  });
 
   r.route({
     method: 'GET',
     url: '/spaces/:periodId/:entityKind/issuance-preview',
-    schema: { params: SpaceParams, querystring: SpaceQuery },
+    schema: { params: SpaceParams, querystring: PreviewQuery },
     handler: async (request, reply) => {
       const user = request.user as SessionUser | undefined;
       if (!user) return reply.code(401).send({ error: 'authentication required' });
@@ -49,7 +52,7 @@ export async function spaceRoutes(
         periodId: request.params.periodId,
         ridingNumber,
         entityKind: request.params.entityKind,
-      });
+      }, { combinePerDonor: request.query.combinePerDonor === 'true' });
       return reply.send(preview);
     },
   });
@@ -58,6 +61,7 @@ export async function spaceRoutes(
     reason: z.string().min(3),
     politicalEntityLabel: z.string().min(1),
     delivery: ReceiptDelivery.optional(),
+    combinePerDonor: z.boolean().optional(),
   });
 
   r.route({
@@ -85,6 +89,7 @@ export async function spaceRoutes(
           reason: request.body.reason,
           politicalEntityLabel: request.body.politicalEntityLabel,
           delivery: request.body.delivery,
+          combinePerDonor: request.body.combinePerDonor,
         },
       );
       return reply.code(201).send(result);

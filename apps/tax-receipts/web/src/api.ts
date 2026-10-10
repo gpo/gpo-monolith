@@ -366,6 +366,11 @@ export interface ContactDetail extends ContactRecord {
     periodId: number | null;
     entityKind: string | null;
     ridingNumber: number | null;
+    goodsServices: boolean;
+    receivedBy: string;
+    leadershipContestantId: string | null;
+    /** what a new receipt could still cover */
+    remainingCents: number;
   }>;
   changeLog: Array<{
     id: string;
@@ -481,6 +486,13 @@ export interface IssueReceiptInput {
   politicalEntityLabel: string;
 }
 
+export interface IssueCombinedReceiptInput {
+  contributionIds: string[];
+  reason: string;
+  delivery?: 'EMAIL' | 'MAIL';
+  politicalEntityLabel: string;
+}
+
 export interface IssuedReceipt {
   id: string;
   receiptNumber: string;
@@ -544,8 +556,11 @@ export interface SpaceIssuanceBlocker {
   ruleRef: string | null;
 }
 
+/** One receipt the run would issue. */
 export interface SpaceIssuanceLine {
   contributionId: string;
+  /** every contribution the receipt carries: several when combined per donor */
+  contributionIds: string[];
   contactId: string;
   contactName: string;
   amountCents: number;
@@ -568,6 +583,7 @@ export interface SpaceIssuancePreview {
 
 export interface SpaceIssuanceRowResult {
   contributionId: string;
+  contributionIds: string[];
   ok: boolean;
   receiptId?: string;
   receiptNumber?: string;
@@ -585,6 +601,8 @@ export interface IssueSpaceReceiptsInput {
   reason: string;
   politicalEntityLabel: string;
   delivery?: 'EMAIL' | 'MAIL';
+  /** one combined receipt per donor rather than one per contribution */
+  combinePerDonor?: boolean;
 }
 
 export interface SentDonorPrecheck {
@@ -1031,6 +1049,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  issueCombinedReceipt: (input: IssueCombinedReceiptInput) =>
+    request<IssuedReceipt>('/receipts', { method: 'POST', body: JSON.stringify(input) }),
   receiptPdfUrl: (receiptId: string) => `${BASE}/receipts/${receiptId}/pdf`,
   createPayment: (input: NewPaymentInput) =>
     request<{ paymentId: string; contributions: Array<{ id: string; amountCents: number; periodId: number | null; flags: IntakeFlag[] }> }>(
@@ -1089,10 +1109,13 @@ export const api = {
   resolveWorkItem: (id: string, input: { reason: string; outcome: 'RESOLVED' | 'EXCEPTION' }) =>
     request<WorkItemRow>(`/work-items/${id}/resolve`, { method: 'POST', body: JSON.stringify(input) }),
   listSpaces: () => request<{ data: SpaceDashboardRow[] }>('/spaces'),
-  previewSpaceIssuance: (periodId: number, entityKind: string, ridingNumber: number | null) =>
-    request<SpaceIssuancePreview>(
-      `/spaces/${periodId}/${entityKind}/issuance-preview${ridingNumber !== null ? `?ridingNumber=${ridingNumber}` : ''}`,
-    ),
+  previewSpaceIssuance: (periodId: number, entityKind: string, ridingNumber: number | null, combinePerDonor = false) => {
+    const params = new URLSearchParams();
+    if (ridingNumber !== null) params.set('ridingNumber', String(ridingNumber));
+    if (combinePerDonor) params.set('combinePerDonor', 'true');
+    const query = params.toString();
+    return request<SpaceIssuancePreview>(`/spaces/${periodId}/${entityKind}/issuance-preview${query ? `?${query}` : ''}`);
+  },
   issueSpaceReceipts: (
     periodId: number,
     entityKind: string,

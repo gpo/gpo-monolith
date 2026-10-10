@@ -21,6 +21,7 @@ import type {
   ReceiptDelivery,
   ReceivedBy,
 } from '../generated/prisma/index.js';
+import { receiptPrintedFields } from '../receipts/combined.js';
 import { renderReceiptPdf } from '../receipts/pdf.js';
 import { getReceiptSettings } from '../receipts/settings.js';
 import { runValidationForContribution } from '../validation/run.js';
@@ -945,9 +946,8 @@ export async function issuePlannedInTx(
 }
 
 /** Renders each newly issued receipt's PDF and attaches it in a second write
- *  under the correction's correlation id. The first contribution on the
- *  receipt stands in for the printed date and goods-and-services flag on a
- *  multi-line receipt (O44 is still open, same as `reissueReceipt`). */
+ *  under the correction's correlation id. A receipt with several lines
+ *  prints its date range and shared fields (`receipts/combined.ts`). */
 export async function attachIssuedPdfs(
   deps: ArtifactStoreDeps,
   issued: IssuedInTx[],
@@ -962,19 +962,23 @@ export async function attachIssuedPdfs(
   const out: CorrectionResult['issuedReceipts'] = [];
   const { receiptLayout } = await getReceiptSettings(deps.prisma);
   for (const { planned, receipt, address, addressLine1 } of issued) {
-    const primary = await opts.contributionFor(planned.lines[0]!.contributionRef);
+    const printed = receiptPrintedFields(
+      await Promise.all(planned.lines.map((line) => opts.contributionFor(line.contributionRef))),
+    );
+    const primary = printed.primary;
     const pdfBytes = await renderReceiptPdf({
       receiptNumber: receipt.receiptNumber,
       issueDate: receipt.issueDate,
-      acceptedAt: primary.acceptedAt,
+      acceptedAt: printed.acceptedFrom,
+      acceptedThrough: printed.acceptedThrough,
       eligibleAmountCents: planned.totalAmountCents,
-      isGoodsServices: primary.goodsServices,
+      isGoodsServices: printed.goodsServices,
       politicalEntityLabel: await receiptEntityLabel(
         deps.prisma,
         primary,
         opts.labelFor(planned.entityKind, planned.ridingNumber),
       ),
-      eoContributorId: primary.eoContributorId,
+      eoContributorId: printed.eoContributorId,
       contributorName: planned.contactName,
       replacesReceiptNumber: planned.replacesReceiptNumber,
       addressLine1,

@@ -1,5 +1,5 @@
 ---
-last-reviewed: 2026-10-06
+last-reviewed: 2026-10-10
 review-interval-days: 60
 ---
 
@@ -37,6 +37,11 @@ The tool checks the space's gate and shows a preview.
 - **If the space is clear**, you see exactly what would be issued: every
   receipt, its donor, and its amount, with totals. Nothing has been issued
   yet. This preview replaces the old "trial receipts."
+- **One receipt per donor** (off by default) combines each donor's
+  contributions in the space onto a single receipt, so a monthly donor
+  gets one receipt for the period rather than twelve. The preview updates
+  to show the combined receipts, with how many contributions each covers.
+  See [Combined receipts](#combined-receipts) for what can share one.
 
 The Review step also holds the **donor pre-check** card, for asking donors
 to confirm their address and delivery preference before anything is
@@ -56,8 +61,9 @@ Enter:
 - a **reason** for this run, such as "2026 annual receipts."
 
 Choose **Generate receipts**. For each contribution with something left to
-receipt, the tool takes the next receipt number, freezes the donor's
-address, records the allocation, and renders the PDF in the layout chosen
+receipt (or each donor's group of contributions, with **One receipt per
+donor** on), the tool takes the next receipt number, freezes the donor's
+address, records the allocations, and renders the PDF in the layout chosen
 under [Admin > Receipts](administration.md#receipt-layout).
 
 Results show per row, with a link to each PDF. If a few rows fail (for
@@ -90,19 +96,49 @@ contribution is still waiting on its details from intake.
   never reused, and a cancelled receipt's number is never freed.
 - The issue date, the donor's name, and their address as it was at
   issuance.
-- The eligible amount, the contribution date, and the received-by entity.
+- The eligible amount, the contribution date (a range of dates on a
+  [combined receipt](#combined-receipts)), and the received-by entity.
 - Three copies on one page: office, donor, and political entity.
 - In the contributor-type layout, the line "Contributor Type: Individual."
 
 Once issued, a receipt's facts can never change. A mistake is fixed by a
 [correction](corrections.md), which cancels it and issues a replacement.
 
-## Consolidated receipts
+## Combined receipts
 
-One receipt can cover several contributions from the same donor. Today
-this happens through corrections (a reissue carries every contribution the
-old receipt covered); the issuance wizard issues one receipt per
-contribution.
+One receipt can cover several contributions from the same donor. Each
+contribution stays its own record, linked to the receipt by its own
+allocation, so the receipt still shows exactly which contributions it
+covers and for how much. There are two ways to issue one:
+
+- in the issuance wizard, turn on **One receipt per donor** (see
+  [Review](#1-review));
+- on a [contributor's record](contributors.md), tick two or more
+  contributions in **Contributions**, enter the received-by label and a
+  reason, and choose **Issue one receipt**. Needs *Issue receipts*.
+
+Contributions can share a receipt only when they agree on everything a
+receipt prints or reports once: the same period, entity, riding, and
+leadership contestant, the same agency status, and the same contribution
+type. Monetary and goods-and-services contributions always get separate
+receipts. On the contributor's record, once you tick one contribution,
+only the ones that can join it stay selectable.
+
+A combined receipt:
+
+- prints the total of its contributions as the eligible amount;
+- prints **Received on** as a range of acceptance dates, for example
+  "2026-03-01 to 2026-05-02" (a single date when they were all accepted
+  the same day);
+- appears in the ALL report as one row with the receipt's total, dated to
+  the latest acceptance date, and counts toward the donor's S2P2 total like
+  any other receipt.
+
+A contribution is never added to a receipt that has already been issued,
+because its PDF would no longer match. To combine a contribution with an
+existing receipt, cancel that receipt and issue a combined one. Corrections
+that reissue a receipt carry every contribution it covered onto the
+replacement.
 
 ## Receipts issued outside the tool
 

@@ -26,16 +26,16 @@ const CLEAR_PREVIEW = {
   blocked: false,
   blockers: [],
   lines: [
-    { contributionId: 'c1', contactId: 'ct1', contactName: 'Dana Donor', amountCents: 5_000, delivery: 'MAIL' },
-    { contributionId: 'c2', contactId: 'ct2', contactName: 'Sam Supporter', amountCents: 3_000, delivery: 'EMAIL' },
+    { contributionId: 'c1', contributionIds: ['c1'], contactId: 'ct1', contactName: 'Dana Donor', amountCents: 5_000, delivery: 'MAIL' },
+    { contributionId: 'c2', contributionIds: ['c2'], contactId: 'ct2', contactName: 'Sam Supporter', amountCents: 3_000, delivery: 'EMAIL' },
   ],
   totals: { receiptCount: 2, amountCents: 8_000, emailCount: 1, mailCount: 1 },
 };
 
 const GENERATE_RESULT = {
   results: [
-    { contributionId: 'c1', ok: true, receiptId: 'r1', receiptNumber: 'GPO-00402510', amountCents: 5_000 },
-    { contributionId: 'c2', ok: true, receiptId: 'r2', receiptNumber: 'GPO-00402511', amountCents: 3_000 },
+    { contributionId: 'c1', contributionIds: ['c1'], ok: true, receiptId: 'r1', receiptNumber: 'GPO-00402510', amountCents: 5_000 },
+    { contributionId: 'c2', contributionIds: ['c2'], ok: true, receiptId: 'r2', receiptNumber: 'GPO-00402511', amountCents: 3_000 },
   ],
   succeeded: 2,
   failed: 0,
@@ -174,6 +174,27 @@ test('generates receipts and shows per-row results', async () => {
   expect(await screen.findByText('2 issued, 0 failed.')).toBeInTheDocument();
   expect(screen.getByText('GPO-00402510')).toBeInTheDocument();
   expect(screen.getByText('GPO-00402511')).toBeInTheDocument();
+});
+
+test('the one-receipt-per-donor toggle re-previews combined and generates combined', async () => {
+  renderPage();
+  await screen.findByText('Sam Supporter');
+  expect(calls.some((c) => c.url.includes('combinePerDonor'))).toBe(false);
+
+  fireEvent.click(screen.getByRole('switch', { name: /One receipt per donor/ }));
+  await waitFor(() =>
+    expect(calls.some((c) => c.url.includes('/issuance-preview?combinePerDonor=true'))).toBe(true),
+  );
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Next: generate' }));
+  fireEvent.change(await screen.findByPlaceholderText('e.g. period-end batch issuance'), {
+    target: { value: 'annual run' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Generate receipts' }));
+
+  await waitFor(() => expect(calls.some((c) => c.url.includes('/spaces/67/PARTY/receipts'))).toBe(true));
+  const call = calls.find((c) => c.url.includes('/spaces/67/PARTY/receipts'))!;
+  expect(JSON.parse(call.body!)).toMatchObject({ combinePerDonor: true });
 });
 
 test('sends the donor pre-check for the space and shows the sent/skipped summary', async () => {
