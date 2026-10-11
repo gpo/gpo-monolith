@@ -4,8 +4,11 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
+import { setKillSwitch } from '../auth/kill-switch.js';
 import { hashPassword } from '../auth/password.js';
 import { withChangeLog } from '../changelog/write.js';
+import { DevEmailProvider } from '../delivery/dev-provider.js';
+import { dispatchPendingEmails } from '../delivery/dispatcher.js';
 import { resetDb, seedBaseline, testPrisma, createTestContribution, fixtureContact } from '../test/db.js';
 
 const prisma = testPrisma();
@@ -457,5 +460,184 @@ describe('receipt correction routes: cancel / reissue (ticket 3.10)', () => {
     const body = res.json();
     expect(body.newReceiptNumber).toBe('GPO-00402511');
     expect(body.cancelledReceiptId).toBe(receiptId);
+  });
+});
+
+describe('cancellation notice routes (EO evaluation row 62)', () => {
+  let app: FastifyInstance;
+  let baseline: Awaited<ReturnType<typeof seedBaseline>>;
+  let storageDir: string;
+  let contactId: string;
+  let receiptId: string;
+
+  const emailPayload = {
+    reason: 'tell the donor',
+    subject: 'Your receipt has been cancelled',
+    body: 'Your receipt was issued in error and has been cancelled. The cancelled copy is attached.',
+  };
+
+  beforeEach(async () => {
+    await resetDb(prisma);
+    baseline = await seedBaseline(prisma);
+    await prisma.user.update({
+      where: { id: baseline.adminUserId },
+      data: { passwordHash: await hashPassword('admin-pass-phrase') },
+    });
+    await prisma.user.update({
+      where: { id: baseline.cfoUserId },
+      data: { passwordHash: await hashPassword('cfo-pass-phrase') },
+    });
+    await prisma.user.create({
+      data: {
+        email: 'bookkeeper@gpo.test',
+        name: 'Bookkeeper',
+        roleKey: 'bookkeeper',
+        passwordHash: await hashPassword('bookkeeper-pass-phrase'),
+        allRidings: true,
+      },
+    });
+
+    const contact = await fixtureContact(prisma, {
+      data: {
+        qomonContactId: 1n,
+        name: 'Dana Donor',
+        email: 'dana@example.org',
+        addresses: [
+          { housenumber: '1', street: 'Main St', city: 'Toronto', state: 'ON', postalcode: 'M1M1M1', country: 'CA' },
+        ],
+      },
+    });
+    contactId = contact.id;
+    const contribution = await createTestContribution(prisma, { qomonTransactionId: 1n, contactId: contact.id, amountCents: 5_000, acceptedAt: new Date('2026-03-01T12:00:00Z') });
+    await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
+      const after = await ctx.tx.contribution.update({ where: { id: contribution.id }, data: { periodId: baseline.periodId, entityKind: 'PARTY', receivedBy: 'GPO' } });
+      await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
+    });
+
+    storageDir = await mkdtemp(path.join(tmpdir(), 'gpo-cancellation-notice-test-'));
+    app = await buildApp({ prisma, sessionSecret: SECRET, artifactStorageDir: storageDir });
+    await app.ready();
+
+    const cookie = await login('cfo@gpo.test', 'cfo-pass-phrase');
+    const issued = await app.inject({
+      method: 'POST',
+      url: `/contributions/${contribution.id}/receipts`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: { reason: 'first receipt', politicalEntityLabel: 'Green Party of Ontario' },
+    });
+    receiptId = issued.json().id;
+  });
+
+  afterEach(async () => {
+    await app.close();
+    await rm(storageDir, { recursive: true, force: true });
+  });
+
+  async function login(email: string, password: string) {
+    const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { email, password } });
+    return res.cookies[0]!;
+  }
+
+  async function cancel() {
+    const cookie = await login('admin@gpo.test', 'admin-pass-phrase');
+    const res = await app.inject({
+      method: 'POST',
+      url: `/receipts/${receiptId}/cancel`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: { reason: 'donor ineligible' },
+    });
+    expect(res.statusCode).toBe(200);
+  }
+
+  async function emailNotice(email: string, password: string) {
+    const cookie = await login(email, password);
+    return app.inject({
+      method: 'POST',
+      url: `/receipts/${receiptId}/cancellation-notice/email`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: emailPayload,
+    });
+  }
+
+  it('404s the notice for a receipt that is not cancelled, then serves the watermarked PDF once it is', async () => {
+    const cookie = await login('bookkeeper@gpo.test', 'bookkeeper-pass-phrase');
+    const before = await app.inject({
+      method: 'GET',
+      url: `/receipts/${receiptId}/cancellation-notice`,
+      cookies: { [cookie.name]: cookie.value },
+    });
+    expect(before.statusCode).toBe(404);
+
+    await cancel();
+    const after = await app.inject({
+      method: 'GET',
+      url: `/receipts/${receiptId}/cancellation-notice`,
+      cookies: { [cookie.name]: cookie.value },
+    });
+    expect(after.statusCode).toBe(200);
+    expect(after.headers['content-type']).toBe('application/pdf');
+    expect(after.headers['content-disposition']).toContain('GPO-00402510-cancelled.pdf');
+    expect(after.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('409s emailing the notice for a receipt that is still issued', async () => {
+    const res = await emailNotice('admin@gpo.test', 'admin-pass-phrase');
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('403s emailing the notice for a role that cannot correct receipts', async () => {
+    await cancel();
+    const res = await emailNotice('bookkeeper@gpo.test', 'bookkeeper-pass-phrase');
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('queues the notice to the donor once, attaching the cancelled copy, and change-logs it', async () => {
+    await cancel();
+    const res = await emailNotice('admin@gpo.test', 'admin-pass-phrase');
+    expect(res.statusCode).toBe(202);
+    expect(res.json().toAddress).toBe('dana@example.org');
+
+    const message = await prisma.emailMessage.findUniqueOrThrow({ where: { id: res.json().emailMessageId } });
+    expect(message).toMatchObject({ purpose: 'CANCELLATION', receiptId, status: 'QUEUED', subject: emailPayload.subject });
+    expect(message.textBody).toContain('Re: Receipt GPO-00402510');
+    const notice = await prisma.eOForm.findFirstOrThrow({ where: { receiptId, kind: 'CANCELLATION' } });
+    expect(message.attachments).toEqual([{ artifactId: notice.artifactId, filename: 'GPO-00402510-cancelled.pdf' }]);
+
+    const entry = await prisma.changeLogEntry.findFirstOrThrow({
+      where: { subjectType: 'Receipt', subjectId: receiptId, reason: emailPayload.reason },
+    });
+    expect(entry.after).toMatchObject({ cancellationNoticeEmailMessageId: message.id, toAddress: 'dana@example.org' });
+
+    const again = await emailNotice('admin@gpo.test', 'admin-pass-phrase');
+    expect(again.statusCode).toBe(409);
+  });
+
+  it('422s a donor with no email address on file', async () => {
+    await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'remove email' }, async (ctx) => {
+      const after = await ctx.tx.contact.update({ where: { id: contactId }, data: { email: null } });
+      await ctx.log({ subjectType: 'Contact', subjectId: contactId, after });
+    });
+    await cancel();
+    const res = await emailNotice('admin@gpo.test', 'admin-pass-phrase');
+    expect(res.statusCode).toBe(422);
+  });
+
+  it('is sent by the dispatcher for the cancelled receipt, even with the kill switch engaged', async () => {
+    await cancel();
+    await emailNotice('admin@gpo.test', 'admin-pass-phrase');
+    await setKillSwitch(prisma, { userId: baseline.cfoUserId, reason: 'EO request' }, true);
+
+    const provider = new DevEmailProvider();
+    const result = await dispatchPendingEmails({ prisma, storageDir, liveSendingAllowed: false, provider, sleep: async () => {} });
+    expect(result).toMatchObject({ sent: 1, failed: 0 });
+
+    const message = await prisma.emailMessage.findFirstOrThrow({ where: { receiptId, purpose: 'CANCELLATION' } });
+    expect(message).toMatchObject({ status: 'SENT', simulated: true });
+    const receipt = await prisma.receipt.findUniqueOrThrow({ where: { id: receiptId } });
+    expect(receipt).toMatchObject({ status: 'CANCELLED', deliveredAt: null });
+    const entry = await prisma.changeLogEntry.findFirstOrThrow({
+      where: { subjectType: 'Receipt', subjectId: receiptId, reason: { startsWith: 'cancellation notice email' } },
+    });
+    expect(entry.after).toMatchObject({ emailMessageId: message.id, simulated: true });
   });
 });

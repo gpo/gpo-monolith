@@ -48,7 +48,7 @@ gap still being there.
 
 | Gap | Meanwhile |
 |---|---|
-| Cancellation notices and replacement receipts are not emailed automatically after a correction. | Send them by hand from the stored PDFs. |
+| Cancellation notices are not sent automatically after a correction, and print batches do not include them. | Email each one from the cancelled receipt (**Email to donor**), or open it and mail it by hand. |
 | Splitting a receipt, and undoing a merge, are API-only. | |
 | A DC-1A amendment has no button to produce it. | Generate it through the API (`POST /rtd/contributions/:id/dc1a`), then send it to EO and resolve the Owed to EO item. |
 | A moved contribution gets its own new receipt rather than joining the new donor's existing one. | |

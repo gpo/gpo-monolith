@@ -13,6 +13,7 @@ export const ME: Me = {
     issueReceipts: true,
     sendDonorPrechecks: true,
     administerKillSwitch: true,
+    viewEntityReports: true,
     generateEntityReports: true,
     shareEntityReports: true,
     prepareRtdFilings: true,

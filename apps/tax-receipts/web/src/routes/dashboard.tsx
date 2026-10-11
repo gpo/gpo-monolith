@@ -32,7 +32,9 @@ function stageColor(stage: string): string {
 }
 
 export function DashboardPage() {
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: api.listSpaces });
+  const showReports = (me.data?.can.viewEntityReports || me.data?.can.generateEntityReports) ?? false;
   const periods = useQuery({ queryKey: ['admin-periods'], queryFn: api.listPeriods });
   const ridings = useQuery({ queryKey: ['admin-ridings'], queryFn: api.listRidings });
 
@@ -106,15 +108,17 @@ export function DashboardPage() {
                         Issue
                       </Button>
                     </Link>
-                    <Link
-                      to="/spaces/$periodId/$entityKind/entity-reports"
-                      params={{ periodId: String(s.periodId), entityKind: s.entityKind }}
-                      search={s.ridingNumber ? { ridingNumber: s.ridingNumber } : {}}
-                    >
-                      <Button size="xs" variant="default">
-                        Reports
-                      </Button>
-                    </Link>
+                    {showReports && (
+                      <Link
+                        to="/spaces/$periodId/$entityKind/entity-reports"
+                        params={{ periodId: String(s.periodId), entityKind: s.entityKind }}
+                        search={s.ridingNumber ? { ridingNumber: s.ridingNumber } : {}}
+                      >
+                        <Button size="xs" variant="default">
+                          Reports
+                        </Button>
+                      </Link>
+                    )}
                   </Group>
                 </Table.Td>
               </Table.Tr>

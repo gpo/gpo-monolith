@@ -148,6 +148,14 @@ system administrator role is locked, and every role write is change-logged
 under subject type `Role`. A user's permissions are reloaded on each
 request, so a role edit takes effect on the user's next request.
 
+Every signed-in user can read the operational surface (contributions,
+receipts, the work queue, filings, periods, and limits). Entity reports are
+deliberately outside it: listing, viewing, and downloading them needs
+`entityReport.read` (or `records.readAll`), so report access is a role given
+only to privileged users (EO evaluation row 66). A permission added after
+roles exist reaches the built-in roles through a migration that inserts its
+`role_permission` rows, as `contact.manage` and `entityReport.read` did.
+
 Users manage their own account from the account menu: **Edit profile**
 changes their name and email (an email change needs the current password,
 since the email is the sign-in name), and **Change password** needs the

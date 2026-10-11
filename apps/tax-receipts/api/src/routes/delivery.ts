@@ -236,7 +236,7 @@ export async function deliveryRoutes(
   // pre-check body carries a live confirmation link (a bearer credential).
 
   const EmailStatus = z.enum(['QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'DELAYED', 'BOUNCED', 'COMPLAINED', 'FAILED']);
-  const EmailPurpose = z.enum(['RECEIPT', 'PRECHECK']);
+  const EmailPurpose = z.enum(['RECEIPT', 'PRECHECK', 'CANCELLATION']);
 
   r.route({
     method: 'GET',

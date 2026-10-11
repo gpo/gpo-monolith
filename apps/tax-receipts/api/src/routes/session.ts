@@ -147,6 +147,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
           'administer',
           'IssuanceKillSwitch',
         ),
+        viewEntityReports: request.ability.can('read', 'EntityReport'),
         generateEntityReports: request.ability.can('create', 'EntityReport'),
         shareEntityReports: request.ability.can('share', 'EntityReport'),
         prepareRtdFilings: request.ability.can('create', 'RtdFiling'),

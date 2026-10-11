@@ -179,6 +179,7 @@ function EmailLogCard() {
               { value: '', label: 'Any' },
               { value: 'RECEIPT', label: 'Receipt' },
               { value: 'PRECHECK', label: 'Pre-check' },
+              { value: 'CANCELLATION', label: 'Cancellation notice' },
             ]}
             value={filters.purpose ?? ''}
             onChange={(e) => setFilter('purpose', e.currentTarget.value)}

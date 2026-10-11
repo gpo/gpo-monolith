@@ -37,6 +37,7 @@ export const PERMISSION_KEYS = [
   'receipt.correct',
   'killSwitch.administer',
   'reconciliation.manage',
+  'entityReport.read',
   'entityReport.generate',
   'entityReport.share',
   'filing.prepare',
@@ -75,7 +76,7 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
     group: 'Records',
     label: 'Read all records',
     description:
-      'Read every record, including payments, reconciliation, and EO forms. Every signed-in user can already read contributions, receipts, the work queue, filings, reports, periods, and limits.',
+      'Read every record, including payments, reconciliation, EO forms, and entity reports. Every signed-in user can already read contributions, receipts, the work queue, filings, periods, and limits.',
     grant: (can) => {
       can('read', 'all');
     },
@@ -162,6 +163,15 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
       can(['create', 'update', 'reconcile'], 'ReconciliationMark');
     },
   },
+  'entityReport.read': {
+    group: 'Reporting',
+    label: 'View entity reports',
+    description:
+      'List generated ALL and S2P2 reports and download their CSV files, for the ridings the user can see (EO evaluation row 66).',
+    grant: (can) => {
+      can('read', 'EntityReport');
+    },
+  },
   'entityReport.generate': {
     group: 'Reporting',
     label: 'Generate entity reports',
@@ -237,6 +247,7 @@ export const BUILT_IN_ROLES: BuiltInRole[] = [
       'receipt.issue',
       'receipt.correct',
       'killSwitch.administer',
+      'entityReport.read',
       'entityReport.generate',
       'entityReport.share',
       'filing.submit',
@@ -266,7 +277,13 @@ export const BUILT_IN_ROLES: BuiltInRole[] = [
     key: 'bookkeeper',
     name: 'Bookkeeper',
     description: 'Reconciliation, S2P2, and auditor liaison.',
-    permissions: ['records.readAll', 'reconciliation.manage', 'entityReport.generate', 'workItem.resolve'],
+    permissions: [
+      'records.readAll',
+      'reconciliation.manage',
+      'entityReport.read',
+      'entityReport.generate',
+      'workItem.resolve',
+    ],
   },
   {
     key: 'filer',
@@ -276,6 +293,7 @@ export const BUILT_IN_ROLES: BuiltInRole[] = [
       'records.readAll',
       'filing.prepare',
       'filing.submit',
+      'entityReport.read',
       'entityReport.generate',
       'entityReport.share',
       'workItem.resolve',
@@ -291,13 +309,13 @@ export const BUILT_IN_ROLES: BuiltInRole[] = [
     key: 'organizer',
     name: 'Organizer',
     description: 'Liaison with riding association and campaign CFOs.',
-    permissions: ['entityReport.share'],
+    permissions: ['entityReport.read', 'entityReport.share'],
   },
   {
     key: 'cfo',
     name: 'Riding or campaign CFO',
     description: 'External CFO: reads only their granted riding(s).',
-    permissions: [],
+    permissions: ['entityReport.read'],
   },
   {
     key: 'readonly',

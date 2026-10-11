@@ -23,6 +23,11 @@ they are produced, and tells you when one has gone out of date.
 From the [space dashboard](dashboard.md), choose **Reports** on the space's
 row. Needs *Generate entity reports* (party CFO, bookkeeper, or filer).
 
+Seeing the reports already generated, their status, and their CSV files
+needs *View entity reports* (party CFO, bookkeeper, filer, organizer, and
+riding or campaign CFOs, who see only their own ridings), or *Read all
+records*. Other roles can open the screen but not the list.
+
 1. In **Generate a report**, choose **ALL** or **S2P2**.
 2. Enter the **political entity label**, the entity's name as it should
    appear in the file.

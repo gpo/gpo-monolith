@@ -30,8 +30,9 @@ Open the account menu (your initials, top right):
 What you can do depends on your **role**. A role is a named set of
 **permissions**, and each user has exactly one role. Every signed-in user
 can read the operational screens (contributions, receipts, the work queue,
-filings, reports, periods, and limits); permissions add the ability to
-change things.
+filings, periods, and limits); permissions add the ability to change things.
+Entity reports are the exception: seeing them is itself a permission (*View
+entity reports*), so access to them can be limited to privileged users.
 
 ### The permissions
 
@@ -40,7 +41,7 @@ change things.
 | System | Full system access | Everything, including functions added later. System administrators only. |
 | System | Manage users and roles | Create and edit users, assign roles, define roles. |
 | System | Manage annual settings | Edit periods, contribution limits, the RTD holiday calendar, ridings, and leadership contestants; use the email tools. |
-| Records | Read all records | Read everything, including payments, reconciliation, and EO forms. |
+| Records | Read all records | Read everything, including payments, reconciliation, EO forms, and entity reports. |
 | Contributions | Enter payments | Record manual payments and their contributions. |
 | Contributions | Add and edit contributors | Add contributors and edit names, emails, and addresses. |
 | Contributions | Edit contribution details | Edit period, entity, riding, source code, and similar; send donor pre-checks. |
@@ -51,6 +52,7 @@ change things.
 | Receipts | Correct receipts | Cancel, mark lost, reprint, and run corrections that replace a receipt. |
 | Receipts | Operate the issuance kill switch | Stop and restart all issuance. |
 | Reconciliation | Reconcile deposits | Match contributions to deposits (no screen yet). |
+| Reporting | View entity reports | List generated ALL and S2P2 files and download them. |
 | Reporting | Generate entity reports | Generate ALL and S2P2 files. |
 | Reporting | Share entity reports | Mark a report as sent to a CFO. |
 | Reporting | Prepare EO filings | Prepare RTD filings and EO forms. |
@@ -68,7 +70,7 @@ change things.
 | Filer | Prepares and submits reports and forms to EO. |
 | Process owner | Oversight: reads everything, including who did what. |
 | Organizer | Liaison with riding and campaign CFOs; shares entity reports. |
-| Riding or campaign CFO | External CFO; reads only their own riding(s). |
+| Riding or campaign CFO | External CFO; reads only their own riding(s), including their entity reports. |
 | Read only | Reads the operational screens; changes nothing. |
 
 New users get **Read only** unless given another role.

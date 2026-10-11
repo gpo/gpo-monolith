@@ -115,8 +115,10 @@ export function EntityReportsPage(params: EntityReportsParams) {
   const { periodId, entityKind, ridingNumber } = params;
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+  const canView = me.data?.can.viewEntityReports ?? false;
   const reports = useQuery({
     queryKey: ['entity-reports', periodId],
+    enabled: canView,
     queryFn: () => api.listEntityReports(periodId),
     select: (page) =>
       page.data.filter((r) => r.ridingNumber === ridingNumber && r.entityKind === entityKind),
@@ -203,7 +205,9 @@ export function EntityReportsPage(params: EntityReportsParams) {
         </Stack>
       </Card>
 
-      {reports.isLoading ? (
+      {!canView ? (
+        me.data && <Alert color="yellow">Your role cannot view generated reports.</Alert>
+      ) : reports.isLoading ? (
         <Loader />
       ) : reports.isError ? (
         <Text c="red">Failed to load reports for this space.</Text>

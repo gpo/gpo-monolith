@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Alert, Button, Group, Menu, Modal, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Menu, Modal, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { api, ApiError } from '../api.js';
 
 /**
@@ -143,5 +143,101 @@ export function ReceiptActions({
         )}
       </Modal>
     </>
+  );
+}
+
+const DEFAULT_NOTICE_SUBJECT = 'Your tax receipt has been cancelled';
+
+/**
+ * A cancelled receipt's notice (EO evaluation row 62): the watermarked
+ * CANCELLED copy stored when the receipt was cancelled. Anyone who can read
+ * the receipt can open it (to print and mail); someone who can correct
+ * receipts can email it to the donor, with a letter they write, through the
+ * outbox. One live email per receipt; a bounced or failed one can be resent.
+ */
+export function CancellationNoticeActions({
+  receipt,
+  donorEmail,
+  canSend,
+  onDone,
+}: {
+  receipt: {
+    id: string;
+    receiptNumber: string;
+    cancellationNotice: { email: { status: string; toAddress: string; simulated: boolean } | null } | null;
+  };
+  donorEmail: string | null;
+  canSend: boolean;
+  onDone: () => void;
+}) {
+  const [opened, setOpened] = useState(false);
+  const [subject, setSubject] = useState(DEFAULT_NOTICE_SUBJECT);
+  const [body, setBody] = useState('');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const send = useMutation({
+    mutationFn: () => api.emailCancellationNotice(receipt.id, { reason, subject: subject.trim(), body: body.trim() }),
+    onSuccess: () => {
+      setError(null);
+      setOpened(false);
+      setReason('');
+      onDone();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'That did not work.'),
+  });
+
+  const notice = receipt.cancellationNotice;
+  if (!notice) return null;
+  const email = notice.email;
+  const undeliverable = email?.status === 'BOUNCED' || email?.status === 'FAILED';
+
+  return (
+    <Group gap="xs" wrap="nowrap">
+      <Text component="a" href={api.cancellationNoticeUrl(receipt.id)} target="_blank" rel="noreferrer" c="blue" size="sm">
+        Cancellation notice
+      </Text>
+      {email && (
+        <Text size="xs" c={undeliverable ? 'red' : 'dimmed'}>
+          {email.status.toLowerCase()} to {email.toAddress}
+          {email.simulated ? ' (simulated)' : ''}
+        </Text>
+      )}
+      {canSend && donorEmail && (!email || undeliverable) && (
+        <Button size="compact-xs" variant="light" onClick={() => setOpened(true)}>
+          Email to donor
+        </Button>
+      )}
+      <Modal opened={opened} onClose={() => setOpened(false)} title={`Email the cancellation notice: ${receipt.receiptNumber}`}>
+        <Stack gap="sm">
+          <Text size="sm">
+            Queues an email to {donorEmail} with the cancelled copy attached. The letter opens with the donor&apos;s
+            name and the receipt number.
+          </Text>
+          <TextInput label="Subject" value={subject} onChange={(e) => setSubject(e.currentTarget.value)} />
+          <Textarea
+            label="Letter"
+            autosize
+            minRows={4}
+            value={body}
+            onChange={(e) => setBody(e.currentTarget.value)}
+          />
+          <TextInput label="Reason (required)" value={reason} onChange={(e) => setReason(e.currentTarget.value)} />
+          {error && <Alert color="red">{error}</Alert>}
+          <Group>
+            <Button
+              onClick={() => send.mutate()}
+              loading={send.isPending}
+              disabled={reason.trim().length < 3 || subject.trim().length === 0 || body.trim().length === 0}
+            >
+              Queue email
+            </Button>
+            <Button variant="subtle" onClick={() => setOpened(false)}>
+              Close
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Group>
   );
 }
