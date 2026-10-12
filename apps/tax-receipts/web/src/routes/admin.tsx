@@ -281,7 +281,7 @@ function ContributionLimitsSection() {
                   <Table.Td>{l.bucket}</Table.Td>
                   <Table.Td>${(l.amountCents / 100).toFixed(2)}</Table.Td>
                   <Table.Td>{l.notes ?? '—'}</Table.Td>
-                  <Table.Td>
+                  <Table.Td ta="right">
                     <Button
                       size="xs"
                       color="red"
@@ -523,7 +523,7 @@ function RidingsSection() {
                 <Table.Th>Name</Table.Th>
                 <Table.Th>Api base</Table.Th>
                 <Table.Th>Key on file</Table.Th>
-                <Table.Th>Active</Table.Th>
+                <Table.Th>Status</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -548,7 +548,7 @@ function RidingsSection() {
                     <Badge color={r.active ? 'green' : 'gray'}>{r.active ? 'Active' : 'Inactive'}</Badge>
                   </Table.Td>
                   <Table.Td>
-                    <Group gap="xs" wrap="nowrap">
+                    <Group gap="xs" wrap="nowrap" justify="flex-end">
                       <Button size="xs" variant="subtle" onClick={() => openEditModal(r)}>
                         Edit
                       </Button>
@@ -612,38 +612,22 @@ function RidingsSection() {
 }
 
 function UsersSection() {
-  const qc = useQueryClient();
   const users = useQuery({ queryKey: ['admin-users'], queryFn: api.listUsers });
   const roles = useQuery({ queryKey: ['admin-roles'], queryFn: api.listRoles });
   const roleOptions = (roles.data?.data ?? []).map((r) => ({ value: r.key, label: r.name }));
   const [resetting, setResetting] = useState<AdminUserRow | null>(null);
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'readonly' });
-  const create = useMutation({
-    mutationFn: () => api.createUser(form),
-    onSuccess: () => {
-      setForm({ name: '', email: '', password: '', role: 'readonly' });
-      return qc.invalidateQueries({ queryKey: ['admin-users'] });
-    },
-  });
-  const toggleActive = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) => api.updateUser(id, { active }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
-  });
-  const changeRole = useMutation({
-    mutationFn: ({ id, role }: { id: string; role: string }) => api.updateUser(id, { role }),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: ['admin-users'] }),
-        qc.invalidateQueries({ queryKey: ['admin-roles'] }),
-        qc.invalidateQueries({ queryKey: ['me'] }),
-      ]),
-  });
+  const [creating, setCreating] = useState(false);
 
   return (
     <Card withBorder>
       <Stack gap="sm">
-        <Text fw={600}>Users &amp; roles</Text>
+        <Group justify="space-between">
+          <Text fw={600}>Users &amp; roles</Text>
+          <Button size="xs" onClick={() => setCreating(true)}>
+            New user
+          </Button>
+        </Group>
         {users.isLoading ? (
           <Loader />
         ) : (
@@ -654,7 +638,7 @@ function UsersSection() {
                 <Table.Th>Email</Table.Th>
                 <Table.Th>Role</Table.Th>
                 <Table.Th>CFO designate</Table.Th>
-                <Table.Th>Active</Table.Th>
+                <Table.Th>Status</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -663,28 +647,25 @@ function UsersSection() {
                 <Table.Tr key={u.id}>
                   <Table.Td>{u.name}</Table.Td>
                   <Table.Td>{u.email}</Table.Td>
-                  <Table.Td>
-                    <NativeSelect
-                      size="xs"
-                      aria-label={`Role for ${u.name}`}
-                      data={roleOptions.length ? roleOptions : [{ value: u.role, label: u.roleName }]}
-                      value={u.role}
-                      onChange={(e) => changeRole.mutate({ id: u.id, role: e.currentTarget.value })}
-                    />
-                  </Table.Td>
+                  <Table.Td>{u.roleName}</Table.Td>
                   <Table.Td>{u.isCfoDesignate ? 'yes' : '—'}</Table.Td>
                   <Table.Td>
-                    <Checkbox
-                      checked={u.active}
-                      onChange={(e) => toggleActive.mutate({ id: u.id, active: e.currentTarget.checked })}
-                    />
+                    {u.active ? (
+                      <Badge color="green" variant="light">
+                        Active
+                      </Badge>
+                    ) : (
+                      <Badge color="gray" variant="light">
+                        Inactive
+                      </Badge>
+                    )}
                   </Table.Td>
                   <Table.Td>
-                    <Group gap="xs" wrap="nowrap">
-                      <Button size="xs" variant="light" onClick={() => setEditing(u)}>
+                    <Group gap="xs" wrap="nowrap" justify="flex-end">
+                      <Button size="xs" variant="subtle" onClick={() => setEditing(u)}>
                         Edit
                       </Button>
-                      <Button size="xs" variant="light" onClick={() => setResetting(u)}>
+                      <Button size="xs" variant="subtle" onClick={() => setResetting(u)}>
                         Reset password
                       </Button>
                     </Group>
@@ -694,58 +675,115 @@ function UsersSection() {
             </Table.Tbody>
           </Table>
         )}
-        <Text size="sm" fw={600} mt="sm">
-          New user
-        </Text>
-        <Group grow>
-          <TextInput label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.currentTarget.value })} />
-          <TextInput
-            label="Email"
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.currentTarget.value })}
-          />
-          <TextInput
-            label="Temporary password (12+ chars)"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.currentTarget.value })}
-          />
-          <NativeSelect
-            label="Role"
-            data={roleOptions}
-            value={form.role}
-            onChange={(e) => setForm({ ...form, role: e.currentTarget.value })}
-          />
-        </Group>
-        <Group>
-          <Button
-            onClick={() => create.mutate()}
-            loading={create.isPending}
-            disabled={!form.name || !form.email || form.password.length < 12}
-          >
-            Create user
-          </Button>
-        </Group>
-        {(create.error ?? changeRole.error ?? toggleActive.error) && (
-          <Alert color="red">{(create.error ?? changeRole.error ?? toggleActive.error)?.message}</Alert>
-        )}
       </Stack>
       {resetting && <ResetPasswordModal user={resetting} onClose={() => setResetting(null)} />}
-      {editing && <EditUserModal user={editing} onClose={() => setEditing(null)} />}
+      {editing && <EditUserModal user={editing} roleOptions={roleOptions} onClose={() => setEditing(null)} />}
+      {creating && <CreateUserModal roleOptions={roleOptions} onClose={() => setCreating(false)} />}
     </Card>
   );
 }
 
-/** Edit a user's name and email (EO evaluation row 5). Role and active
- *  status stay as the quick controls in the table. */
-function EditUserModal({ user, onClose }: { user: AdminUserRow; onClose: () => void }) {
+const MIN_PASSWORD_LENGTH = 12;
+
+/** Create a user with a temporary password the admin passes on. */
+function CreateUserModal({
+  roleOptions,
+  onClose,
+}: {
+  roleOptions: { value: string; label: string }[];
+  onClose: () => void;
+}) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ name: user.name, email: user.email, reason: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'readonly' });
+  const create = useMutation({
+    mutationFn: () => api.createUser(form),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['admin-users'] });
+      onClose();
+    },
+  });
+  const passwordShort = form.password.length < MIN_PASSWORD_LENGTH;
+
+  return (
+    <Modal opened onClose={onClose} title="New user">
+      <Stack gap="sm">
+        <TextInput
+          label="Name"
+          required
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.currentTarget.value })}
+        />
+        <TextInput
+          label="Email (used to sign in)"
+          type="email"
+          required
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.currentTarget.value })}
+        />
+        <TextInput
+          label="Temporary password"
+          required
+          description={`At least ${MIN_PASSWORD_LENGTH} characters (${form.password.length} so far). Give it to the user; they change it from their account menu.`}
+          error={form.password.length > 0 && passwordShort ? `Needs ${MIN_PASSWORD_LENGTH - form.password.length} more characters` : undefined}
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.currentTarget.value })}
+        />
+        <NativeSelect
+          label="Role"
+          data={roleOptions}
+          value={form.role}
+          onChange={(e) => setForm({ ...form, role: e.currentTarget.value })}
+        />
+        {create.isError && <Alert color="red">{create.error.message}</Alert>}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!form.name.trim() || !form.email.trim() || passwordShort}
+            loading={create.isPending}
+            onClick={() => create.mutate()}
+          >
+            Create user
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+/** Edit a user's name, email, role, and active status (EO evaluation
+ *  rows 5 and 9). Role and active are sent only when changed. */
+function EditUserModal({
+  user,
+  roleOptions,
+  onClose,
+}: {
+  user: AdminUserRow;
+  roleOptions: { value: string; label: string }[];
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    active: user.active,
+    reason: '',
+  });
   const save = useMutation({
-    mutationFn: () => api.updateUser(user.id, form),
+    mutationFn: () =>
+      api.updateUser(user.id, {
+        name: form.name,
+        email: form.email,
+        ...(form.role !== user.role ? { role: form.role } : {}),
+        ...(form.active !== user.active ? { active: form.active } : {}),
+        reason: form.reason,
+      }),
     onSuccess: async () => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['admin-users'] }),
+        qc.invalidateQueries({ queryKey: ['admin-roles'] }),
         qc.invalidateQueries({ queryKey: ['me'] }),
       ]);
       onClose();
@@ -761,6 +799,17 @@ function EditUserModal({ user, onClose }: { user: AdminUserRow; onClose: () => v
           type="email"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.currentTarget.value })}
+        />
+        <NativeSelect
+          label="Role"
+          data={roleOptions.length ? roleOptions : [{ value: user.role, label: user.roleName }]}
+          value={form.role}
+          onChange={(e) => setForm({ ...form, role: e.currentTarget.value })}
+        />
+        <Checkbox
+          label="Active (inactive users cannot sign in)"
+          checked={form.active}
+          onChange={(e) => setForm({ ...form, active: e.currentTarget.checked })}
         />
         <TextInput
           label="Reason (required)"
@@ -786,7 +835,7 @@ function EditUserModal({ user, onClose }: { user: AdminUserRow; onClose: () => v
 }
 
 /** Admin password reset (EO evaluation row 12): sets a temporary password
- *  the admin passes on, and signs the user out everywhere. */
+ *  the admin passes on. The user's sessions stay signed in. */
 function ResetPasswordModal({ user, onClose }: { user: AdminUserRow; onClose: () => void }) {
   const [password, setPassword] = useState('');
   const [reason, setReason] = useState('');
@@ -797,8 +846,8 @@ function ResetPasswordModal({ user, onClose }: { user: AdminUserRow; onClose: ()
       {reset.isSuccess ? (
         <Stack gap="sm">
           <Alert color="green">
-            Password reset. {user.name} has been signed out everywhere; give them the temporary password
-            and ask them to change it from their account menu.
+            Password reset. Give {user.name} the temporary password and ask them to change it from their
+            account menu.
           </Alert>
           <Group justify="flex-end">
             <Button onClick={onClose}>Done</Button>

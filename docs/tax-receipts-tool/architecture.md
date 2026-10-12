@@ -161,7 +161,7 @@ changes their name and email (an email change needs the current password,
 since the email is the sign-in name), and **Change password** needs the
 current password and signs out the user's other sessions. An administrator
 holding `users.administer` can edit any user's name and email and reset a
-password (which signs that user out everywhere) from Admin, Users. User
+password (which leaves that user's sessions signed in) from Admin, Users. User
 creates and edits are change-logged under subject type `User`, never with
 the password hash. Sessions are tied to their user through
 `session.userId` and the passport field in the session data

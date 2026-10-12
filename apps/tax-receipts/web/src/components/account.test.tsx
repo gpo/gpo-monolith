@@ -20,7 +20,7 @@ beforeEach(() => {
       if (String(url).includes('/auth/password')) return passwordResponse();
       if (String(url).includes('/auth/profile')) return jsonResponse({ name: 'Terry T.', email: 'terry@example.org' });
       if (String(url).includes('/admin/users')) {
-        if (init?.method === 'POST') return jsonResponse({ ok: true, sessionsSignedOut: 1 });
+        if (init?.method === 'POST') return jsonResponse({ ok: true });
         if (init?.method === 'PATCH') return jsonResponse({});
         return jsonResponse({
           data: [

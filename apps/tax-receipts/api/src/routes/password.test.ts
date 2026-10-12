@@ -75,18 +75,18 @@ describe('password change and reset (EO evaluation row 12)', () => {
   });
 
   it('also signs out sessions stored before the session userId column was filled in', async () => {
+    const here = (await login('cfo@gpo.test', 'original-pass-phrase'))!;
     const elsewhere = (await login('cfo@gpo.test', 'original-pass-phrase'))!;
     await prisma.session.updateMany({ data: { userId: null } });
-    const admin = (await login('sysadmin@gpo.test', 'sysadmin-pass-phrase'))!;
     const res = await app.inject({
       method: 'POST',
-      url: `/admin/users/${cfoId}/password`,
-      cookies: admin,
-      payload: { newPassword: 'temporary-pass-phrase', reason: 'legacy session check' },
+      url: '/auth/password',
+      cookies: here,
+      payload: { currentPassword: 'original-pass-phrase', newPassword: 'a-brand-new-pass-phrase' },
     });
-    expect(res.json()).toEqual({ ok: true, sessionsSignedOut: 1 });
+    expect(res.json()).toEqual({ ok: true, otherSessionsSignedOut: 1 });
     expect(await signedIn(elsewhere)).toBe(false);
-    expect(await signedIn(admin)).toBe(true);
+    expect(await signedIn(here)).toBe(true);
   });
 
   it('refuses a wrong current password, a short new one, and an unchanged one', async () => {
@@ -111,8 +111,8 @@ describe('password change and reset (EO evaluation row 12)', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('an admin resets a password, signing out all of that user\'s sessions', async () => {
-    const victimSession = (await login('cfo@gpo.test', 'original-pass-phrase'))!;
+  it('an admin resets a password, leaving that user\'s sessions signed in', async () => {
+    const userSession = (await login('cfo@gpo.test', 'original-pass-phrase'))!;
     const admin = (await login('sysadmin@gpo.test', 'sysadmin-pass-phrase'))!;
     const res = await app.inject({
       method: 'POST',
@@ -121,8 +121,8 @@ describe('password change and reset (EO evaluation row 12)', () => {
       payload: { newPassword: 'temporary-pass-phrase', reason: 'forgot password, ticket 42' },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, sessionsSignedOut: 1 });
-    expect(await signedIn(victimSession)).toBe(false);
+    expect(res.json()).toEqual({ ok: true });
+    expect(await signedIn(userSession)).toBe(true);
     expect(await login('cfo@gpo.test', 'temporary-pass-phrase')).not.toBeNull();
 
     const entry = await prisma.changeLogEntry.findFirstOrThrow({ where: { subjectType: 'User', subjectId: cfoId } });

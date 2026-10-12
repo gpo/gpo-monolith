@@ -6,7 +6,6 @@ import type { AppAbility } from '../auth/abilities.js';
 import { hashPassword } from '../auth/password.js';
 import { LOCKED_ROLE_KEYS, PERMISSION_KEYS, PERMISSIONS } from '../auth/permissions.js';
 import { roleKeyFromName } from '../auth/roles.js';
-import { sessionsOfUser } from '../auth/session-store.js';
 import { withChangeLog } from '../changelog/write.js';
 import { listOutstandingDonorPrechecks } from '../donors/precheck.js';
 import {
@@ -567,7 +566,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Admin password reset (EO evaluation row 12): for a user who has
-  // forgotten theirs. Signs out every session the user has, and is
+  // forgotten theirs. Leaves the user's sessions alone, and is
   // change-logged with the admin as actor and their reason.
   r.route({
     method: 'POST',
@@ -587,17 +586,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: 'user not found' });
       }
       const passwordHash = await hashPassword(request.body.newPassword);
-      const signedOut = await withChangeLog(
-        app.prisma,
-        { userId: auth.user.id, reason: request.body.reason },
-        async (ctx) => {
-          await ctx.tx.user.update({ where: { id }, data: { passwordHash } });
-          const { count } = await ctx.tx.session.deleteMany({ where: sessionsOfUser(id) });
-          await ctx.log({ subjectType: 'User', subjectId: id, after: { passwordReset: true, sessionsSignedOut: count } });
-          return count;
-        },
-      );
-      return reply.send({ ok: true, sessionsSignedOut: signedOut });
+      await withChangeLog(app.prisma, { userId: auth.user.id, reason: request.body.reason }, async (ctx) => {
+        await ctx.tx.user.update({ where: { id }, data: { passwordHash } });
+        await ctx.log({ subjectType: 'User', subjectId: id, after: { passwordReset: true } });
+      });
+      return reply.send({ ok: true });
     },
   });
 

@@ -704,7 +704,7 @@ function DeliverStep(props: {
                           />
                           <Button
                             size="xs"
-                            variant="light"
+                            variant="subtle"
                             onClick={() => markMailed.mutate(b.id)}
                             loading={markMailed.isPending && markMailed.variables === b.id}
                             disabled={!canDeliver || reason.trim().length < 3}

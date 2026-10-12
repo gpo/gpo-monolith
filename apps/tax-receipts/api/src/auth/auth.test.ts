@@ -61,6 +61,23 @@ describe('auth + authorization (ticket 0.5)', () => {
     });
   });
 
+  it('signs a user out: the old cookie no longer authenticates', async () => {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'cfo@gpo.test', password: 'correct-horse-battery' },
+    });
+    const cookie = login.cookies[0]!;
+    const cookies = { [cookie.name]: cookie.value };
+
+    const logout = await app.inject({ method: 'POST', url: '/auth/logout', cookies });
+    expect(logout.json()).toEqual({ ok: true });
+
+    const me = await app.inject({ method: 'GET', url: '/auth/me', cookies });
+    expect(me.statusCode).toBe(401);
+    expect(await prisma.session.count()).toBe(0);
+  });
+
   it('rejects a bad password', async () => {
     const login = await app.inject({
       method: 'POST',
