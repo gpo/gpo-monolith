@@ -17,8 +17,11 @@ import type { EntityKind, ReceivedBy } from '../enums.js';
  *  - **riding_number**: subspace-based derivation is blocked (B3: no
  *    confirmed `group_id` -> riding convention). Source-code parsing (rule
  *    A7) is NOT blocked, so a directed online source code (`TSF.W.007`)
- *    still resolves a riding; only an undirected code (subspace CFO entry,
- *    or a general/party code) falls back to null, flagged.
+ *    still resolves a riding; an undirected code (subspace CFO entry, or a
+ *    general/party code) falls back to null, unflagged: null is the correct
+ *    riding for the PARTY default below (rule A2), and the possibility that
+ *    this is really a riding-scoped CA/CAMPAIGN contribution is already
+ *    covered by the entity_kind flag.
  *  - **entity_kind**: no unblocked source exists at all (B8: no
  *    "directed-to" field or `code_campaign` convention yet), and D6 forbids
  *    deriving it from the space regardless. Always PARTY, flagged.
@@ -31,7 +34,7 @@ import type { EntityKind, ReceivedBy } from '../enums.js';
  */
 
 export interface IntakeFlag {
-  field: 'period_id' | 'riding_number' | 'entity_kind' | 'received_by';
+  field: 'period_id' | 'entity_kind' | 'received_by';
   reason: string;
 }
 
@@ -62,20 +65,8 @@ export interface IntakeDefaultsResult {
 export function deriveIntakeDefaults(input: IntakeDefaultsInput): IntakeDefaultsResult {
   const flags: IntakeFlag[] = [];
 
-  const ridingFromSourceCode = parseRidingFromSourceCode(input.codeCampaign);
-  let ridingNumber: number | null;
-  if (input.ridingNumber != null) {
-    ridingNumber = input.ridingNumber;
-  } else if (ridingFromSourceCode != null) {
-    ridingNumber = ridingFromSourceCode;
-  } else {
-    ridingNumber = null;
-    flags.push({
-      field: 'riding_number',
-      reason:
-        'not derivable: the source code has no directed riding segment (rule A7), and subspace-based derivation is blocked pending B3',
-    });
-  }
+  const ridingNumber: number | null =
+    input.ridingNumber ?? parseRidingFromSourceCode(input.codeCampaign);
 
   const entityKind: EntityKind = 'PARTY';
   flags.push({
@@ -132,7 +123,6 @@ export function deriveIntakeDefaults(input: IntakeDefaultsInput): IntakeDefaults
     non_deductible_cents: 0,
     processed_date: null,
     source_code: input.codeCampaign ?? '',
-    eo_contributor_id: null,
     exception_reason: null,
     external_ref: input.externalRef,
   };

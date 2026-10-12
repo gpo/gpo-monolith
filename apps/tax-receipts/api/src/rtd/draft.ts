@@ -88,10 +88,8 @@ export interface RtdDraftEntry extends RtdDraftRowWithClock {
   contactLastName: string;
   /** Contribution.periodId (rule A1's derivation, ticket 1.6). */
   periodId: number;
-  /** Contribution.eoContributorId. Null in the common case — no
-   *  ticket assigns it yet (open-questions.md O38); emitted as null rather
-   *  than fabricated. */
-  eoContributorId: string | null;
+  /** the contributor's Contact.contributorId: EO's `Contributor ID`. */
+  eoContributorId: string;
   /** Open RTD-gate findings on this contribution (see `RTD_GATE_RULE_REFS`).
    *  Non-blocking here — screen 9 shows these alongside the row rather than
    *  hiding it (screens.md screen 9); whatever ticket actually emits the
@@ -174,7 +172,7 @@ export async function buildRtdDraft(prisma: PrismaClient, input: RtdDraftInput):
       contactFirstName: source.contact.firstName ?? '',
       contactLastName: source.contact.lastName ?? source.contact.name,
       periodId,
-      eoContributorId: source.eoContributorId,
+      eoContributorId: source.contact.contributorId,
       gateFindings: gateFindings.get(row.contributionId) ?? [],
     };
   });

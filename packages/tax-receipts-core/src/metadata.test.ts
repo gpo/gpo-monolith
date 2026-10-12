@@ -15,7 +15,6 @@ const descriptive: GpoMetadataDescriptive = {
   non_deductible_cents: 0,
   processed_date: null,
   source_code: 'NC.W.DON.DBK.BTN50',
-  eo_contributor_id: null,
   exception_reason: null,
   external_ref: 'ch_3PqK',
 };

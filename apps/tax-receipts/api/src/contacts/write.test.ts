@@ -43,6 +43,8 @@ describe('contact writes (D13)', () => {
         email: 'ada@example.org',
         contributorType: 'INDIVIDUAL',
       });
+      // a tool-owned contact's EO contributor id: `T` plus a sequence number
+      expect(contact.contributorId).toMatch(/^T\d{1,9}$/);
       expect(contact.addresses).toEqual([
         { housenumber: '12', street: 'Queen St', city: 'Guelph', state: 'ON', postalcode: 'N1H 1A1', country: 'CA' },
       ]);
@@ -145,6 +147,8 @@ describe('contact writes (D13)', () => {
       const contact = await createContact({ prisma, qomon }, { actorUserId, reason: 'new donor by phone', contact: ADA });
 
       expect(contact.qomonContactId).not.toBeNull();
+      // a Qomon contact's EO contributor id is its Qomon id
+      expect(contact.contributorId).toBe(String(contact.qomonContactId));
       const inQomon = await qomon.getContact(Number(contact.qomonContactId));
       expect(inQomon).toMatchObject({ firstname: 'Ada', surname: 'Lovelace', mail: 'ada@example.org' });
       expect(inQomon.address).toMatchObject({ street: 'Queen St', postalcode: 'N1H 1A1' });
@@ -207,6 +211,23 @@ describe('contact writes (D13)', () => {
     await expect(prisma.contact.create({ data: { name: 'Sneaky' } })).rejects.toThrow(/invariant 5/);
     const c = await fixtureContact(prisma, { data: { name: 'Dana' } });
     await expect(prisma.contact.update({ where: { id: c.id }, data: { name: 'Dana X' } })).rejects.toThrow(/invariant 5/);
+  });
+
+  it('the database assigns a unique contributor id at insert and never changes it', async () => {
+    const tool = await fixtureContact(prisma, { data: { name: 'Tess' } });
+    const other = await fixtureContact(prisma, { data: { name: 'Toby' } });
+    const qomon = await fixtureContact(prisma, { data: { name: 'Quinn', qomonContactId: 12515n } });
+    expect(tool.contributorId).toMatch(/^T\d+$/);
+    expect(other.contributorId).not.toBe(tool.contributorId);
+    expect(qomon.contributorId).toBe('12515');
+
+    await expect(
+      fixtureWrite(prisma, (tx) => tx.contact.update({ where: { id: tool.id }, data: { contributorId: 'X1' } })),
+    ).rejects.toThrow(/never changed/);
+    // EO allows at most 10 characters
+    await expect(fixtureContact(prisma, { data: { name: 'Huge', qomonContactId: 12_345_678_901n } })).rejects.toThrow(
+      /10 characters/,
+    );
   });
 
   it('the database refuses to hard-delete a contact (invariant 4)', async () => {

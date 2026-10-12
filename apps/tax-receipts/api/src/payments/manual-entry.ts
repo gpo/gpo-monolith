@@ -146,7 +146,6 @@ async function resolveDescriptive(
           non_deductible_cents: 0,
           processed_date: null,
           source_code: '',
-          eo_contributor_id: null,
           exception_reason: null,
           external_ref: input.externalRef,
         }

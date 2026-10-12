@@ -4,7 +4,14 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withChangeLog } from '../changelog/write.js';
 import type { EntityKind } from '../generated/prisma/index.js';
-import { makeContribution, issueReceipt as fixtureIssueReceipt, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import {
+  fixtureContactUpdate,
+  makeContribution,
+  issueReceipt as fixtureIssueReceipt,
+  resetDb,
+  seedBaseline,
+  testPrisma,
+} from '../test/db.js';
 import { generateAllReport } from './all-report.js';
 import { checkEntityReportDrift, listEntityReports, markEntityReportSentToCfo } from './entity-reports.js';
 
@@ -28,7 +35,7 @@ describe('entity reports: listing, drift, send-to-CFO (ticket 4.5)', () => {
     await rm(storageDir, { recursive: true, force: true });
   });
 
-  async function seedReportableReceipt(opts: { amountCents?: number; eoContributorId?: string | null } = {}) {
+  async function seedReportableReceipt(opts: { amountCents?: number } = {}) {
     const amountCents = opts.amountCents ?? 5_000;
     const { contactId, contributionId } = await makeContribution(prisma, {
       qomonContactId: nextContactId++,
@@ -42,7 +49,6 @@ describe('entity reports: listing, drift, send-to-CFO (ticket 4.5)', () => {
           periodId: baseline.periodId,
           entityKind: 'PARTY',
           receivedBy: 'GPO',
-          eoContributorId: opts.eoContributorId ?? null,
         } });
       await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
     });
@@ -91,14 +97,10 @@ describe('entity reports: listing, drift, send-to-CFO (ticket 4.5)', () => {
       },
     );
 
-    // Simulate the "year-later auditor" case: eoContributorId assigned after
-    // the report already went out.
-    const allocation = await prisma.receiptAllocation.findFirstOrThrow({ where: { receiptId } });
-    const contributionId = allocation.contributionId;
-    await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'assign contributor id' }, async (ctx) => {
-      const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: { eoContributorId: '198176' } });
-      await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
-    });
+    // Simulate the "year-later auditor" case: the donor's surname corrected
+    // after the report already went out.
+    const receipt = await prisma.receipt.findUniqueOrThrow({ where: { id: receiptId } });
+    await fixtureContactUpdate(prisma, { where: { id: receipt.contactId }, data: { lastName: 'Donnor' } });
 
     const list = await listEntityReports(prisma, baseline.periodId);
     expect(list[0]!.dirty).toBe(true);
@@ -112,7 +114,7 @@ describe('entity reports: listing, drift, send-to-CFO (ticket 4.5)', () => {
     });
     expect(drift.status).toBe('dirty');
     expect(drift.diff?.changed).toHaveLength(1);
-    expect(drift.diff?.changed[0]!.fields.map((f) => f.field)).toContain('Contributor_ID');
+    expect(drift.diff?.changed[0]!.fields.map((f) => f.field)).toContain('Contributor_Last_Name');
   });
 
   it('does not flag a report dirty when nothing about its included rows changed', async () => {

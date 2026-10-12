@@ -74,13 +74,13 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
     });
 
     // one intake-flag work item per ticket-1.6 field the stub couldn't derive
-    // (period_id resolved fine, so it's absent here)
+    // (period_id resolved fine, and a null riding is correct for the PARTY
+    // default, so neither is flagged)
     const workItems = await prisma.workItem.findMany();
-    expect(workItems).toHaveLength(3);
+    expect(workItems).toHaveLength(2);
     expect(workItems.map((w) => w.ruleRef).sort()).toEqual([
       'INTAKE:entity_kind',
       'INTAKE:received_by',
-      'INTAKE:riding_number',
     ]);
     expect(workItems.every((w) => w.kind === 'VALIDATION' && w.status === 'OPEN')).toBe(true);
 
@@ -154,7 +154,6 @@ describe('Qomon import sweep (ticket 1.1, D12, data-model §5)', () => {
       'INTAKE:entity_kind',
       'INTAKE:period_id',
       'INTAKE:received_by',
-      'INTAKE:riding_number',
     ]);
   });
 

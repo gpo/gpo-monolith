@@ -333,7 +333,7 @@ async function issueForLines(
     eligibleAmountCents: amountCents,
     isGoodsServices: printed.goodsServices,
     politicalEntityLabel: await receiptEntityLabel(prisma, primary, input.politicalEntityLabel),
-    eoContributorId: printed.eoContributorId,
+    eoContributorId: contact.contributorId,
     contributorName: contact.name,
     addressLine1,
     addressLine2: null,

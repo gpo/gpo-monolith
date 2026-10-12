@@ -15,8 +15,12 @@ receipts and go to EO, so they must be right.
 **Contributors** has a search box: type at least two letters of a name or
 email. Open a contributor to see:
 
-- **Details**: name, email, address, and contributor type (always
-  Individual: Ontario accepts contributions from individuals only).
+- **Details**: name, email, address, contributor type (always
+  Individual: Ontario accepts contributions from individuals only), and
+  contributor id. The contributor id is what the RTD, ALL, and S2P2 files
+  and the receipt carry as EO's `Contributor ID`. It is set when the
+  contributor is added and never changes: their Qomon contact id, or, for a
+  contributor kept only in the tool, `T` and a number.
 - **Contributions**: everything they have given, with period, entity,
   amount, status, and what is left to receipt. With *Issue receipts*, tick
   two or more to issue one receipt for all of them (see

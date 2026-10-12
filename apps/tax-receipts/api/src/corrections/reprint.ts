@@ -106,6 +106,7 @@ export async function reprintReceipt(deps: ArtifactStoreDeps, input: ReprintInpu
     where: { id: input.receiptId },
     include: {
       addressSnapshot: true,
+      contact: { select: { contributorId: true } },
       allocations: { include: { contribution: true }, orderBy: { id: 'asc' } },
     },
   });
@@ -151,7 +152,7 @@ export async function reprintReceipt(deps: ArtifactStoreDeps, input: ReprintInpu
     eligibleAmountCents: receipt.allocations.reduce((sum, a) => sum + a.amountCents, 0),
     isGoodsServices: printed.goodsServices,
     politicalEntityLabel: await receiptEntityLabel(prisma, primary, input.politicalEntityLabel),
-    eoContributorId: printed.eoContributorId,
+    eoContributorId: receipt.contact.contributorId,
     contributorName,
     addressLine1: snapshot.line1,
     addressLine2: snapshot.line2,

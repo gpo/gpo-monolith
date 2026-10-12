@@ -20,6 +20,8 @@ export interface ContributionDetail {
     email: string | null;
     address: FormattedAddress | null;
     contributorType: string;
+    /** the contributor id on EO filings (Contact.contributorId) */
+    contributorId: string;
     /** null for a tool-owned contact (D13) */
     qomonContactId: string | null;
   };
@@ -78,7 +80,6 @@ export interface ContributionDetail {
     nonDeductibleCents: number;
     processedDate: string | null;
     sourceCode: string;
-    eoContributorId: string | null;
     exceptionReason: string | null;
   } | null;
   allocations: Array<{
@@ -192,6 +193,7 @@ export async function getContributionDetail(
       email: row.contact.email,
       address: formatAddress(row.contact.addresses),
       contributorType: row.contact.contributorType,
+      contributorId: row.contact.contributorId,
       qomonContactId: row.contact.qomonContactId === null ? null : String(row.contact.qomonContactId),
     },
     amountCents: row.amountCents,
@@ -255,7 +257,6 @@ export async function getContributionDetail(
             nonDeductibleCents: row.nonDeductibleCents,
             processedDate: row.processedDate ? row.processedDate.toISOString() : null,
             sourceCode: row.sourceCode,
-            eoContributorId: row.eoContributorId,
             exceptionReason: row.exceptionReason,
           }
         : null,

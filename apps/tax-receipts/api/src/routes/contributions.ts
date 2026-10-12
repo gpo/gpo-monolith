@@ -125,7 +125,6 @@ export async function contributionRoutes(
         nonDeductibleCents: z.number().int().min(0).optional(),
         processedDate: z.string().date().nullable().optional(),
         sourceCode: z.string().optional(),
-        eoContributorId: z.string().nullable().optional(),
         exceptionReason: z.string().nullable().optional(),
         externalRef: z.string().nullable().optional(),
       })
@@ -166,7 +165,6 @@ export async function contributionRoutes(
     nonDeductibleCents: z.number().int().min(0),
     processedDate: z.string().date().nullable(),
     sourceCode: z.string(),
-    eoContributorId: z.string().nullable(),
     exceptionReason: z.string().nullable(),
     externalRef: z.string().nullable(),
   });
@@ -196,7 +194,6 @@ export async function contributionRoutes(
         non_deductible_cents: d.nonDeductibleCents,
         processed_date: d.processedDate,
         source_code: d.sourceCode,
-        eo_contributor_id: d.eoContributorId,
         exception_reason: d.exceptionReason,
         external_ref: d.externalRef,
       };

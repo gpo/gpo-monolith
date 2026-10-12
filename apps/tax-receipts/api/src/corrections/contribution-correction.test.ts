@@ -58,7 +58,7 @@ describe('contribution correction engine (corrections.md actions 4, 5, 6, 8, 9, 
   /** a contribution with intake metadata, optionally receipted */
   async function seedContribution(
     contactId: string,
-    opts: { amountCents?: number; receipted?: boolean; nonDeductibleCents?: number; eoContributorId?: string } = {},
+    opts: { amountCents?: number; receipted?: boolean; nonDeductibleCents?: number } = {},
   ) {
     const contribution = await createTestContribution(prisma, {
       qomonTransactionId: BigInt(nextTransactionId++),
@@ -74,7 +74,6 @@ describe('contribution correction engine (corrections.md actions 4, 5, 6, 8, 9, 
           entityKind: 'PARTY',
           receivedBy: 'GPO',
           nonDeductibleCents: opts.nonDeductibleCents ?? 0,
-          eoContributorId: opts.eoContributorId ?? null,
         },
       });
       await ctx.log({ subjectType: 'Contribution', subjectId: contribution.id, after });
@@ -390,7 +389,6 @@ describe('contribution correction engine (corrections.md actions 4, 5, 6, 8, 9, 
       const { contribution, receiptId } = await seedContribution(dana.id, {
         amountCents: 10_000,
         receipted: true,
-        eoContributorId: 'EO-111',
       });
 
       const input = await moveContributions(prisma, { ...common(), contributionIds: [contribution.id], toContactId: robin.id });
@@ -409,8 +407,6 @@ describe('contribution correction engine (corrections.md actions 4, 5, 6, 8, 9, 
       // the payer of record does not change with the attribution
       const payment = await prisma.payment.findUniqueOrThrow({ where: { id: contribution.paymentId } });
       expect(payment.contactId).toBe(dana.id);
-      // an EO contributor id belongs to the donor it was assigned to
-      expect(moved.eoContributorId).toBeNull();
     });
 
     it('moves an unreceipted contribution without touching any receipt', async () => {

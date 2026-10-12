@@ -82,7 +82,7 @@ export interface CorrectionCascadePreview {
 }
 
 type ReceiptForCorrection = Receipt & {
-  contact: { id: string; name: string; qomonContactId: bigint; addresses: unknown };
+  contact: { id: string; name: string; qomonContactId: bigint; contributorId: string; addresses: unknown };
   pdfArtifact: { uri: string } | null;
   allocations: {
     id: string;
@@ -405,7 +405,7 @@ export async function reissueReceipt(
     eligibleAmountCents: created.totalAmountCents,
     isGoodsServices: printed.goodsServices,
     politicalEntityLabel: await receiptEntityLabel(deps.prisma, primary, input.politicalEntityLabel),
-    eoContributorId: printed.eoContributorId,
+    eoContributorId: receipt.contact.contributorId,
     contributorName: receipt.contactNameSnapshot,
     replacesReceiptNumber: receipt.receiptNumber,
     addressLine1,

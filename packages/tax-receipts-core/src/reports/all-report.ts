@@ -115,12 +115,9 @@ export interface AllReportSourceRow {
   acceptedAt: Date;
   goodsServices: boolean;
   receivedBy: ReceivedBy;
-  /** Contribution.eoContributorId. Null in the common case today —
-   *  no ticket populates it yet (data-model.md §3 marks it optional); emitted
-   *  as an empty field rather than fabricated. EO's spec calls this
-   *  mandatory for GPO (eo-reporting.md §1), so a report with blank
-   *  Contributor_ID values is not yet fully spec-compliant — tracked as a
-   *  gap, not silently worked around. */
+  /** the contributor's Contact.contributorId, mandatory for GPO
+   *  (eo-reporting.md §1) and assigned to every contact at insert. Emitted
+   *  as an empty field if null rather than fabricated. */
   eoContributorId: string | null;
   /** from Contact.lastName/firstName (ticket 4.1's schema addition) —
    *  Qomon's own name split, not a heuristic parse of the joined display

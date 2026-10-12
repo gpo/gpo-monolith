@@ -7,8 +7,8 @@ import { EntityKind, ReceivedBy } from './enums.js';
  * Six of these round-trip through Qomon's `extra_json` custom fields on the
  * transaction (see @gpo/qomon-client's transaction-extra-fields.ts for the
  * mapping and which six); the rest — `leadership_contestant_id`,
- * `received_by`, `eo_contributor_id`, `exception_reason`,
- * `non_deductible_cents`, `external_ref` — have no Qomon
+ * `received_by`, `exception_reason`, `non_deductible_cents`,
+ * `external_ref` — have no Qomon
  * counterpart and are tool-local only, cached here regardless so the whole
  * object stays the unit of local storage, editing, and checksumming.
  */
@@ -25,7 +25,6 @@ export const GpoMetadataDescriptive = z.object({
   non_deductible_cents: z.number().int().min(0),
   processed_date: z.string().date().nullable(),
   source_code: z.string(),
-  eo_contributor_id: z.string().nullable(),
   exception_reason: z.string().nullable(),
   external_ref: z.string().nullable(),
 });
@@ -43,7 +42,6 @@ const DESCRIPTIVE_KEYS: (keyof GpoMetadataDescriptive)[] = [
   'non_deductible_cents',
   'processed_date',
   'source_code',
-  'eo_contributor_id',
   'exception_reason',
   'external_ref',
 ];

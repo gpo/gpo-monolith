@@ -509,7 +509,6 @@ function mergeSyncedWithLocalDefaults(
     leadership_contestant_id: null,
     received_by: 'GPO',
     non_deductible_cents: 0,
-    eo_contributor_id: null,
     exception_reason: null,
     external_ref: externalRef,
   };

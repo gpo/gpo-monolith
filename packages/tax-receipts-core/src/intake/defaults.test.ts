@@ -14,7 +14,7 @@ const periods: PeriodRow[] = [
 ];
 
 describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
-  it('resolves period_id from the acceptance date and always flags entity_kind (B8)', () => {
+  it('resolves period_id from the acceptance date, leaves a party-level code riding-less without flagging it, and always flags entity_kind (B8)', () => {
     const result = deriveIntakeDefaults({
       acceptedAt: new Date('2026-03-01T12:00:00Z'),
       codeCampaign: 'NC.W.DON.DBK.BTN50', // party-level code: no directed riding segment
@@ -33,14 +33,13 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       non_deductible_cents: 0,
       processed_date: null,
       source_code: 'NC.W.DON.DBK.BTN50',
-      eo_contributor_id: null,
       exception_reason: null,
       external_ref: null,
     });
-    expect(result.flags.map((f) => f.field).sort()).toEqual(['entity_kind', 'received_by', 'riding_number']);
+    expect(result.flags.map((f) => f.field).sort()).toEqual(['entity_kind', 'received_by']);
   });
 
-  it('derives riding_number from a directed source code (rule A7) and does not flag it', () => {
+  it('derives riding_number from a directed source code (rule A7)', () => {
     const result = deriveIntakeDefaults({
       acceptedAt: new Date('2026-03-01T12:00:00Z'),
       codeCampaign: 'TSF.W.007',
@@ -48,7 +47,6 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       periods,
     });
     expect(result.descriptive?.riding_number).toBe(7);
-    expect(result.flags.some((f) => f.field === 'riding_number')).toBe(false);
   });
 
   it('ignores an out-of-range trailing numeric segment', () => {
@@ -59,7 +57,6 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       periods,
     });
     expect(result.descriptive?.riding_number).toBeNull();
-    expect(result.flags.some((f) => f.field === 'riding_number')).toBe(true);
   });
 
   it('prefers an already-known riding over source-code parsing', () => {

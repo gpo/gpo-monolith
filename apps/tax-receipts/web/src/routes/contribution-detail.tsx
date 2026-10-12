@@ -197,7 +197,6 @@ export function ContributionDetailPage({ id }: { id: string }) {
           nonDeductibleCents: detail.metadata.nonDeductibleCents,
           processedDate: detail.metadata.processedDate,
           sourceCode: detail.metadata.sourceCode,
-          eoContributorId: detail.metadata.eoContributorId,
           exceptionReason: detail.metadata.exceptionReason,
           // external_ref lives on the payment (data-model §2, D12), not on
           // ContributionMetadata
@@ -391,7 +390,9 @@ export function ContributionDetailPage({ id }: { id: string }) {
               ? `${detail.contact.address.line1}, ${detail.contact.address.city} ${detail.contact.address.province} ${detail.contact.address.postalCode}, ${detail.contact.address.country}`
               : 'none — a receipt cannot be issued until this donor has an address on file'}
           </Text>
-          <Text size="sm">Contributor type: Individual</Text>
+          <Text size="sm">
+            Contributor type: Individual · Contributor id: {detail.contact.contributorId}
+          </Text>
           {detail.metadata && (
             <Group gap="xs">
               <Text size="sm">Directed to: {describeRecipient(detail.metadata)}</Text>

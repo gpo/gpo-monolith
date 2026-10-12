@@ -26,7 +26,7 @@ describe('RTD filing prepare, DB-backed (redesigned from tickets 2.3/2.6)', () =
     await rm(storageDir, { recursive: true, force: true });
   });
 
-  async function seedMetadata(contributionId: string, eoContributorId: string | null = null) {
+  async function seedMetadata(contributionId: string) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
       const after = await ctx.tx.contribution.update({ where: { id: contributionId }, data: {
           periodId: baseline.periodId,
@@ -34,7 +34,6 @@ describe('RTD filing prepare, DB-backed (redesigned from tickets 2.3/2.6)', () =
           ridingNumber: null,
           receivedBy: 'GPO',
           goodsServices: false,
-          eoContributorId,
         } });
       await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
@@ -48,7 +47,6 @@ describe('RTD filing prepare, DB-backed (redesigned from tickets 2.3/2.6)', () =
     acceptedAt?: Date;
     lastName?: string;
     firstName?: string;
-    eoContributorId?: string | null;
   } = {}) {
     const made = await makeContribution(prisma, {
       qomonContactId: nextContactId++,
@@ -58,7 +56,7 @@ describe('RTD filing prepare, DB-backed (redesigned from tickets 2.3/2.6)', () =
       contactFirstName: opts.firstName ?? 'Dana',
       contactLastName: opts.lastName ?? 'Donor',
     });
-    await seedMetadata(made.contributionId, opts.eoContributorId ?? null);
+    await seedMetadata(made.contributionId);
     return made;
   }
 
@@ -104,7 +102,7 @@ describe('RTD filing prepare, DB-backed (redesigned from tickets 2.3/2.6)', () =
     expect(entry?.reason).toBe('first RTD filing');
   });
 
-  it('renders the exact header and row content, with the CFO name and blank Contributor ID', async () => {
+  it("renders the exact header and row content, with the CFO name and the contact's contributor id", async () => {
     const a = await seedDraftCandidate({ amountCents: 20_001, lastName: 'Donor', firstName: 'Dana' });
     const result = await prepareRtdFiling(
       { prisma, storageDir },
@@ -124,7 +122,8 @@ describe('RTD filing prepare, DB-backed (redesigned from tickets 2.3/2.6)', () =
       'Entity ID,CFO Name,Contribution Year,Contribution Period ID,Contributor Last Name,' +
         'Contributor First Name,Deposit Date,Contribution Amount,Aggregate Contribution Amount,Contributor ID',
     );
-    expect(lines[1]).toBe('8,Casey CFO,2026,67,Donor,Dana,03012026,200.01,200.01,');
+    // the contact's Qomon id (1) is its contributor id
+    expect(lines[1]).toBe('8,Casey CFO,2026,67,Donor,Dana,03012026,200.01,200.01,1');
   });
 
   it('orders rows chronologically by acceptance date regardless of selection order', async () => {
