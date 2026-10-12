@@ -27,7 +27,6 @@ export async function contributionRoutes(
   const ContributionListQuery = z.object({
     periodId: z.coerce.number().int().optional(),
     ridingNumber: z.coerce.number().int().min(1).max(124).optional(),
-    partyLevelOnly: z.enum(['true', 'false']).optional(),
     entityKind: EntityKind.optional(),
     receivedBy: ReceivedBy.optional(),
     agency: z.enum(['true', 'false']).optional(),
@@ -55,7 +54,7 @@ export async function contributionRoutes(
       const page = await listContributions(app.prisma, {
         filters: {
           periodId: q.periodId,
-          ridingNumber: q.partyLevelOnly === 'true' ? null : q.ridingNumber,
+          ridingNumber: q.ridingNumber,
           entityKind: q.entityKind,
           receivedBy: q.receivedBy,
           agency: q.agency === undefined ? undefined : q.agency === 'true',

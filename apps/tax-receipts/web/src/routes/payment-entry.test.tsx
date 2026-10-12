@@ -102,12 +102,21 @@ test('the Add payment button is hidden from someone who cannot enter payments', 
   expect(screen.queryByRole('link', { name: 'Add payment' })).not.toBeInTheDocument();
 });
 
+test('names the reference field for the method, and hides it where there is nothing to enter', async () => {
+  renderAt('/payments/new');
+  expect(await screen.findByLabelText('Cheque number')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'CARD' } });
+  expect(screen.getByLabelText('Processor transaction ID')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'CASH' } });
+  expect(screen.queryByLabelText(/Cheque number|Processor transaction ID|reference/i)).not.toBeInTheDocument();
+});
+
 test('records a payment with one contribution covering it, sending only what the operator chose', async () => {
   renderAt('/payments/new');
   await pickDonor('Donor who paid', 'dana', 'Dana Donor');
   fireEvent.change(screen.getByLabelText('Amount ($)', { selector: 'input:not(:disabled)' }), { target: { value: '100' } });
   fireEvent.change(screen.getByLabelText('Received on'), { target: { value: '2026-04-10' } });
-  fireEvent.change(screen.getByLabelText('Cheque number or processor reference'), { target: { value: 'cheque-1042' } });
+  fireEvent.change(screen.getByLabelText('Cheque number'), { target: { value: 'cheque-1042' } });
   fireEvent.change(screen.getByLabelText('Reason (required)'), { target: { value: 'cheque at the office' } });
 
   // what the derivation will do is shown before anything is saved
@@ -191,8 +200,22 @@ test('a CA contribution needs its riding', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Save payment' }));
   expect(await screen.findByText('A CA or campaign contribution needs its riding number.')).toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText('Riding (1 to 124)'), { target: { value: '12' } });
-  expect(await screen.findByText('Brampton West')).toBeInTheDocument();
+  // the riding picker matches by name as well as by number
+  await pickDonor('Riding', 'brampton', '12 · Brampton West');
+  fireEvent.click(screen.getByRole('button', { name: 'Save payment' }));
+  await waitFor(() => expect(body((c) => c.url.endsWith('/payments') && c.method === 'POST')).toBeTruthy());
+  expect(body((c) => c.url.endsWith('/payments') && c.method === 'POST').contributions[0].descriptive).toMatchObject({ entity_kind: 'CA', riding_number: 12 });
+});
+
+test('an unsplit contribution shows the payment amount, and the non-deductible amount waits on goods or services', async () => {
+  renderAt('/payments/new');
+  fireEvent.change(await screen.findByLabelText('Amount ($)', { selector: 'input:not(:disabled)' }), { target: { value: '100' } });
+  expect(screen.getByLabelText('Amount ($)', { selector: 'input:disabled' })).toHaveValue('100');
+
+  const nonDeductible = screen.getByLabelText('Non-deductible ($)');
+  expect(nonDeductible).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Donor received goods or services'));
+  expect(nonDeductible).toBeEnabled();
 });
 
 test('shows the server\'s refusal', async () => {

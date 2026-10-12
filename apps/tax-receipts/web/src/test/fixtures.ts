@@ -20,6 +20,7 @@ export const ME: Me = {
     sendRtdFilings: true,
     fileEOForms: true,
     enterPayments: true,
+    editContributions: true,
     addContacts: true,
     editContacts: true,
     correctContributions: true,

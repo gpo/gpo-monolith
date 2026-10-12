@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Checkbox, Group, NativeSelect, NumberInput, Stack, Text, TextInput } from '@mantine/core';
-import { api, type ContactHit, type ContributionEntryInput, type EntityKindKey } from '../api.js';
+import { Alert, Checkbox, NativeSelect, NumberInput, Stack, Text, TextInput } from '@mantine/core';
+import { api, type ContactHit, type ContributionEntryInput, type EntityKindKey, type PaymentMethodKey } from '../api.js';
 import { ENTITY_KIND_OPTIONS, isRidingScoped } from '../entity-kind.js';
 import { DonorPicker } from './donor-picker.js';
 import { LeadershipContestantSelect } from './leadership-contestant-select.js';
+import { RidingSelect } from './riding-select.js';
 
 /**
  * The fields of one contribution on the entry form (manual entry, D12): who it
@@ -104,7 +105,7 @@ export function ContributionFields({
   row,
   onChange,
   fallbackDate,
-  externalRef,
+  paymentMethod,
   paymentDonorName,
   showDonor = true,
   amountLabel,
@@ -114,7 +115,8 @@ export function ContributionFields({
   onChange: (next: ContributionRow) => void;
   /** the payment's received date, YYYY-MM-DD, used when the row has no date of its own */
   fallbackDate: string;
-  externalRef: string;
+  /** the payment's method; a card or PAD payment is a processor record, which settles received_by */
+  paymentMethod: PaymentMethodKey;
   paymentDonorName: string | null;
   showDonor?: boolean;
   amountLabel: string;
@@ -122,18 +124,17 @@ export function ContributionFields({
   amountDisabled?: boolean;
 }) {
   const periods = useQuery({ queryKey: ['admin-periods'], queryFn: api.listPeriods });
-  const ridings = useQuery({ queryKey: ['admin-ridings'], queryFn: api.listRidings });
 
   const effectiveDate = row.acceptedOn || fallbackDate;
   const riding = !isRidingScoped(row.entityKind) || row.riding === '' ? null : row.riding;
   const preview = useQuery({
-    queryKey: ['intake-preview', effectiveDate, riding, row.sourceCode, externalRef],
+    queryKey: ['intake-preview', effectiveDate, riding, row.sourceCode, paymentMethod],
     queryFn: () =>
       api.intakePreview({
         acceptedAt: dateToInstant(effectiveDate),
         ridingNumber: riding,
         sourceCode: row.sourceCode.trim() || undefined,
-        externalRef: externalRef.trim() || undefined,
+        method: paymentMethod,
       }),
     enabled: /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate),
     retry: false,
@@ -144,111 +145,100 @@ export function ContributionFields({
   const set = (patch: Partial<ContributionRow>) => onChange({ ...row, ...patch });
 
   return (
-    <Stack gap="xs">
-      <Group align="flex-start" grow>
-        {showDonor && (
-          <DonorPicker
-            label={`Donor${paymentDonorName ? ` (blank = ${paymentDonorName})` : ''}`}
-            value={row.donor}
-            onChange={(donor) => set({ donor })}
-          />
-        )}
-        <NumberInput
-          label={amountLabel}
-          min={0.01}
-          decimalScale={2}
-          disabled={amountDisabled}
-          value={row.amount}
-          onChange={(v) => set({ amount: typeof v === 'number' ? v : '' })}
+    <Stack gap="sm">
+      {showDonor && (
+        <DonorPicker
+          label={`Donor${paymentDonorName ? ` (blank = ${paymentDonorName})` : ''}`}
+          value={row.donor}
+          onChange={(donor) => set({ donor })}
         />
-        <NativeSelect
-          label="Recipient"
-          data={ENTITY_KIND_OPTIONS}
-          value={row.entityKind}
-          onChange={(e) =>
-            set({ entityKind: e.currentTarget.value as ContributionRow['entityKind'], riding: '', leadershipContestantId: null })
-          }
+      )}
+      <NumberInput
+        label={amountLabel}
+        min={0.01}
+        decimalScale={2}
+        disabled={amountDisabled}
+        value={row.amount}
+        onChange={(v) => set({ amount: typeof v === 'number' ? v : '' })}
+      />
+      <NativeSelect
+        label="Recipient"
+        data={ENTITY_KIND_OPTIONS}
+        value={row.entityKind}
+        onChange={(e) =>
+          set({ entityKind: e.currentTarget.value as ContributionRow['entityKind'], riding: '', leadershipContestantId: null })
+        }
+      />
+      {row.entityKind === 'LEADERSHIP' ? (
+        <LeadershipContestantSelect
+          value={row.leadershipContestantId}
+          onChange={(leadershipContestantId) => set({ leadershipContestantId })}
         />
-        {row.entityKind === 'LEADERSHIP' ? (
-          <LeadershipContestantSelect
-            value={row.leadershipContestantId}
-            onChange={(leadershipContestantId) => set({ leadershipContestantId })}
-          />
-        ) : (
-          <NumberInput
-            label="Riding (1 to 124)"
-            min={1}
-            max={124}
-            allowDecimal={false}
-            disabled={!isRidingScoped(row.entityKind)}
-            placeholder={!isRidingScoped(row.entityKind) ? 'N/A for the party' : ''}
-            value={row.riding}
-            onChange={(v) => set({ riding: typeof v === 'number' ? v : '' })}
-            description={
-              isRidingScoped(row.entityKind) && typeof row.riding === 'number'
-                ? (ridings.data?.data.find((r) => r.ridingNumber === row.riding)?.name ?? 'not a riding on file')
-                : undefined
-            }
-          />
-        )}
-      </Group>
-      <Group align="flex-start" grow>
-        <NativeSelect
-          label="Period"
-          data={[
-            {
-              value: '',
-              label: derivedId !== undefined ? `Derived from the date: ${periodName(derivedId)}` : 'Derived from the date',
-            },
-            ...(periods.data?.data.map((p) => ({ value: String(p.id), label: p.name })) ?? []),
-          ]}
-          value={row.periodId}
-          onChange={(e) => set({ periodId: e.currentTarget.value })}
+      ) : (
+        <RidingSelect
+          label="Riding"
+          disabled={!isRidingScoped(row.entityKind)}
+          placeholder={!isRidingScoped(row.entityKind) ? 'N/A for the party' : undefined}
+          value={riding}
+          onChange={(v) => set({ riding: v ?? '' })}
         />
-        <TextInput
-          type="date"
-          label="Accepted on"
-          description={`blank = ${fallbackDate || 'the received date'}`}
-          value={row.acceptedOn}
-          onChange={(e) => set({ acceptedOn: e.currentTarget.value })}
-        />
-        <NativeSelect
-          label="Received by"
-          data={[
-            { value: 'GPO', label: 'GPO (party office, central)' },
-            { value: 'ENTITY', label: 'Entity / subspace entry' },
-          ]}
-          value={row.receivedBy}
-          onChange={(e) => set({ receivedBy: e.currentTarget.value as ContributionRow['receivedBy'] })}
-          description={
-            row.receivedBy === 'GPO' && row.entityKind !== 'PARTY'
-              ? 'Agency contribution: GPO received it for another entity'
-              : undefined
-          }
-        />
-        <TextInput
-          label="Source code"
-          placeholder="optional"
-          value={row.sourceCode}
-          onChange={(e) => set({ sourceCode: e.currentTarget.value })}
-        />
-      </Group>
-      <Group align="flex-end" grow>
-        <NumberInput
-          label="Non-deductible ($)"
-          description="e.g. the value of goods or services the donor received"
-          min={0}
-          decimalScale={2}
-          value={row.nonDeductible}
-          onChange={(v) => set({ nonDeductible: typeof v === 'number' ? v : '' })}
-        />
-        <Checkbox
-          label="Donor received goods or services"
-          checked={row.goodsServices}
-          onChange={(e) => set({ goodsServices: e.currentTarget.checked })}
-        />
-        <TextInput label="Note" value={row.note} onChange={(e) => set({ note: e.currentTarget.value })} />
-      </Group>
+      )}
+      <NativeSelect
+        label="Period"
+        data={[
+          {
+            value: '',
+            label: derivedId !== undefined ? `Derived from the date: ${periodName(derivedId)}` : 'Derived from the date',
+          },
+          ...(periods.data?.data.map((p) => ({ value: String(p.id), label: p.name })) ?? []),
+        ]}
+        value={row.periodId}
+        onChange={(e) => set({ periodId: e.currentTarget.value })}
+      />
+      <TextInput
+        type="date"
+        label="Accepted on"
+        description={`blank = ${fallbackDate || 'the received date'}`}
+        value={row.acceptedOn}
+        onChange={(e) => set({ acceptedOn: e.currentTarget.value })}
+      />
+      <NativeSelect
+        label="Received by"
+        data={[
+          { value: 'GPO', label: 'GPO (party office, central)' },
+          { value: 'ENTITY', label: 'Entity / subspace entry' },
+        ]}
+        value={row.receivedBy}
+        onChange={(e) => set({ receivedBy: e.currentTarget.value as ContributionRow['receivedBy'] })}
+        description={
+          row.receivedBy === 'GPO' && row.entityKind !== 'PARTY'
+            ? 'Agency contribution: GPO received it for another entity'
+            : undefined
+        }
+      />
+      <TextInput
+        label="Source code"
+        placeholder="optional"
+        value={row.sourceCode}
+        onChange={(e) => set({ sourceCode: e.currentTarget.value })}
+      />
+      <Checkbox
+        label="Donor received goods or services"
+        checked={row.goodsServices}
+        onChange={(e) =>
+          set(e.currentTarget.checked ? { goodsServices: true } : { goodsServices: false, nonDeductible: '' })
+        }
+      />
+      <NumberInput
+        label="Non-deductible ($)"
+        description="the value of the goods or services the donor received"
+        min={0}
+        decimalScale={2}
+        disabled={!row.goodsServices}
+        value={row.nonDeductible}
+        onChange={(v) => set({ nonDeductible: typeof v === 'number' ? v : '' })}
+      />
+      <TextInput label="Note" value={row.note} onChange={(e) => set({ note: e.currentTarget.value })} />
       {preview.data && preview.data.descriptive === null && row.periodId === '' && (
         <Alert color="orange" py={4}>
           No reporting period covers this date. Choose one, or configure one under Admin first.

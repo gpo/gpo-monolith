@@ -31,6 +31,9 @@ export interface ContributionDetail {
   /** the money event behind this contribution (D12) */
   payment: {
     id: string;
+    /** who paid; on a split payment, not necessarily this contribution's donor */
+    contactId: string;
+    contactName: string;
     source: string;
     method: string;
     state: string;
@@ -138,6 +141,7 @@ export async function getContributionDetail(
       leadershipContestant: true,
       payment: {
         include: {
+          contact: { select: { name: true } },
           qomonLink: true,
           contributions: {
             where: { status: 'ACTIVE' },
@@ -201,6 +205,8 @@ export async function getContributionDetail(
     note: row.note,
     payment: {
       id: row.payment.id,
+      contactId: row.payment.contactId,
+      contactName: row.payment.contact.name,
       source: row.payment.source,
       method: row.payment.method,
       state: row.payment.state,

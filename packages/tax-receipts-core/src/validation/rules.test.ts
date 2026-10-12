@@ -188,18 +188,23 @@ describe('A3 entity active', () => {
 
 describe('A4 received_by provenance', () => {
   it('passes a non-processor contribution regardless of received_by', () => {
-    const c = contribution({ externalRef: null }, { receivedBy: 'ENTITY' });
+    const c = contribution({ paymentMethod: 'CASH' }, { receivedBy: 'ENTITY' });
+    expect(checkA4ReceivedByProvenance(c)).toBeNull();
+  });
+
+  it('passes a cheque received by the entity, cheque number and all', () => {
+    const c = contribution({ paymentMethod: 'CHEQUE', externalRef: '1042' }, { receivedBy: 'ENTITY' });
     expect(checkA4ReceivedByProvenance(c)).toBeNull();
   });
 
   it('passes a processor record with received_by GPO', () => {
-    const c = contribution({ externalRef: 'ch_123' }, { receivedBy: 'GPO' });
+    const c = contribution({ paymentMethod: 'CARD', externalRef: 'ch_123' }, { receivedBy: 'GPO' });
     expect(checkA4ReceivedByProvenance(c)).toBeNull();
   });
 
-  it('flags a processor record with received_by ENTITY', () => {
-    const c = contribution({ externalRef: 'ch_123' }, { receivedBy: 'ENTITY' });
-    expect(checkA4ReceivedByProvenance(c)?.ruleRef).toBe('A4');
+  it('flags a processor record with received_by ENTITY, reference or not', () => {
+    expect(checkA4ReceivedByProvenance(contribution({ paymentMethod: 'CARD' }, { receivedBy: 'ENTITY' }))?.ruleRef).toBe('A4');
+    expect(checkA4ReceivedByProvenance(contribution({ paymentMethod: 'PAD', externalRef: 'pad_9' }, { receivedBy: 'ENTITY' }))?.ruleRef).toBe('A4');
   });
 });
 

@@ -51,7 +51,7 @@ The tool keeps two questions apart that the old system blurred together.
 
 | Received by | Means |
 |---|---|
-| GPO | The central party received it (any online donation through a processor is always GPO) |
+| GPO | The central party received it (any card or pre-authorized debit payment, which comes through GPO's processor, is always GPO) |
 | Entity | The CA or campaign received it directly |
 
 **Agency contribution.** A contribution received by GPO but directed to

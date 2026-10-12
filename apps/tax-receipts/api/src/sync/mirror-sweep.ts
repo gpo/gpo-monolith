@@ -6,6 +6,7 @@ import {
   type ContributionSyncFields,
   type GpoMetadataDescriptive,
   type IntakeFlag,
+  type PaymentMethod,
   type PeriodRow,
 } from '@gpo/tax-receipts-core';
 import {
@@ -228,6 +229,7 @@ export async function ingestChange(
       contribution.acceptedAt,
       link.codeCampaign,
       link.payment.externalRef,
+      link.payment.method,
       contribution.contactId,
     );
     if (touched) {
@@ -260,6 +262,7 @@ async function ingestNewTransaction(
       ? String(transaction.external_transaction_id)
       : null;
   const acceptedAt = new Date(transaction.date);
+  const method = paymentMethodFromQomon(transaction.payment_method_kind);
 
   // Descriptive fields are intake input only (data-model §3, D12): Qomon's
   // `extra_json` is read here, once, when it carries them; otherwise the
@@ -275,6 +278,7 @@ async function ingestNewTransaction(
       acceptedAt,
       codeCampaign: transaction.code_campaign ?? null,
       externalRef,
+      paymentMethod: method,
       periods,
     });
     descriptive = derived.descriptive;
@@ -292,7 +296,7 @@ async function ingestNewTransaction(
       contactId,
       amountCents: transaction.amount,
       receivedAt: acceptedAt,
-      method: paymentMethodFromQomon(transaction.payment_method_kind),
+      method,
       externalRef,
       state: paymentStateFromQomonKind(statusKind),
       note: transaction.comment ?? null,
@@ -347,9 +351,10 @@ async function backfillMetadataIfPossible(
   acceptedAt: Date,
   codeCampaign: string | null,
   externalRef: string | null,
+  paymentMethod: PaymentMethod,
   contactId: string,
 ): Promise<boolean> {
-  const derived = deriveIntakeDefaults({ acceptedAt, codeCampaign, externalRef, periods });
+  const derived = deriveIntakeDefaults({ acceptedAt, codeCampaign, externalRef, paymentMethod, periods });
   if (!derived.descriptive) return false;
   await withChangeLog(prisma, { userId: null, reason: REASON_BACKFILL }, async (ctx) => {
     const before = await ctx.tx.contribution.findUniqueOrThrow({ where: { id: contributionId } });

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Alert, Badge, Button, Card, Group, Loader, Stack, Table, Text, TextInput } from '@mantine/core';
 import { api, type ContactSource, type FormattedAddress } from '../api.js';
+import { ChangeHistoryCard } from '../components/change-history.js';
 import { ContactFormModal, ownershipNote } from '../components/contact-form-modal.js';
 import { ContributorContributions } from '../components/contributor-contributions.js';
 import { PageHeader } from '../components/PageHeader.js';
@@ -186,47 +187,38 @@ export function ContributorDetailPage({ id }: { id: string }) {
         canIssue={(me.data?.can.issueReceipts ?? false) && !c.mergedIntoId}
       />
 
-      <Card withBorder>
-        <Stack gap="xs">
-          <Text fw={600}>Change history</Text>
-          {c.changeLog.length === 0 ? (
-            <Text size="sm" c="dimmed">
-              No recorded changes.
-            </Text>
-          ) : (
-            <Table>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>At</Table.Th>
-                  <Table.Th>By</Table.Th>
-                  <Table.Th>Reason</Table.Th>
-                  <Table.Th>Before</Table.Th>
-                  <Table.Th>After</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {c.changeLog.map((e) => (
-                  <Table.Tr key={e.id}>
-                    <Table.Td>{new Date(e.at).toLocaleString()}</Table.Td>
-                    <Table.Td>{e.actorName ?? 'System'}</Table.Td>
-                    <Table.Td>{e.reason}</Table.Td>
-                    <Table.Td>
-                      <Text size="xs" ff="monospace" style={{ wordBreak: 'break-all' }}>
-                        {jsonCell(e.before)}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="xs" ff="monospace" style={{ wordBreak: 'break-all' }}>
-                        {jsonCell(e.after)}
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          )}
-        </Stack>
-      </Card>
+      <ChangeHistoryCard entries={c.changeLog}>
+        <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>At</Table.Th>
+              <Table.Th>By</Table.Th>
+              <Table.Th>Reason</Table.Th>
+              <Table.Th>Before</Table.Th>
+              <Table.Th>After</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {c.changeLog.map((e) => (
+              <Table.Tr key={e.id}>
+                <Table.Td>{new Date(e.at).toLocaleString()}</Table.Td>
+                <Table.Td>{e.actorName ?? 'System'}</Table.Td>
+                <Table.Td>{e.reason}</Table.Td>
+                <Table.Td>
+                  <Text size="xs" ff="monospace" style={{ wordBreak: 'break-all' }}>
+                    {jsonCell(e.before)}
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  <Text size="xs" ff="monospace" style={{ wordBreak: 'break-all' }}>
+                    {jsonCell(e.after)}
+                  </Text>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </ChangeHistoryCard>
 
       {editing && <ContactFormModal contact={c} onClose={() => setEditing(false)} />}
     </Stack>

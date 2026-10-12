@@ -72,6 +72,16 @@ export type PaymentSource = z.infer<typeof PaymentSource>;
 export const PaymentMethod = z.enum(['CARD', 'CHEQUE', 'CASH', 'PAD', 'EFT', 'IN_KIND', 'OTHER']);
 export type PaymentMethod = z.infer<typeof PaymentMethod>;
 
+/** Methods whose money arrives through GPO's payment processor, so the
+ *  payment is a processor record and GPO received it (invariant 8). Decided
+ *  by method, not by whether a reference is on file: a cheque number or
+ *  transfer reference is a reference too, and says nothing about who
+ *  received the money. Assumes riding associations take no card or PAD
+ *  money through a processor of their own; revisit if one does. */
+export function isProcessorMethod(method: PaymentMethod | null | undefined): boolean {
+  return method === 'CARD' || method === 'PAD';
+}
+
 /** Whether the money actually landed. Only RECEIVED counts toward RTD
  *  disclosure and receipting (open-questions.md O42). Mapped from Qomon's
  *  transaction status `kind` at import (`paymentStateFromQomonKind`). */

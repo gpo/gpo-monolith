@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
-import { resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
+import { resetDb, seedBaseline, testPrisma, fixtureContact, issueReceipt, makeContribution } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -49,7 +49,7 @@ describe('payment entry routes (D12 manual entry)', () => {
   const DESIGNATE: [string, string] = ['designate@gpo.test', 'designate-pass-phrase'];
   const SCOPED: [string, string] = ['scoped@gpo.test', 'scoped-pass-phrase'];
 
-  async function call(method: 'GET' | 'POST', url: string, who: [string, string] | null, payload?: unknown) {
+  async function call(method: 'GET' | 'POST' | 'PATCH', url: string, who: [string, string] | null, payload?: unknown) {
     const cookies: Record<string, string> = {};
     if (who) {
       const login = await app.inject({ method: 'POST', url: '/auth/login', payload: { email: who[0], password: who[1] } });
@@ -151,5 +151,80 @@ describe('payment entry routes (D12 manual entry)', () => {
     const created = await call('POST', '/payments', ADMIN, { ...payment(), contributions: [{ amountCents: 5_000 }] });
     const detail = await call('GET', `/contributions/${created.json().contributions[0].id}`, ADMIN);
     expect(detail.json().payment.unattributedCents).toBe(2_500);
+  });
+
+  describe('editing a payment', () => {
+    const fix = () => ({
+      reason: 'cheque number was mis-keyed',
+      receivedAt: '2026-04-11T17:00:00.000Z',
+      method: 'CHEQUE',
+      externalRef: ' cheque-1043 ',
+      payerName: '',
+      note: null,
+    });
+
+    it('fixes how a manual payment was keyed, moving the contributions on the old date with it', async () => {
+      const created = await call('POST', '/payments', ADMIN, {
+        ...payment(),
+        contributions: [
+          { amountCents: 5_000 },
+          { amountCents: 2_500, contactId: samId, acceptedAt: '2026-04-09T17:00:00.000Z' },
+        ],
+      });
+      const paymentId = created.json().paymentId as string;
+      const [followerId, ownDateId] = created.json().contributions.map((c: { id: string }) => c.id);
+
+      expect((await call('PATCH', `/payments/${paymentId}`, null, fix())).statusCode).toBe(401);
+      expect((await call('PATCH', `/payments/${paymentId}`, DESIGNATE, fix())).statusCode).toBe(403);
+      expect((await call('PATCH', `/payments/${paymentId}`, ADMIN, { ...fix(), reason: 'x' })).statusCode).toBe(400);
+      expect((await call('PATCH', '/payments/nope', ADMIN, fix())).statusCode).toBe(404);
+
+      const res = await call('PATCH', `/payments/${paymentId}`, ADMIN, fix());
+      expect(res.statusCode).toBe(200);
+      const row = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+      expect(row).toMatchObject({ externalRef: 'cheque-1043', payerName: null, note: null, amountCents: 7_500 });
+      expect(row.receivedAt.toISOString()).toBe('2026-04-11T17:00:00.000Z');
+
+      const follower = await prisma.contribution.findUniqueOrThrow({ where: { id: followerId } });
+      expect(follower.acceptedAt.toISOString()).toBe('2026-04-11T17:00:00.000Z');
+      const ownDate = await prisma.contribution.findUniqueOrThrow({ where: { id: ownDateId } });
+      expect(ownDate.acceptedAt.toISOString()).toBe('2026-04-09T17:00:00.000Z');
+
+      const log = await prisma.changeLogEntry.findMany({ where: { reason: 'cheque number was mis-keyed' } });
+      expect(log.map((e) => `${e.subjectType}:${e.subjectId}`).sort()).toEqual(
+        [`Contribution:${followerId}`, `Payment:${paymentId}`].sort(),
+      );
+    });
+
+    it('refuses a payment imported from Qomon', async () => {
+      const { paymentId } = await makeContribution(prisma, { amountCents: 5_000, qomonTransactionId: 77n });
+      const res = await call('PATCH', `/payments/${paymentId}`, ADMIN, fix());
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toContain('imported from Qomon');
+    });
+
+    it('refuses a date fix that would move a receipted contribution, but takes other fixes', async () => {
+      const { paymentId, contributionId, contactId } = await makeContribution(prisma, {
+        amountCents: 5_000,
+        acceptedAt: new Date('2026-03-01T12:00:00Z'),
+        method: 'CHEQUE',
+      });
+      const c = await prisma.contribution.findUniqueOrThrow({ where: { id: contributionId } });
+      await issueReceipt(prisma, {
+        contactId,
+        contributionId,
+        periodId: c.periodId ?? baseline.periodId,
+        amountCents: 5_000,
+        actorUserId: baseline.adminUserId,
+      });
+
+      const moved = await call('PATCH', `/payments/${paymentId}`, ADMIN, fix());
+      expect(moved.statusCode).toBe(409);
+      expect(moved.json().error).toContain('through a correction');
+
+      const sameDay = await call('PATCH', `/payments/${paymentId}`, ADMIN, { ...fix(), receivedAt: '2026-03-01T12:00:00.000Z' });
+      expect(sameDay.statusCode).toBe(200);
+      expect((await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).externalRef).toBe('cheque-1043');
+    });
   });
 });

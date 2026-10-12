@@ -30,8 +30,8 @@ all, logged under a single entry in the change log.
 
 ## Contribution corrections
 
-On a contribution's detail page, open **Correct this contribution** and
-pick an action:
+On a contribution's detail page, select **Correct** in the
+**Contribution** section and pick an action:
 
 | Action | Use it when |
 |---|---|

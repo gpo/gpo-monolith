@@ -64,7 +64,10 @@ export interface Me {
     prepareRtdFilings: boolean;
     sendRtdFilings: boolean;
     fileEOForms: boolean;
+    /** enter payments, and fix how a manual payment was keyed */
     enterPayments: boolean;
+    /** edit a contribution's details (contribution.edit) */
+    editContributions: boolean;
     /** add contributors (contact.manage) */
     addContacts: boolean;
     /** edit contributors (contact.manage) */
@@ -111,7 +114,6 @@ export interface ContributionListPage {
 export interface ContributionListFilters {
   periodId?: number;
   ridingNumber?: number;
-  partyLevelOnly?: boolean;
   entityKind?: string;
   receivedBy?: string;
   /** agency contributions only (true) or only the rest (false) */
@@ -158,6 +160,9 @@ export interface ContributionDetail {
   /** the money event behind this contribution */
   payment: {
     id: string;
+    /** who paid; on a split payment, not necessarily this contribution's donor */
+    contactId: string;
+    contactName: string;
     source: string;
     method: string;
     state: string;
@@ -479,13 +484,23 @@ export interface IntakePreview {
   flags: IntakeFlag[];
 }
 
+/** Fixes to how a manual payment was keyed; the amount and donor change through a correction. */
+export interface PaymentEditInput {
+  reason: string;
+  receivedAt: string;
+  method: PaymentMethodKey;
+  externalRef: string | null;
+  payerName: string | null;
+  note: string | null;
+}
+
 export interface PaymentSummary {
   id: string;
   contactId: string;
   contactName: string;
   amountCents: number;
   receivedAt: string;
-  method: string;
+  method: PaymentMethodKey;
   state: string;
   source: string;
   externalRef: string | null;
@@ -1077,11 +1092,13 @@ export const api = {
       { method: 'POST', body: JSON.stringify(input) },
     ),
   getPayment: (paymentId: string) => request<PaymentSummary>(`/payments/${paymentId}`),
-  intakePreview: (q: { acceptedAt: string; ridingNumber?: number | null; sourceCode?: string; externalRef?: string }) => {
+  editPayment: (paymentId: string, input: PaymentEditInput) =>
+    request<{ id: string }>(`/payments/${paymentId}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  intakePreview: (q: { acceptedAt: string; ridingNumber?: number | null; sourceCode?: string; method?: PaymentMethodKey }) => {
     const params = new URLSearchParams({ acceptedAt: q.acceptedAt });
     if (q.ridingNumber != null) params.set('ridingNumber', String(q.ridingNumber));
     if (q.sourceCode) params.set('sourceCode', q.sourceCode);
-    if (q.externalRef) params.set('externalRef', q.externalRef);
+    if (q.method) params.set('method', q.method);
     return request<IntakePreview>(`/intake-preview?${params.toString()}`);
   },
   searchContacts: (query: string) => request<{ data: ContactHit[] }>(`/contacts?query=${encodeURIComponent(query)}`),

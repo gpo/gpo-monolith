@@ -111,19 +111,6 @@ test('the column picker can hide a column', async () => {
   );
 });
 
-test('saving a filter persists it to localStorage', async () => {
-  renderPage();
-  await screen.findByText('Dana Donor');
-
-  fireEvent.change(screen.getByLabelText('Donor (name or email)'), { target: { value: 'dana' } });
-  fireEvent.change(screen.getByPlaceholderText('Save filter as…'), { target: { value: 'My dana filter' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save current filters' }));
-
-  expect(localStorage.getItem('tax-receipts:contributions-list:saved-filters')).toContain(
-    'My dana filter',
-  );
-});
-
 test('bulk edit: selecting a row shows the bar, and applying it posts to bulk-edit', async () => {
   renderPage();
   await screen.findByText('Dana Donor');

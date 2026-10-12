@@ -63,9 +63,9 @@ lists every rule and whether it is implemented yet.
 | A1 | Acceptance date is outside its period's window |
 | A2 | Riding or entity kind is invalid for this contribution (for example, a campaign contribution outside an election, or a leadership contribution with no contestant) |
 | A3 | The entity is not active with EO for this period (for example, a defunct riding) |
-| A4 | Received-by does not match how the money arrived (a processor payment must be GPO) |
+| A4 | Received-by does not match how the money arrived (a card or pre-authorized debit payment came through GPO's processor, so must be GPO) |
 | A5 | The non-deductible amount leaves nothing eligible |
-| A6 | Possible duplicate contribution (same donor, amount, and entity within three days, or the same processor reference). **EO** |
+| A6 | Possible duplicate contribution (same donor, amount, and entity within three days, or the same payment reference, such as a cheque number). **EO** |
 | A7 | The source code's riding disagrees with the contribution's riding |
 | A8 | Cash over the $25 limit |
 

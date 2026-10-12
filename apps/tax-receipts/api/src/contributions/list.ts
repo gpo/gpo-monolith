@@ -10,8 +10,7 @@ import type { EntityKind, Prisma, PrismaClient, ReceivedBy } from '../generated/
 
 export interface ContributionListFilters {
   periodId?: number;
-  /** `null` explicitly means "party-level only" (no riding). */
-  ridingNumber?: number | null;
+  ridingNumber?: number;
   entityKind?: EntityKind;
   receivedBy?: ReceivedBy;
   /** agency contributions only (received by GPO, directed to another
