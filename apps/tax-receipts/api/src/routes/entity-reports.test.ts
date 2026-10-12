@@ -142,6 +142,33 @@ describe('entity report routes (ticket 4.5)', () => {
     expect(csv.body).toContain('Green Party of Ontario');
   });
 
+  it('403s listing, viewing, and downloading reports for a role without entityReport.read (EO row 66)', async () => {
+    const cfo = await login('cfo@gpo.test', 'cfo-pass-phrase');
+    const generate = await app.inject({
+      method: 'POST',
+      url: `/periods/${baseline.periodId}/entity-reports`,
+      cookies: { [cfo.name]: cfo.value },
+      payload: {
+        kind: 'ALL',
+        entityKind: 'PARTY',
+        ridingNumber: null,
+        politicalEntityLabel: 'Green Party of Ontario',
+        reason: 'generate ALL report',
+      },
+    });
+    const { entityReportId } = generate.json();
+
+    const admin = await login('admin@gpo.test', 'admin-pass-phrase');
+    for (const url of [
+      `/periods/${baseline.periodId}/entity-reports`,
+      `/entity-reports/${entityReportId}`,
+      `/entity-reports/${entityReportId}/csv`,
+    ]) {
+      const res = await app.inject({ method: 'GET', url, cookies: { [admin.name]: admin.value } });
+      expect(res.statusCode, url).toBe(403);
+    }
+  });
+
   it('404s a nonexistent entity report', async () => {
     const cookie = await login('cfo@gpo.test', 'cfo-pass-phrase');
     const res = await app.inject({

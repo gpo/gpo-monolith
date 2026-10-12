@@ -65,7 +65,7 @@ const DETAIL = {
     {
       id: 'a1',
       amountCents: 10_000,
-      receipt: { id: 'r1', receiptNumber: 'GPO-00402510', status: 'ISSUED', issueDate: '2026-03-02T00:00:00.000Z' },
+      receipt: { id: 'r1', receiptNumber: 'GPO-00402510', status: 'ISSUED', issueDate: '2026-03-02T00:00:00.000Z', cancellationNotice: null },
     },
   ],
   rtdInclusions: [],

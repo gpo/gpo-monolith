@@ -25,7 +25,11 @@ import { advanceSpaceIfDelivered } from './space-delivery.js';
  * - A row left in SENDING by a crashed process is reclaimed after
  *   `staleClaimMinutes`.
  * - While the issuance kill switch is engaged, receipt email waits in the
- *   queue; pre-check email still goes, since it issues nothing.
+ *   queue; pre-check and cancellation-notice email still go, since they
+ *   issue nothing.
+ * - A cancellation notice (EO evaluation row 62) belongs to a CANCELLED
+ *   receipt, so it skips the receipt-email checks and leaves `deliveredAt`
+ *   alone; sending it is change-logged against the receipt.
  * - `dailyLimit` caps sends in any rolling 24 hours, for warming up a new
  *   sending domain.
  * - Unless live sending is on (`send-mode.ts`: the env flag, the admin toggle,
@@ -73,7 +77,7 @@ async function claim(
   prisma: PrismaClient,
   opts: { limit: number; now: Date; receiptsAllowed: boolean },
 ): Promise<EmailMessage[]> {
-  const purposes = opts.receiptsAllowed ? ['RECEIPT', 'PRECHECK'] : ['PRECHECK'];
+  const purposes = opts.receiptsAllowed ? ['RECEIPT', 'PRECHECK', 'CANCELLATION'] : ['PRECHECK', 'CANCELLATION'];
   const ids = await prisma.$queryRaw<{ id: string }[]>`
     UPDATE email_message SET status = 'SENDING', "claimedAt" = ${opts.now}
     WHERE id IN (
@@ -169,7 +173,7 @@ export async function dispatchPendingEmails(
   for (const [index, message] of claimed.entries()) {
     if (index > 0) await sleep(gapMs);
 
-    if (message.receiptId) {
+    if (message.purpose === 'RECEIPT' && message.receiptId) {
       const receipt = await prisma.receipt.findUnique({ where: { id: message.receiptId } });
       if (!receipt || receipt.status !== 'ISSUED') {
         await prisma.emailMessage.update({
@@ -197,25 +201,23 @@ export async function dispatchPendingEmails(
             tags: { purpose: message.purpose.toLowerCase() },
           });
       const sentAt = now();
+      const sentFields = {
+        status: 'SENT',
+        statusDetail: null,
+        provider: deps.provider.name,
+        providerMessageId: sent.providerMessageId,
+        simulated,
+        attempts,
+        sentAt,
+        claimedAt: null,
+      } as const;
 
-      if (message.receiptId) {
+      if (message.purpose === 'RECEIPT' && message.receiptId) {
         const reason = simulated
           ? `receipt email to ${message.toAddress} simulated (live sending off)`
           : `receipt emailed to ${message.toAddress}`;
         await withChangeLog(prisma, { userId: null, reason }, async (ctx) => {
-          await ctx.tx.emailMessage.update({
-            where: { id: message.id },
-            data: {
-              status: 'SENT',
-              statusDetail: null,
-              provider: deps.provider.name,
-              providerMessageId: sent.providerMessageId,
-              simulated,
-              attempts,
-              sentAt,
-              claimedAt: null,
-            },
-          });
+          await ctx.tx.emailMessage.update({ where: { id: message.id }, data: sentFields });
           const receipt = await ctx.tx.receipt.update({
             where: { id: message.receiptId! },
             data: { deliveredAt: sentAt },
@@ -234,20 +236,26 @@ export async function dispatchPendingEmails(
           });
         });
         touchedReceiptIds.push(message.receiptId);
-      } else {
-        await prisma.emailMessage.update({
-          where: { id: message.id },
-          data: {
-            status: 'SENT',
-            statusDetail: null,
-            provider: deps.provider.name,
-            providerMessageId: sent.providerMessageId,
-            simulated,
-            attempts,
-            sentAt,
-            claimedAt: null,
-          },
+      } else if (message.purpose === 'CANCELLATION' && message.receiptId) {
+        const reason = simulated
+          ? `cancellation notice email to ${message.toAddress} simulated (live sending off)`
+          : `cancellation notice emailed to ${message.toAddress}`;
+        await withChangeLog(prisma, { userId: null, reason }, async (ctx) => {
+          await ctx.tx.emailMessage.update({ where: { id: message.id }, data: sentFields });
+          await ctx.log({
+            subjectType: 'Receipt',
+            subjectId: message.receiptId!,
+            after: {
+              cancellationNoticeSentAt: sentAt,
+              emailMessageId: message.id,
+              provider: deps.provider.name,
+              providerMessageId: sent.providerMessageId,
+              simulated,
+            },
+          });
         });
+      } else {
+        await prisma.emailMessage.update({ where: { id: message.id }, data: sentFields });
       }
       result.sent += 1;
     } catch (err) {

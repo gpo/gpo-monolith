@@ -57,6 +57,8 @@ export interface Me {
     issueReceipts: boolean;
     sendDonorPrechecks: boolean;
     administerKillSwitch: boolean;
+    /** list, view, and download entity reports (entityReport.read; EO row 66) */
+    viewEntityReports: boolean;
     generateEntityReports: boolean;
     shareEntityReports: boolean;
     prepareRtdFilings: boolean;
@@ -207,7 +209,17 @@ export interface ContributionDetail {
   allocations: Array<{
     id: string;
     amountCents: number;
-    receipt: { id: string; receiptNumber: string; status: string; issueDate: string };
+    receipt: {
+      id: string;
+      receiptNumber: string;
+      status: string;
+      issueDate: string;
+      /** a cancelled receipt's notice (EO row 62); null when there is none */
+      cancellationNotice: {
+        /** the latest email of it to the donor, if any */
+        email: { status: string; toAddress: string; queuedAt: string; simulated: boolean } | null;
+      } | null;
+    };
   }>;
   rtdInclusions: Array<{ id: string; rtdFilingId: string; amountCents: number; aggregateAfterCents: number }>;
   workItems: Array<{
@@ -649,7 +661,7 @@ export interface MarkPrintBatchMailedResult {
 
 export interface EmailLogRow {
   id: string;
-  purpose: 'RECEIPT' | 'PRECHECK';
+  purpose: 'RECEIPT' | 'PRECHECK' | 'CANCELLATION';
   status: string;
   statusDetail: string | null;
   simulated: boolean;
@@ -1096,6 +1108,12 @@ export const api = {
     request<{ newReceiptNumber: string }>(`/receipts/${receiptId}/reissue`, { method: 'POST', body: JSON.stringify(input) }),
   reprintReceipt: (receiptId: string, input: ReprintInput) =>
     request<{ reprintId: string; kind: string }>(`/receipts/${receiptId}/reprint`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  cancellationNoticeUrl: (receiptId: string) => `${BASE}/receipts/${receiptId}/cancellation-notice`,
+  emailCancellationNotice: (receiptId: string, input: { reason: string; subject: string; body: string }) =>
+    request<{ emailMessageId: string; toAddress: string }>(`/receipts/${receiptId}/cancellation-notice/email`, {
       method: 'POST',
       body: JSON.stringify(input),
     }),

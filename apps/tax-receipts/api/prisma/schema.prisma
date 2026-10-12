@@ -55,10 +55,12 @@ enum ReceiptDelivery {
   MAIL
 }
 
-/// what an outgoing email carries (ticket 3.6)
+/// what an outgoing email carries (ticket 3.6). CANCELLATION is a cancelled
+/// receipt's watermarked notice (EO evaluation row 62).
 enum EmailPurpose {
   RECEIPT
   PRECHECK
+  CANCELLATION
 }
 
 /// an outgoing email's lifecycle (ticket 3.6). QUEUED -> SENDING -> SENT is

@@ -35,7 +35,7 @@ ones.
 - **Issue** opens the [issuance wizard](issuing-receipts.md#issuing-a-whole-space)
   for the space.
 - **Reports** opens the [entity reports](entity-reports.md) screen for the
-  space.
+  space. It is shown only to people who can view or generate reports.
 
 ## Things to know
 

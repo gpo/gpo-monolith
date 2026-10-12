@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { cancelReceipt, previewReceiptCorrection, reissueReceipt } from '../corrections/cancel.js';
+import { findCancellationNotice, queueCancellationNoticeEmail } from '../corrections/cancellation-notice.js';
 import { recordForeignReceipt } from '../receipts/foreign.js';
 import { issueCombinedReceipt, issueReceipt } from '../receipts/issue.js';
 import type { SessionUser } from '../plugins/auth.js';
@@ -22,6 +23,10 @@ import type { SessionUser } from '../plugins/auth.js';
  * to cancel it and issue a combined one. `cancel`/`reissue` (ticket 3.10,
  * corrections.md actions 1/2) are gated on `correct`: they act on existing
  * money rather than originating a new receipt.
+ *
+ * A cancelled receipt's notice (EO evaluation row 62) is readable like the
+ * receipt PDF (`GET /receipts/:id/cancellation-notice`); emailing it to the
+ * donor is gated on `correct`, the same function that cancelled it.
  */
 export async function receiptRoutes(
   app: FastifyInstance,
@@ -225,6 +230,57 @@ export async function receiptRoutes(
         .header('content-type', 'application/pdf')
         .header('content-disposition', `inline; filename="${receipt.receiptNumber}.pdf"`)
         .send(bytes);
+    },
+  });
+
+  r.route({
+    method: 'GET',
+    url: '/receipts/:id/cancellation-notice',
+    schema: { params: z.object({ id: z.string() }) },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('read', 'Receipt')) {
+        return reply.code(403).send({ error: 'not permitted to read receipts' });
+      }
+
+      const receipt = await app.prisma.receipt.findUnique({ where: { id: request.params.id } });
+      const notice = receipt ? await findCancellationNotice(app.prisma, receipt.id) : null;
+      if (!receipt || !notice?.artifact) return reply.code(404).send({ error: 'not found' });
+
+      const bytes = await readFile(path.join(opts.storageDir, notice.artifact.uri));
+      return reply
+        .header('content-type', 'application/pdf')
+        .header('content-disposition', `inline; filename="${receipt.receiptNumber}-cancelled.pdf"`)
+        .send(bytes);
+    },
+  });
+
+  const EmailCancellationNoticeBody = z.object({
+    reason: z.string().min(3),
+    subject: z.string().trim().min(1),
+    body: z.string().trim().min(1),
+  });
+
+  r.route({
+    method: 'POST',
+    url: '/receipts/:id/cancellation-notice/email',
+    schema: { params: z.object({ id: z.string() }), body: EmailCancellationNoticeBody },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('correct', 'Receipt')) {
+        return reply.code(403).send({ error: 'not permitted to correct receipts' });
+      }
+
+      const result = await queueCancellationNoticeEmail(app.prisma, {
+        receiptId: request.params.id,
+        actorUserId: user.id,
+        reason: request.body.reason,
+        subject: request.body.subject,
+        body: request.body.body,
+      });
+      return reply.code(202).send(result);
     },
   });
 }

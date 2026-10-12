@@ -85,6 +85,11 @@ const ALLOWED_GAINS = new Set([
   'party_cfo:update:Contact',
   'administrator:create:Contact',
   'administrator:update:Contact',
+  // deliberate: reading entity reports moved out of the everyone-reads
+  // block into `entityReport.read` (EO row 66), given to the two roles that
+  // are sent reports but held no read-all
+  'organizer:read:EntityReport',
+  'cfo:read:EntityReport',
 ]);
 
 const user = { id: 'u', isCfoDesignate: false, allRidings: true, ridingGrants: [] };

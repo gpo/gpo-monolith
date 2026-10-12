@@ -78,7 +78,7 @@ While engaged:
 - receipt emails and print batches are held;
 - cancelling receipts and other corrections that do not issue a new
   receipt still work, so mistakes can be fixed;
-- donor pre-check emails still go out.
+- donor pre-check emails and cancellation notices still go out.
 
 ## Receipt layout
 

@@ -84,7 +84,17 @@ export interface ContributionDetail {
   allocations: Array<{
     id: string;
     amountCents: number;
-    receipt: { id: string; receiptNumber: string; status: string; issueDate: string };
+    receipt: {
+      id: string;
+      receiptNumber: string;
+      status: string;
+      issueDate: string;
+      /** a cancelled receipt's notice (EO row 62); null when there is none */
+      cancellationNotice: {
+        /** the latest email of it to the donor, if any */
+        email: { status: string; toAddress: string; queuedAt: string; simulated: boolean } | null;
+      } | null;
+    };
   }>;
   rtdInclusions: Array<{
     id: string;
@@ -135,7 +145,16 @@ export async function getContributionDetail(
           },
         },
       },
-      allocations: { include: { receipt: true } },
+      allocations: {
+        include: {
+          receipt: {
+            include: {
+              eoForms: { where: { kind: 'CANCELLATION', artifactId: { not: null } }, select: { id: true } },
+              emailMessages: { where: { purpose: 'CANCELLATION' }, orderBy: { queuedAt: 'desc' }, take: 1 },
+            },
+          },
+        },
+      },
       rtdInclusions: true,
     },
   });
@@ -248,6 +267,19 @@ export async function getContributionDetail(
         receiptNumber: a.receipt.receiptNumber,
         status: a.receipt.status,
         issueDate: a.receipt.issueDate.toISOString(),
+        cancellationNotice:
+          a.receipt.eoForms.length === 0
+            ? null
+            : {
+                email: a.receipt.emailMessages[0]
+                  ? {
+                      status: a.receipt.emailMessages[0].status,
+                      toAddress: a.receipt.emailMessages[0].toAddress,
+                      queuedAt: a.receipt.emailMessages[0].queuedAt.toISOString(),
+                      simulated: a.receipt.emailMessages[0].simulated,
+                    }
+                  : null,
+              },
       },
     })),
     rtdInclusions: row.rtdInclusions.map((i) => ({

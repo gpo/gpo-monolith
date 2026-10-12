@@ -64,14 +64,15 @@ export interface AbilityUser {
 export function defineAbilitiesFor(user: AbilityUser): AppAbility {
   const { can, build } = new AbilityBuilder<AppAbility>(createMongoAbility);
 
-  // Everyone authenticated can read the operational surface.
+  // Everyone authenticated can read the operational surface. Entity reports
+  // are not part of it: reading them is a permission (`entityReport.read`),
+  // so access can be limited to privileged users (EO evaluation row 66).
   can('read', [
     'Contribution',
     'ContributionMetadata',
     'Receipt',
     'WorkItem',
     'RtdFiling',
-    'EntityReport',
     'Period',
     'ContributionLimit',
   ]);

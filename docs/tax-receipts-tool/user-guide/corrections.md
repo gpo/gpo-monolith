@@ -92,10 +92,15 @@ still be fixed); reissuing is not, since it issues a new number.
 
 ## After a correction
 
-- **Donor notices.** The cancellation notice and replacement receipt are
-  stored with the receipt. They are not yet emailed automatically; send
-  them through the normal delivery process or by hand (see
-  [Current limitations](limitations.md)).
+- **Donor notices.** A cancelled receipt's row on the contribution shows
+  **Cancellation notice**, which opens the watermarked CANCELLED copy to
+  print and mail. With *Correct receipts* and an email address on file,
+  **Email to donor** queues it through the email outbox with a letter you
+  write (subject, letter, and reason); the row then shows the email's
+  status. A notice is emailed once; if that email bounces or fails, the
+  button returns. Nothing is sent automatically when a receipt is
+  cancelled. A replacement receipt is an ordinary issued receipt, so it
+  goes out through the space's normal [delivery](delivering-receipts.md).
 - **Owed to EO.** Work through the Owed to EO queue: send EO the DC-1A or
   return note, then resolve the item. The tool can produce the DC-1A form
   and lists it on the [RTD filings](rtd-filings.md) screen, but there is no

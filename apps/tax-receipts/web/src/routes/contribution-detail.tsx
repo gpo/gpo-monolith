@@ -32,7 +32,7 @@ import {
   leadershipLabelNote,
 } from '../entity-kind.js';
 import { PageHeader } from '../components/PageHeader.js';
-import { ReceiptActions } from '../components/receipt-actions.js';
+import { CancellationNoticeActions, ReceiptActions } from '../components/receipt-actions.js';
 
 /** Metadata field help text — kept next to the form so it stays in sync with
  * what the fields actually do (packages/tax-receipts-core/src/metadata.ts). */
@@ -642,6 +642,12 @@ export function ContributionDetailPage({ id }: { id: string }) {
                       </Text>
                     </Table.Td>
                     <Table.Td>
+                      <CancellationNoticeActions
+                        receipt={a.receipt}
+                        donorEmail={detail.contact.email}
+                        canSend={me.data?.can.correctReceipts ?? false}
+                        onDone={() => qc.invalidateQueries({ queryKey: ['contribution', id] })}
+                      />
                       {me.data?.can.correctReceipts && (
                         <ReceiptActions
                           receipt={a.receipt}

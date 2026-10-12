@@ -23,6 +23,11 @@ import type { SessionUser } from '../plugins/auth.js';
  * there is no per-space label source to drive it from a single HTTP call
  * (open-questions.md O39). Nothing here regresses that: it was already true
  * before this ticket.
+ *
+ * Reading a generated report (the list, its detail, and the CSV) needs
+ * `read EntityReport` (the `entityReport.read` permission), not just a
+ * session: EO evaluation row 66 expects report access to be a role given
+ * only to privileged users. Riding scope still applies on top.
  */
 export async function entityReportRoutes(
   app: FastifyInstance,
@@ -39,6 +44,9 @@ export async function entityReportRoutes(
     handler: async (request, reply) => {
       const user = request.user as SessionUser | undefined;
       if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('read', 'EntityReport')) {
+        return reply.code(403).send({ error: 'not permitted to view entity reports' });
+      }
 
       const all = await listEntityReports(app.prisma, request.params.periodId);
       const visible = all.filter((r) => canSeeRiding(user, r.ridingNumber));
@@ -94,6 +102,9 @@ export async function entityReportRoutes(
     handler: async (request, reply) => {
       const user = request.user as SessionUser | undefined;
       if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('read', 'EntityReport')) {
+        return reply.code(403).send({ error: 'not permitted to view entity reports' });
+      }
 
       const detail = await getEntityReportDetail(app.prisma, request.params.id);
       if (!canSeeRiding(user, detail.report.ridingNumber)) {
@@ -110,6 +121,9 @@ export async function entityReportRoutes(
     handler: async (request, reply) => {
       const user = request.user as SessionUser | undefined;
       if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('read', 'EntityReport')) {
+        return reply.code(403).send({ error: 'not permitted to view entity reports' });
+      }
 
       const report = await app.prisma.entityReport.findUnique({
         where: { id: request.params.id },
