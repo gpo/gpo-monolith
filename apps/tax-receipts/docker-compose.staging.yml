@@ -41,6 +41,10 @@ services:
       context: ../..
       dockerfile: apps/tax-receipts/Dockerfile
       target: api-tools
+      x-bake:
+        platforms:
+        - linux/arm64
+        - linux/amd64
     image: tax-receipts-api-tools:${IMAGE_TAG:-staging}
     environment:
       <<: *api-env
@@ -54,6 +58,10 @@ services:
       context: ../..
       dockerfile: apps/tax-receipts/Dockerfile
       target: api
+      x-bake:
+        platforms:
+        - linux/arm64
+        - linux/amd64
     image: tax-receipts-api:${IMAGE_TAG:-staging}
     restart: unless-stopped
     environment:
@@ -85,6 +93,10 @@ services:
       context: ../..
       dockerfile: apps/tax-receipts/Dockerfile
       target: web
+      x-bake:
+        platforms:
+        - linux/arm64
+        - linux/amd64
     image: tax-receipts-web:${IMAGE_TAG:-staging}
     restart: unless-stopped
     environment:
