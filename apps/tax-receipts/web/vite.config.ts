@@ -19,5 +19,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // Route tests render whole pages in jsdom; CI runners run them several
+    // times slower than a laptop, so the 5s default flakes on the longer forms.
+    testTimeout: 20_000,
   },
 });
