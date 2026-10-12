@@ -90,13 +90,20 @@ export interface IntakePreview {
  *  before anything is saved. */
 export async function previewIntake(
   prisma: PrismaClient,
-  input: { acceptedAt: Date; ridingNumber?: number | null; sourceCode?: string | null; externalRef?: string | null },
+  input: {
+    acceptedAt: Date;
+    ridingNumber?: number | null;
+    sourceCode?: string | null;
+    externalRef?: string | null;
+    method?: PaymentMethod | null;
+  },
 ): Promise<IntakePreview> {
   const derived = deriveIntakeDefaults({
     acceptedAt: input.acceptedAt,
     codeCampaign: input.sourceCode ?? null,
     ridingNumber: input.ridingNumber ?? null,
     externalRef: input.externalRef ?? null,
+    paymentMethod: input.method ?? null,
     periods: await loadPeriods(prisma),
   });
   return { descriptive: derived.descriptive, flags: derived.flags };
@@ -122,6 +129,7 @@ async function resolveDescriptive(
     amountCents: number;
     acceptedAt: Date;
     externalRef: string | null;
+    paymentMethod: PaymentMethod;
     overrides: Partial<Omit<GpoMetadataDescriptive, 'external_ref'>>;
   },
 ): Promise<{ descriptive: GpoMetadataDescriptive; flags: readonly IntakeFlag[] }> {
@@ -131,6 +139,7 @@ async function resolveDescriptive(
     codeCampaign: overrides.source_code ?? null,
     ridingNumber: overrides.riding_number ?? null,
     externalRef: input.externalRef,
+    paymentMethod: input.paymentMethod,
     periods,
   });
   const base: GpoMetadataDescriptive | null =
@@ -199,6 +208,7 @@ export async function enterManualPayment(prisma: PrismaClient, input: ManualPaym
       amountCents: e.amountCents,
       acceptedAt: e.acceptedAt ?? input.receivedAt,
       externalRef: input.externalRef ?? null,
+      paymentMethod: input.method,
       overrides: e.descriptive ?? {},
     });
     await assertLeadershipAttribution(prisma, r.descriptive.entity_kind, r.descriptive.leadership_contestant_id);
@@ -291,6 +301,7 @@ export async function addContributionToPayment(prisma: PrismaClient, input: AddC
     amountCents: input.amountCents,
     acceptedAt,
     externalRef: payment.externalRef,
+    paymentMethod: payment.method,
     overrides: input.descriptive ?? {},
   });
   await assertLeadershipAttribution(prisma, descriptive.entity_kind, descriptive.leadership_contestant_id);

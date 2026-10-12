@@ -79,7 +79,8 @@ Send the receipts by email and print the rest. See
 ## Issuing one receipt
 
 For a single contribution, for example when a donor asks for their receipt
-early. On the contribution's detail page, in **Allocations and receipts**:
+early. On the contribution's detail page, select **Issue a receipt** in
+**Allocations and receipts**, then:
 
 1. Leave the **amount** blank to receipt everything still eligible, or
    enter a smaller amount.
@@ -87,8 +88,9 @@ early. On the contribution's detail page, in **Allocations and receipts**:
 3. Check the **received-by label**.
 4. Give a **reason** ("donor requested annual receipt") and issue.
 
-The page tells you when there is nothing left to receipt, or when the
-contribution is still waiting on its details from intake.
+The button is greyed out when there is nothing left to receipt, or when
+the contribution is still waiting on its details from intake; hover over
+it to see which.
 
 ## What a receipt contains
 

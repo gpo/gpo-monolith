@@ -38,7 +38,7 @@ export function LoginPage() {
   }
 
   return (
-    <Card withBorder maw={380} component="form" onSubmit={submit}>
+    <Card withBorder maw={380} mx="auto" component="form" onSubmit={submit}>
       <Stack>
         <Title order={3}>Sign in</Title>
         {error && (

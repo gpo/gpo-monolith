@@ -91,7 +91,7 @@ export function DashboardPage() {
                       to="/contributions"
                       search={{
                         periodId: s.periodId,
-                        ...(s.ridingNumber ? { ridingNumber: s.ridingNumber } : { partyLevelOnly: true }),
+                        ...(s.ridingNumber ? { ridingNumber: s.ridingNumber } : {}),
                         entityKind: s.entityKind,
                       }}
                     >

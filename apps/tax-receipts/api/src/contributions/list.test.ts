@@ -69,18 +69,6 @@ describe('listContributions (ticket 1.3)', () => {
     expect(page.data[0]?.ridingNumber).toBe(84);
   });
 
-  it('filters party-level only via ridingNumber: null', async () => {
-    await seedRow({ qomonTransactionId: 5n, ridingNumber: null, entityKind: 'PARTY' });
-    await seedRow({ qomonTransactionId: 6n, ridingNumber: 84, entityKind: 'CA' });
-
-    const page = await listContributions(prisma, {
-      filters: { ridingNumber: null },
-      ridingScope: null,
-    });
-    expect(page.data).toHaveLength(1);
-    expect(page.data[0]?.ridingNumber).toBeNull();
-  });
-
   it('filters by donor name/email substring, case-insensitive', async () => {
     await seedRow({ qomonTransactionId: 7n, contactName: 'Dana Donor', contactEmail: 'dana@example.org' });
     await seedRow({ qomonTransactionId: 8n, contactName: 'Pat Payer', contactEmail: 'pat@example.org' });

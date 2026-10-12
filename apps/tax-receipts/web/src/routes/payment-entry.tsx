@@ -16,6 +16,7 @@ import {
   type ContributionRow,
 } from '../components/contribution-fields.js';
 import { PageHeader } from '../components/PageHeader.js';
+import { PAYMENT_METHODS, paymentReferenceLabel } from '../components/payment-reference.js';
 import { money } from './contribution-detail.js';
 
 /**
@@ -28,15 +29,8 @@ import { money } from './contribution-detail.js';
  * derivation the Qomon import uses.
  */
 
-const METHODS: Array<{ value: PaymentMethodKey; label: string }> = [
-  { value: 'CHEQUE', label: 'Cheque' },
-  { value: 'CARD', label: 'Card' },
-  { value: 'CASH', label: 'Cash' },
-  { value: 'PAD', label: 'Pre-authorized debit' },
-  { value: 'EFT', label: 'Bank transfer (EFT)' },
-  { value: 'IN_KIND', label: 'In kind' },
-  { value: 'OTHER', label: 'Other' },
-];
+/** Form fields read poorly stretched across a wide screen. */
+const FORM_WIDTH = 640;
 
 function errorText(err: unknown, fallback: string): string {
   return err instanceof ApiError || err instanceof Error ? err.message : fallback;
@@ -70,6 +64,7 @@ export function NewPaymentPage() {
   const [nextKey, setNextKey] = useState(2);
   const [error, setError] = useState<string | null>(null);
 
+  const referenceLabel = paymentReferenceLabel(method);
   const split = rows.length > 1;
   const paymentCents = dollarsToCents(amount);
   const rowCents = (r: ContributionRow) => (split ? dollarsToCents(r.amount) : paymentCents);
@@ -95,7 +90,7 @@ export function NewPaymentPage() {
         receivedAt: dateToInstant(receivedOn),
         method,
         ...(payerName.trim() ? { payerName: payerName.trim() } : {}),
-        ...(externalRef.trim() ? { externalRef: externalRef.trim() } : {}),
+        ...(referenceLabel && externalRef.trim() ? { externalRef: externalRef.trim() } : {}),
         ...(note.trim() ? { note: note.trim() } : {}),
         contributions: rows.map((r) => rowToEntry(r, rowCents(r))),
       });
@@ -149,7 +144,7 @@ export function NewPaymentPage() {
   }
 
   return (
-    <Stack gap="lg">
+    <Stack gap="lg" maw={FORM_WIDTH} mx="auto">
       <PageHeader title="Add a payment" backTo="/contributions" backLabel="Back to contributions" />
 
       {addingDonor && (
@@ -165,50 +160,48 @@ export function NewPaymentPage() {
       <Card withBorder>
         <Stack gap="sm">
           <Text fw={600}>Payment</Text>
-          <Group align="flex-start" grow>
-            <Stack gap={4}>
-              <DonorPicker label="Donor who paid" value={donor} onChange={setDonor} />
-              {me.data?.can.addContacts && (
-                <Anchor component="button" type="button" size="xs" ta="left" onClick={() => setAddingDonor(true)}>
-                  Not on file? Add a new contributor
-                </Anchor>
-              )}
-            </Stack>
-            <NumberInput
-              label="Amount ($)"
-              min={0.01}
-              decimalScale={2}
-              value={amount}
-              onChange={(v) => setAmount(typeof v === 'number' ? v : '')}
-            />
+          <Stack gap={4}>
+            <DonorPicker label="Donor who paid" value={donor} onChange={setDonor} />
+            {me.data?.can.addContacts && (
+              <Anchor component="button" type="button" size="xs" ta="left" onClick={() => setAddingDonor(true)}>
+                Not on file? Add a new contributor
+              </Anchor>
+            )}
+          </Stack>
+          <NumberInput
+            label="Amount ($)"
+            min={0.01}
+            decimalScale={2}
+            value={amount}
+            onChange={(v) => setAmount(typeof v === 'number' ? v : '')}
+          />
+          <TextInput
+            type="date"
+            label="Received on"
+            value={receivedOn}
+            onChange={(e) => setReceivedOn(e.currentTarget.value)}
+          />
+          <NativeSelect
+            label="Method"
+            data={PAYMENT_METHODS}
+            value={method}
+            onChange={(e) => setMethod(e.currentTarget.value as PaymentMethodKey)}
+          />
+          {referenceLabel && (
             <TextInput
-              type="date"
-              label="Received on"
-              value={receivedOn}
-              onChange={(e) => setReceivedOn(e.currentTarget.value)}
-            />
-            <NativeSelect
-              label="Method"
-              data={METHODS}
-              value={method}
-              onChange={(e) => setMethod(e.currentTarget.value as PaymentMethodKey)}
-            />
-          </Group>
-          <Group align="flex-start" grow>
-            <TextInput
-              label="Cheque number or processor reference"
+              label={referenceLabel}
               placeholder="optional; used to match bank statements"
               value={externalRef}
               onChange={(e) => setExternalRef(e.currentTarget.value)}
             />
-            <TextInput
-              label="Payer name, if it differs from the donor"
-              placeholder="e.g. Dana and Sam Donor"
-              value={payerName}
-              onChange={(e) => setPayerName(e.currentTarget.value)}
-            />
-            <TextInput label="Note" value={note} onChange={(e) => setNote(e.currentTarget.value)} />
-          </Group>
+          )}
+          <TextInput
+            label="Payer name, if it differs from the donor"
+            placeholder="e.g. Dana and Sam Donor"
+            value={payerName}
+            onChange={(e) => setPayerName(e.currentTarget.value)}
+          />
+          <TextInput label="Note" value={note} onChange={(e) => setNote(e.currentTarget.value)} />
         </Stack>
       </Card>
 
@@ -230,10 +223,10 @@ export function NewPaymentPage() {
               </Text>
             )}
             <ContributionFields
-              row={row}
+              row={split ? row : { ...row, amount }}
               onChange={(next) => setRows(rows.map((r) => (r.key === row.key ? next : r)))}
               fallbackDate={receivedOn}
-              externalRef={externalRef}
+              paymentMethod={method}
               paymentDonorName={donor?.name ?? null}
               amountLabel="Amount ($)"
               amountDisabled={!split}
@@ -352,7 +345,7 @@ export function AttributePaymentPage({ paymentId }: { paymentId: string }) {
   }
 
   return (
-    <Stack gap="lg">
+    <Stack gap="lg" maw={FORM_WIDTH} mx="auto">
       <PageHeader title="Attribute the rest of a payment" backTo="/contributions" backLabel="Back to contributions" />
       <Card withBorder>
         <Stack gap={4}>
@@ -386,7 +379,7 @@ export function AttributePaymentPage({ paymentId }: { paymentId: string }) {
               row={row}
               onChange={setRow}
               fallbackDate={p.receivedAt.slice(0, 10)}
-              externalRef={p.externalRef ?? ''}
+              paymentMethod={p.method}
               paymentDonorName={p.contactName}
               amountLabel={`Amount ($, blank = the remaining ${money(p.unattributedCents)})`}
             />

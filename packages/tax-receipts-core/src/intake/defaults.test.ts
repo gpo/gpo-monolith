@@ -19,6 +19,7 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       acceptedAt: new Date('2026-03-01T12:00:00Z'),
       codeCampaign: 'NC.W.DON.DBK.BTN50', // party-level code: no directed riding segment
       externalRef: null,
+      paymentMethod: null,
       periods,
     });
 
@@ -44,6 +45,7 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       acceptedAt: new Date('2026-03-01T12:00:00Z'),
       codeCampaign: 'TSF.W.007',
       externalRef: null,
+      paymentMethod: null,
       periods,
     });
     expect(result.descriptive?.riding_number).toBe(7);
@@ -54,6 +56,7 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       acceptedAt: new Date('2026-03-01T12:00:00Z'),
       codeCampaign: 'XX.W.999',
       externalRef: null,
+      paymentMethod: null,
       periods,
     });
     expect(result.descriptive?.riding_number).toBeNull();
@@ -65,16 +68,18 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       ridingNumber: 42,
       codeCampaign: 'TSF.W.007',
       externalRef: null,
+      paymentMethod: null,
       periods,
     });
     expect(result.descriptive?.riding_number).toBe(42);
   });
 
-  it('sets received_by GPO without flagging when a processor external_ref is present', () => {
+  it('sets received_by GPO without flagging for a processor (card) payment', () => {
     const result = deriveIntakeDefaults({
       acceptedAt: new Date('2026-03-01T12:00:00Z'),
       codeCampaign: null,
       externalRef: 'ch_3PqK',
+      paymentMethod: 'CARD',
       periods,
     });
     expect(result.descriptive?.received_by).toBe('GPO');
@@ -86,9 +91,21 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       acceptedAt: new Date('2026-03-01T12:00:00Z'),
       codeCampaign: null,
       externalRef: null,
+      paymentMethod: null,
       periods,
     });
     expect(result.descriptive?.received_by).toBe('GPO');
+    expect(result.flags.some((f) => f.field === 'received_by')).toBe(true);
+  });
+
+  it('treats a cheque with a cheque number as no processor record', () => {
+    const result = deriveIntakeDefaults({
+      acceptedAt: new Date('2026-03-01T12:00:00Z'),
+      codeCampaign: null,
+      externalRef: '1042',
+      paymentMethod: 'CHEQUE',
+      periods,
+    });
     expect(result.flags.some((f) => f.field === 'received_by')).toBe(true);
   });
 
@@ -98,6 +115,7 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       ridingNumber: 7,
       codeCampaign: 'TSF.W.007',
       externalRef: 'ch_3PqK',
+      paymentMethod: 'CARD',
       periods,
     });
     expect(result.descriptive?.entity_kind).toBe('PARTY');
@@ -114,6 +132,7 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       acceptedAt: new Date('2026-03-01T12:00:00Z'),
       codeCampaign: null,
       externalRef: null,
+      paymentMethod: null,
       periods,
     });
     expect(result.descriptive?.source_code).toBe('');
@@ -124,6 +143,7 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       acceptedAt: new Date('2020-01-01T00:00:00Z'),
       codeCampaign: null,
       externalRef: null,
+      paymentMethod: null,
       periods,
     });
     expect(result.periodId).toBeNull();
@@ -147,6 +167,7 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       acceptedAt: new Date('2026-03-01T12:00:00Z'),
       codeCampaign: null,
       externalRef: null,
+      paymentMethod: null,
       periods: overlapping,
     });
     expect(result.periodId).toBeNull();
@@ -170,6 +191,7 @@ describe('deriveIntakeDefaults (ticket 1.6, data-model §6)', () => {
       acceptedAt: new Date('2026-03-15T00:00:00Z'),
       codeCampaign: 'TSF.W.007',
       externalRef: null,
+      paymentMethod: null,
       periods: withByElection,
     });
     expect(result.periodId).toBe(90); // by-election wins over the annual period

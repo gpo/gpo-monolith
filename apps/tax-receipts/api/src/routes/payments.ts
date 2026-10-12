@@ -8,6 +8,7 @@ import {
   previewIntake,
   type ContributionEntry,
 } from '../payments/manual-entry.js';
+import { editPayment } from '../payments/edit.js';
 import type { SessionUser } from '../plugins/auth.js';
 
 /**
@@ -18,6 +19,8 @@ import type { SessionUser } from '../plugins/auth.js';
  *
  * `create Payment` is the party CFO and administrators (and sysadmin). A user
  * scoped to some ridings may enter only contributions for those ridings.
+ * The same ability fixes how a manual payment was keyed (payments/edit.ts):
+ * whoever may key a payment may correct their own typing.
  */
 
 const Overrides = GpoMetadataDescriptive.omit({ external_ref: true }).partial();
@@ -43,6 +46,15 @@ const NewPaymentBody = z.object({
 });
 
 const AddContributionBody = EntryBody.extend({ reason: z.string().min(3) });
+
+const EditPaymentBody = z.object({
+  reason: z.string().min(3),
+  receivedAt: z.coerce.date(),
+  method: PaymentMethod,
+  externalRef: z.string().nullable(),
+  payerName: z.string().nullable(),
+  note: z.string().nullable(),
+});
 
 export async function paymentRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -122,6 +134,38 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
   });
 
   r.route({
+    method: 'PATCH',
+    url: '/payments/:id',
+    schema: { params: z.object({ id: z.string() }), body: EditPaymentBody },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('create', 'Payment')) {
+        return reply.code(403).send({ error: 'not permitted to edit payments' });
+      }
+      const contributions = await app.prisma.contribution.findMany({
+        where: { paymentId: request.params.id, status: 'ACTIVE' },
+        select: { ridingNumber: true },
+      });
+      if (outsideGrants(user, contributions.map((c) => ({ descriptive: { riding_number: c.ridingNumber } })))) {
+        return reply.code(403).send({ error: 'this payment funds a riding outside your grants' });
+      }
+      const blank = (v: string | null) => (v === null || v.trim() === '' ? null : v.trim());
+      const updated = await editPayment(app.prisma, {
+        paymentId: request.params.id,
+        actorUserId: user.id,
+        reason: request.body.reason,
+        receivedAt: request.body.receivedAt,
+        method: request.body.method,
+        externalRef: blank(request.body.externalRef),
+        payerName: blank(request.body.payerName),
+        note: blank(request.body.note),
+      });
+      return reply.send({ id: updated.id });
+    },
+  });
+
+  r.route({
     method: 'GET',
     url: '/payments/:id',
     schema: { params: z.object({ id: z.string() }) },
@@ -173,6 +217,7 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
         ridingNumber: z.coerce.number().int().min(1).max(124).optional(),
         sourceCode: z.string().optional(),
         externalRef: z.string().optional(),
+        method: PaymentMethod.optional(),
       }),
     },
     handler: async (request, reply) => {

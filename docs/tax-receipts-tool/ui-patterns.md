@@ -3,7 +3,7 @@ last-reviewed: 2026-10-12
 review-interval-days: 90
 ---
 
-# Tax Receipts tool: UI patterns for tables and modals
+# Tax Receipts tool: UI patterns for tables, modals, and layout
 
 How list screens in the web app (`apps/tax-receipts/web`) show records and
 let people add or change them. Follow these when building or changing a
@@ -73,6 +73,17 @@ inline on the page.
 - **On success** invalidate the affected queries, then call `onClose()`.
   Errors stay in the modal.
 
+## Record pages
+
+A record's own page (a contribution) shows its fields read-only, as a
+dimmed label over each value, in the same order and with the same labels
+as the form that creates it (Add a payment), so a record reads the way it
+was entered. Each card's actions sit in its header, right-aligned opposite
+the title: `size="xs"` buttons that open a modal (Edit, Correct, Issue a
+receipt). A button whose action is not allowed right now stays visible but
+disabled, wrapped in a `Tooltip` (around a `span`, since a disabled button
+fires no hover events) that says why.
+
 ## Row action buttons
 
 Buttons inside a table cell are deliberately quiet, so the data stays the
@@ -96,6 +107,36 @@ When action buttons are in the last cell of a row, right-align them:
 
 Buttons in a cell that is not last (for example "Mark sent" in the middle of
 an entity-reports row) keep the cell's normal alignment.
+
+## Width-capped panes are centred
+
+Form fields read poorly stretched across a wide screen, so a form page caps
+its width (the payment entry pages use `maw={640}` on the page `Stack`).
+Any pane given a `maw` (a page `Stack` or a `Card`) also takes `mx="auto"`
+so it sits centred horizontally rather than hugging the left edge.
+
+This applies to panes, not to the fields inside them. A single input or a
+group of fields capped inside a full-width card (a search box, a reason
+field, a cover-letter form) stays left-aligned with the rest of the card.
+
+## Change history panes
+
+A record's page (a contributor, a contribution) ends with a **Change
+history** card. Build it with `ChangeHistoryCard` in
+`web/src/components/change-history.tsx`; do not hand-roll the card.
+
+- **Collapsed by default.** The header shows "Change history" and "Last
+  updated <date of the latest entry>" (or "No recorded changes"), with a
+  `size="xs" variant="subtle"` "Show N changes" button on the right that
+  toggles to "Hide".
+- **Entries render only while open.** Pass the list or table as `children`;
+  the card mounts it on expand.
+- Title it "Change history" everywhere, never "Change-log"; the Admin
+  **Change log** screen is the cross-record view.
+
+Why: the history is rarely what someone opened the page for, and a long
+before/after table pushes the working sections down. The last-updated date
+answers "has this changed recently?" without expanding.
 
 ## Known deviations
 

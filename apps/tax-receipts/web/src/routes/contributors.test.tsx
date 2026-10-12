@@ -180,6 +180,10 @@ test('refuses a half-filled address', async () => {
 test('shows a contributor with type, change history, and an edit form', async () => {
   renderAt('/contributors/ct1');
   expect(await screen.findByText('Contributor type: Individual')).toBeTruthy();
+  // the history starts collapsed, with the latest change's date in its header
+  expect(screen.getByText(/^Last updated /)).toBeTruthy();
+  expect(screen.queryByText('walk-in cheque')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Show 1 change' }));
   expect(screen.getByText('walk-in cheque')).toBeTruthy();
   expect(screen.getByText('Terry Tester')).toBeTruthy();
 

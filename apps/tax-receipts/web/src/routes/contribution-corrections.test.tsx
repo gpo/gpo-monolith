@@ -21,6 +21,8 @@ const DETAIL = {
   note: null,
   payment: {
     id: 'p1',
+    contactId: 'ct1',
+    contactName: 'Dana Donor',
     source: 'QOMON_IMPORT',
     method: 'CARD',
     state: 'RECEIVED',
@@ -112,12 +114,14 @@ let calls: Array<{ url: string; method?: string; body?: string }> = [];
 let plan: typeof PLAN = PLAN;
 let me = ME;
 let detailStatus = 'ACTIVE';
+let detail: object = DETAIL;
 
 beforeEach(() => {
   calls = [];
   plan = PLAN;
   me = ME;
   detailStatus = 'ACTIVE';
+  detail = DETAIL;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -130,7 +134,9 @@ beforeEach(() => {
         return jsonResponse(RESULT, 201);
       }
       if (u.endsWith('/receipts/r1/reprint')) return jsonResponse({ reprintId: 'rp1', kind: 'LOST_COPY', lost: true }, 201);
-      if (u.includes('/contributions/c1')) return jsonResponse({ ...DETAIL, status: detailStatus });
+      if (u.endsWith('/payments/p1') && init?.method === 'PATCH') return jsonResponse({ id: 'p1' });
+      if (u.endsWith('/contributions/c1/receipts')) return jsonResponse({ id: 'r9', receiptNumber: 'GPO-9' }, 201);
+      if (u.includes('/contributions/c1')) return jsonResponse({ ...detail, status: detailStatus });
       return jsonResponse({ data: [] });
     }),
   );
@@ -139,6 +145,11 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+
+async function openCorrection() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Correct' }));
+  await screen.findByText('Correct this contribution');
+}
 
 function renderDetail() {
   const router = makeRouter(createMemoryHistory({ initialEntries: ['/contributions/c1'] }));
@@ -154,7 +165,7 @@ function renderDetail() {
 
 test('previews the cascade before it can be committed, then commits exactly the previewed request', async () => {
   renderDetail();
-  await screen.findByText('Correct this contribution');
+  await openCorrection();
   expect(screen.getByRole('button', { name: 'Commit correction' })).toBeDisabled();
 
   fireEvent.change(screen.getByLabelText(/Corrected amount/), { target: { value: '80' } });
@@ -193,7 +204,7 @@ test('previews the cascade before it can be committed, then commits exactly the 
 
 test('editing an input after a preview discards it, so the commit is always what was previewed', async () => {
   renderDetail();
-  await screen.findByText('Correct this contribution');
+  await openCorrection();
   fireEvent.change(screen.getByLabelText(/Corrected amount/), { target: { value: '80' } });
   fireEvent.change(screen.getByPlaceholderText('e.g. cheque was for $80, keyed as $100'), { target: { value: 'fix' } });
   fireEvent.click(screen.getByRole('button', { name: 'Preview cascade' }));
@@ -208,7 +219,7 @@ test('editing an input after a preview discards it, so the commit is always what
 test('a blocked cascade cannot be committed', async () => {
   plan = { ...PLAN, blockers: ['receipt issuance is disabled by the kill switch'] };
   renderDetail();
-  await screen.findByText('Correct this contribution');
+  await openCorrection();
   fireEvent.change(screen.getByLabelText(/Corrected amount/), { target: { value: '80' } });
   fireEvent.change(screen.getByPlaceholderText('e.g. cheque was for $80, keyed as $100'), { target: { value: 'fix' } });
   fireEvent.click(screen.getByRole('button', { name: 'Preview cascade' }));
@@ -219,18 +230,18 @@ test('a blocked cascade cannot be committed', async () => {
 
 test('asks for a reason before it previews', async () => {
   renderDetail();
-  await screen.findByText('Correct this contribution');
+  await openCorrection();
   fireEvent.change(screen.getByLabelText(/Corrected amount/), { target: { value: '80' } });
   fireEvent.click(screen.getByRole('button', { name: 'Preview cascade' }));
   expect(await screen.findByText('Give a reason (at least three characters).')).toBeInTheDocument();
   expect(calls.some((c) => c.url.endsWith('/corrections/preview'))).toBe(false);
 });
 
-test('hides the correction panel from someone who cannot correct contributions', async () => {
+test('hides the correction action from someone who cannot correct contributions', async () => {
   me = { ...ME, can: { ...ME.can, correctContributions: false, correctReceipts: false } };
   renderDetail();
   await screen.findByText('Allocations & receipts');
-  expect(screen.queryByText('Correct this contribution')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Correct' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Correct receipt/ })).not.toBeInTheDocument();
 });
 
@@ -251,4 +262,68 @@ test('reprints a receipt as a lost copy from the receipt menu', async () => {
     politicalEntityLabel: 'Green Party of Ontario',
   });
   expect(await screen.findByText('Copy generated; the original is flagged lost.')).toBeInTheDocument();
+});
+
+const MANUAL = {
+  ...DETAIL,
+  payment: { ...DETAIL.payment, source: 'MANUAL', method: 'CHEQUE', externalRef: 'cheque-1042' },
+  allocations: [],
+};
+
+test('a payment imported from Qomon is read-only, and the donor actions are gone', async () => {
+  renderDetail();
+  await screen.findByText('Allocations & receipts');
+  // the payment's (from Qomon) and the contribution's (receipted)
+  const edits = screen.getAllByRole('button', { name: 'Edit' });
+  expect(edits).toHaveLength(2);
+  for (const b of edits) expect(b).toBeDisabled();
+  expect(screen.queryByRole('button', { name: /Edit donor/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Refresh donor/ })).not.toBeInTheDocument();
+});
+
+test('edits a manual payment in a modal, sending the payment fields with a reason', async () => {
+  detail = MANUAL;
+  renderDetail();
+  expect(await screen.findByText('cheque-1042')).toBeInTheDocument();
+  const [paymentEdit] = screen.getAllByRole('button', { name: 'Edit' });
+  fireEvent.click(paymentEdit!);
+
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.change(within(dialog).getByLabelText('Cheque number'), { target: { value: 'cheque-1043' } });
+  fireEvent.change(within(dialog).getByLabelText('Received on'), { target: { value: '2026-03-02' } });
+  const save = within(dialog).getByRole('button', { name: 'Save payment' });
+  expect(save).toBeDisabled();
+  fireEvent.change(within(dialog).getByLabelText('Reason (required)'), { target: { value: 'mis-keyed cheque' } });
+  fireEvent.click(save);
+
+  await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+  const call = calls.find((c) => c.method === 'PATCH')!;
+  expect(call.url).toMatch(/\/payments\/p1$/);
+  expect(JSON.parse(call.body!)).toEqual({
+    reason: 'mis-keyed cheque',
+    receivedAt: '2026-03-02T17:00:00.000Z',
+    method: 'CHEQUE',
+    externalRef: 'cheque-1043',
+    payerName: '',
+    note: '',
+  });
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+
+test('issues a receipt from a modal', async () => {
+  detail = MANUAL;
+  renderDetail();
+  fireEvent.click(await screen.findByRole('button', { name: 'Issue a receipt' }));
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText('Remaining eligible: $100.00')).toBeInTheDocument();
+  fireEvent.change(within(dialog).getByLabelText('Reason (required)'), { target: { value: 'annual receipt' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Issue receipt' }));
+
+  await waitFor(() => expect(calls.some((c) => c.url.endsWith('/contributions/c1/receipts'))).toBe(true));
+  const call = calls.find((c) => c.url.endsWith('/contributions/c1/receipts'))!;
+  expect(JSON.parse(call.body!)).toEqual({
+    reason: 'annual receipt',
+    delivery: 'MAIL',
+    politicalEntityLabel: 'Green Party of Ontario',
+  });
 });

@@ -1,7 +1,7 @@
 import { AmbiguousPeriodError, resolvePeriod, type PeriodRow } from '../period/calendar.js';
 import type { GpoMetadataDescriptive } from '../metadata.js';
 import { parseRidingFromSourceCode } from '../source-code.js';
-import type { EntityKind, ReceivedBy } from '../enums.js';
+import { isProcessorMethod, type EntityKind, type PaymentMethod, type ReceivedBy } from '../enums.js';
 
 /**
  * Intake derivation defaults (ticket 1.6, data-model §6): applied when the
@@ -26,8 +26,8 @@ import type { EntityKind, ReceivedBy } from '../enums.js';
  *    "directed-to" field or `code_campaign` convention yet), and D6 forbids
  *    deriving it from the space regardless. Always PARTY, flagged.
  *  - **received_by**: invariant 8's "a processor record forces GPO" clause
- *    is unblocked (a processor `external_ref` is a reliable signal) and is
- *    applied with confidence. Distinguishing "CFO subspace entry" (defaults
+ *    is unblocked (a card or PAD payment is a processor record,
+ *    `isProcessorMethod`) and is applied with confidence. Distinguishing "CFO subspace entry" (defaults
  *    ENTITY) from "central manual entry" (defaults GPO) needs the same
  *    space identification B3 blocks, so anything else defaults GPO,
  *    flagged, per invariant 8's own fallback ("with operator override").
@@ -48,6 +48,8 @@ export interface IntakeDefaultsInput {
   ridingNumber?: number | null;
   codeCampaign: string | null;
   externalRef: string | null;
+  /** the payment's method; card and PAD are processor records */
+  paymentMethod: PaymentMethod | null;
   periods: readonly PeriodRow[];
 }
 
@@ -75,13 +77,13 @@ export function deriveIntakeDefaults(input: IntakeDefaultsInput): IntakeDefaults
       'never derived from the space (D6); no "directed-to" field or code_campaign convention exists yet (B8) — defaulting PARTY',
   });
 
-  const isProcessorRecord = input.externalRef != null && input.externalRef.trim().length > 0;
+  const isProcessorRecord = isProcessorMethod(input.paymentMethod);
   const receivedBy: ReceivedBy = 'GPO';
   if (!isProcessorRecord) {
     flags.push({
       field: 'received_by',
       reason:
-        'no processor external_ref present; cannot yet distinguish a CFO subspace entry (ENTITY) from central manual entry (GPO) pending B3 — defaulting GPO with operator override (invariant 8)',
+        'not a processor payment (card or PAD); cannot yet distinguish a CFO subspace entry (ENTITY) from central manual entry (GPO) pending B3 — defaulting GPO with operator override (invariant 8)',
     });
   }
 

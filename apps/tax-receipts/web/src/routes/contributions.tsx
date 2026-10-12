@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearch } from '@tanstack/react-router';
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -12,6 +13,7 @@ import {
   NativeSelect,
   NumberInput,
   Paper,
+  Select,
   Stack,
   Table,
   Text,
@@ -20,12 +22,13 @@ import {
 } from '@mantine/core';
 import { api, type ContributionListFilters, type ContributionListRow } from '../api.js';
 import { LeadershipContestantSelect } from '../components/leadership-contestant-select.js';
+import { RidingSelect } from '../components/riding-select.js';
 import { ENTITY_KIND_OPTIONS } from '../entity-kind.js';
 
 /**
  * Contributions list (ticket 1.3, screens.md 2) with bulk edit (ticket 1.4,
- * PRD C2): server-side filters, saved filters, column picker, row
- * selection, and a bulk-action bar. The detail screen (ticket 1.5) is
+ * PRD C2): server-side filters, column picker, row selection, and a
+ * bulk-action bar. The detail screen (ticket 1.5) is
  * linked from each donor cell.
  *
  * The bulk-edit bar exposes one field change at a time — the common cases
@@ -116,7 +119,6 @@ const COLUMNS: Column[] = [
 
 const DEFAULT_VISIBLE = new Set(COLUMNS.map((c) => c.key));
 const COLUMN_STORAGE_KEY = 'tax-receipts:contributions-list:columns';
-const SAVED_FILTERS_STORAGE_KEY = 'tax-receipts:contributions-list:saved-filters';
 
 function loadVisibleColumns(): Set<string> {
   try {
@@ -129,26 +131,20 @@ function loadVisibleColumns(): Set<string> {
   }
 }
 
-interface SavedFilter {
-  name: string;
-  filters: ContributionListFilters;
-}
+/** The filters behind "Show advanced filters"; donor, period, riding, and
+ *  entity kind are always shown. */
+const ADVANCED_FILTER_KEYS: Array<keyof ContributionListFilters> = [
+  'agency',
+  'minAmountCents',
+  'maxAmountCents',
+  'acceptedFrom',
+  'acceptedTo',
+  'hasOpenValidation',
+  'hasReceipt',
+];
 
-function loadSavedFilters(): SavedFilter[] {
-  try {
-    const raw = localStorage.getItem(SAVED_FILTERS_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as SavedFilter[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function persistSavedFilters(filters: SavedFilter[]): void {
-  try {
-    localStorage.setItem(SAVED_FILTERS_STORAGE_KEY, JSON.stringify(filters));
-  } catch {
-    // best-effort only (private browsing, storage disabled, etc.)
-  }
+function countAdvancedFilters(filters: ContributionListFilters): number {
+  return ADVANCED_FILTER_KEYS.filter((k) => filters[k] !== undefined).length;
 }
 
 export function ContributionsListPage() {
@@ -158,12 +154,11 @@ export function ContributionsListPage() {
   const [filters, setFilters] = useState<ContributionListFilters>(() => ({
     ...(search.periodId !== undefined ? { periodId: Number(search.periodId) } : {}),
     ...(search.ridingNumber !== undefined ? { ridingNumber: Number(search.ridingNumber) } : {}),
-    ...(search.partyLevelOnly ? { partyLevelOnly: true } : {}),
     ...(search.entityKind ? { entityKind: search.entityKind } : {}),
   }));
+  const [advanced, setAdvanced] = useState(() => countAdvancedFilters(filters) > 0);
+  const advancedActive = countAdvancedFilters(filters);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => loadVisibleColumns());
-  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => loadSavedFilters());
-  const [saveName, setSaveName] = useState('');
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [accumulated, setAccumulated] = useState<ContributionListRow[]>([]);
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -175,6 +170,7 @@ export function ContributionsListPage() {
   const [bulkReason, setBulkReason] = useState('');
 
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+  const periods = useQuery({ queryKey: ['admin-periods'], queryFn: api.listPeriods });
   const query = useQuery({
     queryKey: ['contributions', filters, cursor],
     queryFn: () => api.listContributions({ ...filters, cursor }),
@@ -235,28 +231,6 @@ export function ContributionsListPage() {
     });
   }
 
-  function saveCurrentFilter() {
-    if (!saveName.trim()) return;
-    const next = [...savedFilters.filter((f) => f.name !== saveName), { name: saveName, filters }];
-    setSavedFilters(next);
-    persistSavedFilters(next);
-    setSaveName('');
-  }
-
-  function applySavedFilter(name: string | null) {
-    const found = savedFilters.find((f) => f.name === name);
-    if (!found) return;
-    setCursor(undefined);
-    setAccumulated([]);
-    setFilters(found.filters);
-  }
-
-  function removeSavedFilter(name: string) {
-    const next = savedFilters.filter((f) => f.name !== name);
-    setSavedFilters(next);
-    persistSavedFilters(next);
-  }
-
   function toggleRow(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -286,25 +260,27 @@ export function ContributionsListPage() {
 
       <Card withBorder>
         <Stack gap="sm">
-          <Group grow>
+          <Group grow align="flex-start">
             <TextInput
               label="Donor (name or email)"
               placeholder="dana@example.org"
               value={filters.contactQuery ?? ''}
               onChange={(e) => updateFilter('contactQuery', e.currentTarget.value || undefined)}
             />
-            <NumberInput
-              label="Period id"
-              value={filters.periodId}
-              onChange={(v) => updateFilter('periodId', typeof v === 'number' ? v : undefined)}
+            <Select
+              label="Period"
+              placeholder="Any period"
+              data={periods.data?.data.map((p) => ({ value: String(p.id), label: p.name })) ?? []}
+              value={filters.periodId === undefined ? null : String(filters.periodId)}
+              onChange={(v) => updateFilter('periodId', v === null ? undefined : Number(v))}
+              searchable
+              clearable
+              nothingFoundMessage="No matching period"
             />
-            <NumberInput
-              label="Riding number"
-              min={1}
-              max={124}
-              disabled={filters.partyLevelOnly}
-              value={filters.ridingNumber}
-              onChange={(v) => updateFilter('ridingNumber', typeof v === 'number' ? v : undefined)}
+            <RidingSelect
+              value={filters.ridingNumber ?? null}
+              onChange={(n) => updateFilter('ridingNumber', n ?? undefined)}
+              placeholder="Any riding"
             />
             <NativeSelect
               label="Entity kind"
@@ -312,106 +288,68 @@ export function ContributionsListPage() {
               value={filters.entityKind ?? ''}
               onChange={(e) => updateFilter('entityKind', e.currentTarget.value || undefined)}
             />
-            <NativeSelect
-              label="Agency contribution"
-              data={[
-                { value: '', label: '' },
-                { value: 'true', label: 'Agency only' },
-                { value: 'false', label: 'Not agency' },
-              ]}
-              value={filters.agency === undefined ? '' : String(filters.agency)}
-              onChange={(e) =>
-                updateFilter('agency', e.currentTarget.value === '' ? undefined : e.currentTarget.value === 'true')
-              }
-            />
           </Group>
-          <Group grow align="flex-end">
-            <NumberInput
-              label="Min amount ($)"
-              value={filters.minAmountCents !== undefined ? filters.minAmountCents / 100 : undefined}
-              onChange={(v) => updateFilter('minAmountCents', typeof v === 'number' ? Math.round(v * 100) : undefined)}
-            />
-            <NumberInput
-              label="Max amount ($)"
-              value={filters.maxAmountCents !== undefined ? filters.maxAmountCents / 100 : undefined}
-              onChange={(v) => updateFilter('maxAmountCents', typeof v === 'number' ? Math.round(v * 100) : undefined)}
-            />
-            <TextInput
-              type="date"
-              label="Accepted from"
-              value={filters.acceptedFrom ?? ''}
-              onChange={(e) => updateFilter('acceptedFrom', e.currentTarget.value || undefined)}
-            />
-            <TextInput
-              type="date"
-              label="Accepted to"
-              value={filters.acceptedTo ?? ''}
-              onChange={(e) => updateFilter('acceptedTo', e.currentTarget.value || undefined)}
-            />
-          </Group>
-          <Group>
-            <Checkbox
-              label="Party-level only"
-              checked={filters.partyLevelOnly ?? false}
-              onChange={(e) => updateFilter('partyLevelOnly', e.currentTarget.checked || undefined)}
-            />
-            <Checkbox
-              label="Has open validation findings"
-              checked={filters.hasOpenValidation ?? false}
-              onChange={(e) => updateFilter('hasOpenValidation', e.currentTarget.checked || undefined)}
-            />
-            <Checkbox
-              label="Has an issued receipt"
-              checked={filters.hasReceipt ?? false}
-              onChange={(e) => updateFilter('hasReceipt', e.currentTarget.checked || undefined)}
-            />
-          </Group>
+          <Anchor component="button" type="button" size="sm" ta="left" onClick={() => setAdvanced((v) => !v)}>
+            {advanced
+              ? 'Hide advanced filters'
+              : `Show advanced filters${advancedActive > 0 ? ` (${advancedActive} active)` : ''}`}
+          </Anchor>
+          {advanced && (
+            <>
+              <Group grow align="flex-end">
+                <NativeSelect
+                  label="Agency contribution"
+                  data={[
+                    { value: '', label: '' },
+                    { value: 'true', label: 'Agency only' },
+                    { value: 'false', label: 'Not agency' },
+                  ]}
+                  value={filters.agency === undefined ? '' : String(filters.agency)}
+                  onChange={(e) =>
+                    updateFilter('agency', e.currentTarget.value === '' ? undefined : e.currentTarget.value === 'true')
+                  }
+                />
+                <NumberInput
+                  label="Min amount ($)"
+                  value={filters.minAmountCents !== undefined ? filters.minAmountCents / 100 : undefined}
+                  onChange={(v) => updateFilter('minAmountCents', typeof v === 'number' ? Math.round(v * 100) : undefined)}
+                />
+                <NumberInput
+                  label="Max amount ($)"
+                  value={filters.maxAmountCents !== undefined ? filters.maxAmountCents / 100 : undefined}
+                  onChange={(v) => updateFilter('maxAmountCents', typeof v === 'number' ? Math.round(v * 100) : undefined)}
+                />
+                <TextInput
+                  type="date"
+                  label="Accepted from"
+                  value={filters.acceptedFrom ?? ''}
+                  onChange={(e) => updateFilter('acceptedFrom', e.currentTarget.value || undefined)}
+                />
+                <TextInput
+                  type="date"
+                  label="Accepted to"
+                  value={filters.acceptedTo ?? ''}
+                  onChange={(e) => updateFilter('acceptedTo', e.currentTarget.value || undefined)}
+                />
+              </Group>
+              <Group>
+                <Checkbox
+                  label="Has open validation findings"
+                  checked={filters.hasOpenValidation ?? false}
+                  onChange={(e) => updateFilter('hasOpenValidation', e.currentTarget.checked || undefined)}
+                />
+                <Checkbox
+                  label="Has an issued receipt"
+                  checked={filters.hasReceipt ?? false}
+                  onChange={(e) => updateFilter('hasReceipt', e.currentTarget.checked || undefined)}
+                />
+              </Group>
+            </>
+          )}
         </Stack>
       </Card>
 
-      <Group justify="space-between">
-        <Group>
-          <TextInput
-            placeholder="Save filter as…"
-            value={saveName}
-            onChange={(e) => setSaveName(e.currentTarget.value)}
-            w={200}
-          />
-          <Button variant="light" onClick={saveCurrentFilter} disabled={!saveName.trim()}>
-            Save current filters
-          </Button>
-          {savedFilters.length > 0 && (
-            <NativeSelect
-              aria-label="Load a saved filter"
-              data={['', ...savedFilters.map((f) => f.name)]}
-              onChange={(e) => applySavedFilter(e.currentTarget.value || null)}
-              w={220}
-            />
-          )}
-          {savedFilters.map((f) => (
-            <Badge
-              key={f.name}
-              variant="outline"
-              style={{ cursor: 'pointer' }}
-              rightSection={
-                <Text
-                  span
-                  size="xs"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeSavedFilter(f.name);
-                  }}
-                >
-                  ×
-                </Text>
-              }
-              onClick={() => applySavedFilter(f.name)}
-            >
-              {f.name}
-            </Badge>
-          ))}
-        </Group>
-
+      <Group justify="flex-end">
         <Button variant="default" onClick={() => setColumnsOpen((v) => !v)}>
           Columns
         </Button>

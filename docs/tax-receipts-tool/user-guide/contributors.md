@@ -26,6 +26,8 @@ email. Open a contributor to see:
   two or more to issue one receipt for all of them (see
   [Combined receipts](issuing-receipts.md#combined-receipts)).
 - **Change history**: every change to their record, with before and after.
+  It starts collapsed, showing when the record last changed; select **Show**
+  to see the entries.
 
 ## Adding a contributor
 
@@ -42,8 +44,8 @@ if it is the same person.
 
 ## Editing a contributor
 
-Open the contributor (or use **edit donor** on a contribution) and choose
-**Edit contributor**. Give a reason. Editing re-checks that contributor's
+Open the contributor (from the list, or by selecting the donor's name on a
+contribution) and choose **Edit contributor**. Give a reason. Editing re-checks that contributor's
 active contributions, so fixing an address can close address problems in
 the [work queue](work-queue.md) straight away.
 
@@ -66,10 +68,6 @@ Qomon:
 A contact that came from Qomon cannot be edited while the connection is
 off. A contact created in the tool with no Qomon link can always be
 edited.
-
-**Refresh donor from Qomon** (on a contribution's detail page) pulls the
-latest copy of a Qomon contact into the tool, for example after someone
-fixed an address in Qomon directly.
 
 ## Duplicate records
 

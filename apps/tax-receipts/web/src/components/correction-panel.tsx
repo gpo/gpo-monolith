@@ -5,7 +5,6 @@ import {
   Alert,
   Badge,
   Button,
-  Card,
   Group,
   List,
   NativeSelect,
@@ -27,12 +26,13 @@ import {
 } from '../api.js';
 import { DonorPicker } from './donor-picker.js';
 import { LeadershipContestantSelect } from './leadership-contestant-select.js';
+import { RidingSelect } from './riding-select.js';
 import type { ContactHit, EntityKindKey } from '../api.js';
 import { ENTITY_KIND_OPTIONS, entityKindLabel, isRidingScoped } from '../entity-kind.js';
 
 /**
  * Correct a contribution (screens.md screen 8, corrections.md actions 4, 5, 8,
- * 9, 10, 12). Every action is the same two steps: preview the whole cascade
+ * 9, 10, 12), the body of the contribution page's Correct modal. Every action is the same two steps: preview the whole cascade
  * (nothing is written), then commit exactly what was previewed. The tool never
  * writes a correction back to Qomon (D12); the preview lists what Qomon will
  * still show.
@@ -376,14 +376,11 @@ export function CorrectionPanel({
                 onChange={(id) => edit(setParts)(parts.map((x, j) => (j === i ? { ...x, leadershipContestantId: id } : x)))}
               />
             ) : (
-              <NumberInput
-                label="Riding (1 to 124)"
-                min={1}
-                max={124}
+              <RidingSelect
                 disabled={!isRidingScoped(p.entityKind)}
-                value={!isRidingScoped(p.entityKind) ? '' : (p.ridingNumber ?? '')}
+                value={!isRidingScoped(p.entityKind) || p.ridingNumber === null ? null : Number(p.ridingNumber)}
                 onChange={(v) =>
-                  edit(setParts)(parts.map((x, j) => (j === i ? { ...x, ridingNumber: typeof v === 'number' ? String(v) : null } : x)))
+                  edit(setParts)(parts.map((x, j) => (j === i ? { ...x, ridingNumber: v === null ? null : String(v) } : x)))
                 }
               />
             )}
@@ -405,198 +402,193 @@ export function CorrectionPanel({
 
   if (result) {
     return (
-      <Card withBorder>
-        <Stack gap="sm">
-          <Alert color="green" title="Correction committed">
-            {result.createdContributionIds.length} contribution{result.createdContributionIds.length === 1 ? '' : 's'} created,{' '}
-            {result.cancelledReceiptIds.length} receipt{result.cancelledReceiptIds.length === 1 ? '' : 's'} cancelled,{' '}
-            {result.issuedReceipts.length === 0
-              ? 'no receipts issued'
-              : `issued ${result.issuedReceipts.map((r) => r.receiptNumber).join(', ')}`}
-            {result.owedToEoWorkItemIds.length > 0 ? `; ${result.owedToEoWorkItemIds.length} owed-to-EO item(s) queued` : ''}.
+      <Stack gap="sm">
+        <Alert color="green" title="Correction committed">
+          {result.createdContributionIds.length} contribution{result.createdContributionIds.length === 1 ? '' : 's'} created,{' '}
+          {result.cancelledReceiptIds.length} receipt{result.cancelledReceiptIds.length === 1 ? '' : 's'} cancelled,{' '}
+          {result.issuedReceipts.length === 0
+            ? 'no receipts issued'
+            : `issued ${result.issuedReceipts.map((r) => r.receiptNumber).join(', ')}`}
+          {result.owedToEoWorkItemIds.length > 0 ? `; ${result.owedToEoWorkItemIds.length} owed-to-EO item(s) queued` : ''}.
+        </Alert>
+        {result.followUps.map((f) => (
+          <Alert key={f} color="blue" variant="light">
+            {f}
           </Alert>
-          {result.followUps.map((f) => (
-            <Alert key={f} color="blue" variant="light">
-              {f}
-            </Alert>
-          ))}
-          {result.validationFailures.length > 0 && (
-            <Alert color="orange">
-              The correction is committed, but validating {result.validationFailures.length} replacement(s) failed; the
-              nightly pass will retry.
-            </Alert>
-          )}
-          {result.createdContributionIds.length > 0 && (
-            <Group gap="md">
-              <Text size="sm">Replacement{result.createdContributionIds.length === 1 ? '' : 's'}:</Text>
-              {result.createdContributionIds.map((cid, i) => (
-                <Link key={cid} to="/contributions/$id" params={{ id: cid }}>
-                  {result.createdContributionIds.length === 1 ? 'open it' : `part ${i + 1}`}
-                </Link>
-              ))}
-            </Group>
-          )}
-        </Stack>
-      </Card>
+        ))}
+        {result.validationFailures.length > 0 && (
+          <Alert color="orange">
+            The correction is committed, but validating {result.validationFailures.length} replacement(s) failed; the
+            nightly pass will retry.
+          </Alert>
+        )}
+        {result.createdContributionIds.length > 0 && (
+          <Group gap="md">
+            <Text size="sm">Replacement{result.createdContributionIds.length === 1 ? '' : 's'}:</Text>
+            {result.createdContributionIds.map((cid, i) => (
+              <Link key={cid} to="/contributions/$id" params={{ id: cid }}>
+                {result.createdContributionIds.length === 1 ? 'open it' : `part ${i + 1}`}
+              </Link>
+            ))}
+          </Group>
+        )}
+      </Stack>
     );
   }
 
   return (
-    <Card withBorder>
-      <Stack gap="sm">
-        <Text fw={600}>Correct this contribution</Text>
-        <Text size="sm" c="dimmed">
-          A correction never edits the contribution in place: it is replaced by new rows, affected receipts are cancelled and
-          reissued, and anything EO has already seen is queued for the owed-to-EO list. Preview it first.
-        </Text>
-        <NativeSelect
-          label="Action"
-          data={(Object.keys(ACTION_LABELS) as ActionKey[])
-            .filter((k) => k !== 'REALLOCATE' || canFile)
-            .map((k) => ({ value: k, label: ACTION_LABELS[k] }))}
-          value={action}
-          onChange={(e) => changeAction(e.currentTarget.value as ActionKey)}
-        />
+    <Stack gap="sm">
+      <Text size="sm" c="dimmed">
+        A correction never edits the contribution in place: it is replaced by new rows, affected receipts are cancelled and
+        reissued, and anything EO has already seen is queued for the owed-to-EO list. Preview it first.
+      </Text>
+      <NativeSelect
+        label="Action"
+        data={(Object.keys(ACTION_LABELS) as ActionKey[])
+          .filter((k) => k !== 'REALLOCATE' || canFile)
+          .map((k) => ({ value: k, label: ACTION_LABELS[k] }))}
+        value={action}
+        onChange={(e) => changeAction(e.currentTarget.value as ActionKey)}
+      />
 
-        {action === 'CORRECT_AMOUNT' && (
-          <Group grow align="flex-end">
+      {action === 'CORRECT_AMOUNT' && (
+        <Group grow align="flex-end">
+          <NumberInput
+            label={`Corrected amount ($); now ${money(detail.amountCents)}`}
+            min={0.01}
+            decimalScale={2}
+            value={amount}
+            onChange={(v) => edit(setAmount)(typeof v === 'number' ? v : '')}
+          />
+          {detail.metadata && detail.metadata.nonDeductibleCents > 0 && (
             <NumberInput
-              label={`Corrected amount ($); now ${money(detail.amountCents)}`}
-              min={0.01}
+              label={`Non-deductible ($); now ${money(detail.metadata.nonDeductibleCents)}`}
+              min={0}
               decimalScale={2}
-              value={amount}
-              onChange={(v) => edit(setAmount)(typeof v === 'number' ? v : '')}
+              value={nonDeductible}
+              onChange={(v) => edit(setNonDeductible)(typeof v === 'number' ? v : '')}
             />
-            {detail.metadata && detail.metadata.nonDeductibleCents > 0 && (
-              <NumberInput
-                label={`Non-deductible ($); now ${money(detail.metadata.nonDeductibleCents)}`}
-                min={0}
-                decimalScale={2}
-                value={nonDeductible}
-                onChange={(v) => edit(setNonDeductible)(typeof v === 'number' ? v : '')}
-              />
-            )}
-            <NativeSelect
-              label="The payment itself was mis-keyed"
-              data={[
-                { value: 'no', label: 'No, only the contribution' },
-                { value: 'yes', label: `Yes, correct the payment (${money(detail.payment.amountCents)}) too` },
-              ]}
-              value={fixPayment ? 'yes' : 'no'}
-              onChange={(e) => edit(setFixPayment)(e.currentTarget.value === 'yes')}
-            />
+          )}
+          <NativeSelect
+            label="The payment itself was mis-keyed"
+            data={[
+              { value: 'no', label: 'No, only the contribution' },
+              { value: 'yes', label: `Yes, correct the payment (${money(detail.payment.amountCents)}) too` },
+            ]}
+            value={fixPayment ? 'yes' : 'no'}
+            onChange={(e) => edit(setFixPayment)(e.currentTarget.value === 'yes')}
+          />
+        </Group>
+      )}
+
+      {action === 'MOVE' && <DonorPicker label="Move to donor" value={moveTo} onChange={edit(setMoveTo)} />}
+
+      {(action === 'SPLIT_CONTRIBUTION' || action === 'REALLOCATE') && partsEditor()}
+
+      {action === 'REALLOCATE' && (
+        <Stack gap="xs">
+          <Group>
+            <Button size="xs" variant="light" onClick={loadProposal}>
+              Show over-limit proposal
+            </Button>
           </Group>
-        )}
-
-        {action === 'MOVE' && <DonorPicker label="Move to donor" value={moveTo} onChange={edit(setMoveTo)} />}
-
-        {(action === 'SPLIT_CONTRIBUTION' || action === 'REALLOCATE') && partsEditor()}
-
-        {action === 'REALLOCATE' && (
-          <Stack gap="xs">
-            <Group>
-              <Button size="xs" variant="light" onClick={loadProposal}>
-                Show over-limit proposal
-              </Button>
-            </Group>
-            {proposal &&
-              (proposal.overLimitBucket ? (
-                <Stack gap={4}>
-                  <Text size="sm">
-                    Over the {proposal.overLimitBucket.bucket} limit by {money(proposal.overLimitBucket.overageCents)} (
-                    {money(proposal.overLimitBucket.aggregateCents)} against {money(proposal.overLimitBucket.limitCents)}).
-                  </Text>
-                  {proposal.options.map((o) => (
-                    <Group key={`${o.entityKind}:${o.ridingNumber ?? 'new'}`} gap="xs">
-                      <Text size="sm">
-                        Move {money(o.moveCents)} to {entityText(o.entityKind, o.ridingNumber)}
-                        {o.needsRiding ? ' (choose the riding)' : ''}; room for {money(o.headroomCents)}.
-                      </Text>
-                      <Button size="compact-xs" variant="subtle" onClick={() => useOption(o)}>
-                        Use this
-                      </Button>
-                    </Group>
-                  ))}
-                </Stack>
-              ) : (
-                <Text size="sm" c="dimmed">
-                  This contribution is not over any limit.
+          {proposal &&
+            (proposal.overLimitBucket ? (
+              <Stack gap={4}>
+                <Text size="sm">
+                  Over the {proposal.overLimitBucket.bucket} limit by {money(proposal.overLimitBucket.overageCents)} (
+                  {money(proposal.overLimitBucket.aggregateCents)} against {money(proposal.overLimitBucket.limitCents)}).
                 </Text>
-              ))}
-            <Text size="xs" c="dimmed">
-              A reallocation needs a filer's sign-off: committing it records you as the one who signed off.
-            </Text>
-          </Stack>
-        )}
-
-        {action === 'REFUND' && (
-          <Text size="sm">
-            Marks this payment ({money(detail.payment.amountCents)}) and its contributions refunded, and cancels any receipt
-            for them. The money moves in the processor; the tool only records it.
+                {proposal.options.map((o) => (
+                  <Group key={`${o.entityKind}:${o.ridingNumber ?? 'new'}`} gap="xs">
+                    <Text size="sm">
+                      Move {money(o.moveCents)} to {entityText(o.entityKind, o.ridingNumber)}
+                      {o.needsRiding ? ' (choose the riding)' : ''}; room for {money(o.headroomCents)}.
+                    </Text>
+                    <Button size="compact-xs" variant="subtle" onClick={() => useOption(o)}>
+                      Use this
+                    </Button>
+                  </Group>
+                ))}
+              </Stack>
+            ) : (
+              <Text size="sm" c="dimmed">
+                This contribution is not over any limit.
+              </Text>
+            ))}
+          <Text size="xs" c="dimmed">
+            A reallocation needs a filer's sign-off: committing it records you as the one who signed off.
           </Text>
-        )}
+        </Stack>
+      )}
 
-        {action === 'MERGE_CONTACTS' && (
-          <Stack gap="xs">
-            <DonorPicker label={`Merge ${detail.contact.name} into`} value={survivor} onChange={edit(setSurvivor)} />
-            <TextInput
-              label="Evidence they are the same person (required if anything was RTD-reported)"
-              value={evidence}
-              onChange={(e) => edit(setEvidence)(e.currentTarget.value)}
-            />
-            <Text size="xs" c="dimmed">
-              This moves all of this donor's contributions to the surviving contact. Nothing is deleted, and the merge can
-              be reversed.
-            </Text>
-          </Stack>
-        )}
+      {action === 'REFUND' && (
+        <Text size="sm">
+          Marks this payment ({money(detail.payment.amountCents)}) and its contributions refunded, and cancels any receipt
+          for them. The money moves in the processor; the tool only records it.
+        </Text>
+      )}
 
-        <Group grow align="flex-start">
+      {action === 'MERGE_CONTACTS' && (
+        <Stack gap="xs">
+          <DonorPicker label={`Merge ${detail.contact.name} into`} value={survivor} onChange={edit(setSurvivor)} />
           <TextInput
-            label="Reason (required)"
-            placeholder="e.g. cheque was for $80, keyed as $100"
-            value={reason}
-            onChange={(e) => edit(setReason)(e.currentTarget.value)}
+            label="Evidence they are the same person (required if anything was RTD-reported)"
+            value={evidence}
+            onChange={(e) => edit(setEvidence)(e.currentTarget.value)}
           />
+          <Text size="xs" c="dimmed">
+            This moves all of this donor's contributions to the surviving contact. Nothing is deleted, and the merge can
+            be reversed.
+          </Text>
+        </Stack>
+      )}
+
+      <Group grow align="flex-start">
+        <TextInput
+          label="Reason (required)"
+          placeholder="e.g. cheque was for $80, keyed as $100"
+          value={reason}
+          onChange={(e) => edit(setReason)(e.currentTarget.value)}
+        />
+        <TextInput
+          label="Received-by label on any new receipt"
+          value={label}
+          onChange={(e) => edit(setLabel)(e.currentTarget.value)}
+        />
+      </Group>
+
+      {plan?.labelsNeeded
+        // party receipts default to the party's name, and a leadership
+        // receipt prints its contestant's name from the registry
+        .filter((n) => isRidingScoped(n.entityKind))
+        .map((n) => (
           <TextInput
-            label="Received-by label on any new receipt"
-            value={label}
-            onChange={(e) => edit(setLabel)(e.currentTarget.value)}
+            key={n.key}
+            label={`Received-by label for ${entityText(n.entityKind, n.ridingNumber)} receipts`}
+            value={entityLabels[n.key] ?? ''}
+            onChange={(e) => {
+              setEntityLabels({ ...entityLabels, [n.key]: e.currentTarget.value });
+            }}
           />
-        </Group>
+        ))}
 
-        {plan?.labelsNeeded
-          // party receipts default to the party's name, and a leadership
-          // receipt prints its contestant's name from the registry
-          .filter((n) => isRidingScoped(n.entityKind))
-          .map((n) => (
-            <TextInput
-              key={n.key}
-              label={`Received-by label for ${entityText(n.entityKind, n.ridingNumber)} receipts`}
-              value={entityLabels[n.key] ?? ''}
-              onChange={(e) => {
-                setEntityLabels({ ...entityLabels, [n.key]: e.currentTarget.value });
-              }}
-            />
-          ))}
+      {error && <Alert color="red">{error}</Alert>}
+      {plan && <CascadeView plan={plan} />}
 
-        {error && <Alert color="red">{error}</Alert>}
-        {plan && <CascadeView plan={plan} />}
-
-        <Group>
-          <Button variant="light" onClick={() => preview.mutate()} loading={preview.isPending}>
-            Preview cascade
-          </Button>
-          <Button
-            color="orange"
-            onClick={() => commit.mutate()}
-            loading={commit.isPending}
-            disabled={!plan || plan.blockers.length > 0}
-          >
-            Commit correction
-          </Button>
-        </Group>
-      </Stack>
-    </Card>
+      <Group>
+        <Button variant="light" onClick={() => preview.mutate()} loading={preview.isPending}>
+          Preview cascade
+        </Button>
+        <Button
+          color="orange"
+          onClick={() => commit.mutate()}
+          loading={commit.isPending}
+          disabled={!plan || plan.blockers.length > 0}
+        >
+          Commit correction
+        </Button>
+      </Group>
+    </Stack>
   );
 }

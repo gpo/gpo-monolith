@@ -5,7 +5,7 @@ import {
 } from '../limits/contribution-limit.js';
 import type { PeriodRow } from '../period/calendar.js';
 import { parseRidingFromSourceCode } from '../source-code.js';
-import { isRidingScoped } from '../enums.js';
+import { isProcessorMethod, isRidingScoped } from '../enums.js';
 import { isEntityEligible, type RidingRow } from '../space/eligibility.js';
 import type {
   AddressForValidation,
@@ -127,7 +127,8 @@ export function checkA3EntityActive(
 }
 
 /** Only invariant 8's confident clause is checkable: "a processor record
- *  forces GPO." Distinguishing a CFO-subspace entry (defaults ENTITY) from
+ *  forces GPO." A processor record is a card or PAD payment
+ *  (`isProcessorMethod`), whatever reference it carries. Distinguishing a CFO-subspace entry (defaults ENTITY) from
  *  central manual entry (defaults GPO) needs the same riding/subspace
  *  identification ticket 1.6 flags as blocked pending B3
  *  (intake/defaults.ts) — asserting that half here would false-positive on
@@ -135,11 +136,11 @@ export function checkA3EntityActive(
 export function checkA4ReceivedByProvenance(
   c: ContributionForValidationRules,
 ): ValidationFinding | null {
-  const isProcessorRecord = c.externalRef != null && c.externalRef.trim().length > 0;
+  const isProcessorRecord = isProcessorMethod(c.paymentMethod);
   if (isProcessorRecord && c.metadata.receivedBy !== 'GPO') {
     return {
       ruleRef: 'A4',
-      message: `contribution has a processor external_ref but received_by is ${c.metadata.receivedBy}; a processor record forces GPO (invariant 8)`,
+      message: `a ${c.paymentMethod} payment is a processor record, but received_by is ${c.metadata.receivedBy}; a processor record forces GPO (invariant 8)`,
     };
   }
   return null;

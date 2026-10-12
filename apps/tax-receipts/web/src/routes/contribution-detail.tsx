@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -6,131 +6,40 @@ import {
   Badge,
   Button,
   Card,
-  Checkbox,
   Group,
   Loader,
+  Modal,
   NativeSelect,
   NumberInput,
-  Select,
+  SimpleGrid,
   Stack,
   Table,
   Text,
   TextInput,
-  ThemeIcon,
   Tooltip,
 } from '@mantine/core';
-import { api, ApiError, type ContributionDetail, type MetadataEditInput } from '../api.js';
+import { api, ApiError, type ContributionDetail } from '../api.js';
 import { describeRuleRef } from '../rule-labels.js';
-import { ContactFormModal } from '../components/contact-form-modal.js';
+import { ChangeHistoryCard } from '../components/change-history.js';
 import { CorrectionPanel } from '../components/correction-panel.js';
-import { LeadershipContestantSelect } from '../components/leadership-contestant-select.js';
-import {
-  AGENCY_HELP,
-  describeRecipient,
-  ENTITY_KIND_OPTIONS,
-  isRidingScoped,
-  leadershipLabelNote,
-} from '../entity-kind.js';
+import { EditContributionModal, receivedByOptions } from '../components/edit-contribution-modal.js';
+import { EditPaymentModal } from '../components/edit-payment-modal.js';
+import { AGENCY_HELP, describeRecipient, leadershipLabelNote } from '../entity-kind.js';
 import { PageHeader } from '../components/PageHeader.js';
+import { paymentMethodLabel, paymentReferenceLabel } from '../components/payment-reference.js';
 import { CancellationNoticeActions, ReceiptActions } from '../components/receipt-actions.js';
 
-/** Metadata field help text — kept next to the form so it stays in sync with
- * what the fields actually do (packages/tax-receipts-core/src/metadata.ts). */
-const METADATA_HELP = {
-  entityKind:
-    'Who received the contribution: the party centrally (province-wide, no riding), a constituency association (tied to a riding), a candidate’s campaign (tied to a riding), or a leadership contestant (no riding).',
-  ridingNumber:
-    'Electoral district (1–124) this contribution is attributed to. Required for a constituency association or campaign; not applicable when the recipient is the party (rule A2).',
-  leadershipContestantId:
-    'The leadership contestant this contribution is directed to. Their name prints on the receipt and in the EO reports (entity type LC). Add contestants under Admin.',
-  receivedBy:
-    'Who physically processed the contribution — independent of who it’s attributed to above. GPO: entered centrally by the party office. Entity: entered directly by a constituency association or campaign’s own CFO/subspace (this can happen even when the recipient kind above is Party, e.g. intake can’t yet always tell which subspace handled it).',
-  periodId: 'The receipting period (tax year) this contribution is attributed to.',
-  nonDeductibleCents:
-    'Portion of the amount that is not eligible for a tax receipt, e.g. the value of goods or services the donor received in exchange.',
-  goodsServices:
-    'Check if the donor received goods or services in exchange for this contribution — affects the non-deductible amount.',
-  sourceCode:
-    'Qomon/EO source code identifying the campaign or intake channel this contribution came in through; may also encode a riding number (rule A7).',
-} as const;
-
-/** The ENTITY label for PARTY deliberately does NOT say "Party (central)" —
- * receivedBy tracks processing provenance (who entered it), not attribution.
- * ENTITY means "a subspace/CFO entry, not GPO centrally," which can be true
- * even when the recipient kind above is Party (intake defaults entity_kind
- * to PARTY whenever it can't yet identify the real subspace — see
- * packages/tax-receipts-core/src/intake/defaults.ts, invariant 8). Labelling
- * it as if it meant "the party" would claim the opposite of what it means. */
-function receivedByOptions(entityKind: string): { value: string; label: string }[] {
-  const entityLabel =
-    entityKind === 'CA'
-      ? 'Constituency association'
-      : entityKind === 'CAMPAIGN'
-        ? 'Campaign'
-        : entityKind === 'LEADERSHIP'
-          ? 'Leadership contestant’s campaign'
-          : 'Entity / subspace entry (not GPO)';
-  return [
-    { value: 'GPO', label: 'GPO (party office, central)' },
-    { value: 'ENTITY', label: entityLabel },
-  ];
-}
-
-function FieldLabel({ label, help, required }: { label: string; help: string; required?: boolean }) {
-  return (
-    <Group gap={4} wrap="nowrap">
-      <Text component="span" size="sm" fw={500}>
-        {required && (
-          <Text component="span" c="red" span aria-hidden>
-            *{' '}
-          </Text>
-        )}
-        {label}
-      </Text>
-      <Tooltip label={help} multiline w={260} withArrow events={{ hover: true, focus: true, touch: true }}>
-        <ThemeIcon
-          component="span"
-          size={16}
-          radius="xl"
-          variant="light"
-          color="gray"
-          style={{ cursor: 'help' }}
-          tabIndex={0}
-          aria-label={`About ${label}`}
-        >
-          <Text size="10px" fw={700} span>
-            ?
-          </Text>
-        </ThemeIcon>
-      </Tooltip>
-    </Group>
-  );
-}
-
-/** Client-side mirror of rule A2 (checkA2RidingEntityConsistency in
- * @gpo/tax-receipts-core) so the form can hint at the mismatch before save;
- * the authoritative check still runs server-side post-save as a work item. */
-function a2RidingEntityWarning(
-  entityKind: string,
-  ridingNumber: number | null,
-): string | null {
-  if (!isRidingScoped(entityKind) && ridingNumber !== null) {
-    return `Entity kind ${entityKind} must not carry a riding number.`;
-  }
-  if (isRidingScoped(entityKind) && ridingNumber === null) {
-    return `Entity kind ${entityKind} requires a riding number.`;
-  }
-  return null;
-}
-
 /**
- * Contribution detail (ticket 1.5, screens.md 3): the payment behind the
- * contribution, metadata editable with a mandatory reason, allocations/
- * receipts, RTD inclusions, WorkItems, and the change-log slice for this
- * contribution. Import provenance when the payment came from Qomon, an
- * "edit donor" action, and for a Qomon contact a "refresh donor from Qomon"
- * action (D13).
+ * Contribution detail (ticket 1.5, screens.md 3). The Payment and
+ * Contribution cards show the same fields, in the same order, as Add a
+ * payment, read-only; each has an Edit modal. A payment imported from Qomon
+ * stays read-only. Below them: work items, allocations and receipts (Issue a
+ * receipt is a modal), and the change history. Correcting the contribution
+ * (amount, donor, split, refund) is a modal from the Contribution card.
  */
+
+/** Same cap as the payment entry pages, so the two read alike. */
+const PAGE_WIDTH = 640;
 
 export function money(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -148,7 +57,7 @@ function remainingEligibleCents(detail: ContributionDetail): number {
   return Math.max(0, eligible - issued);
 }
 
-/** A starting point only — the issuer can (and for CA/campaign, must) change
+/** A starting point only: the issuer can (and for CA/campaign, must) change
  * it. The exact EO-facing wording is a compliance question, not something to
  * bake in silently (see PHASE-3-NOTES.md). Exported: the per-space issuance
  * page (ticket 3.12) needs the same default for the same reason. */
@@ -159,6 +68,111 @@ export function defaultPoliticalEntityLabel(entityKind: string): string {
   return '';
 }
 
+function dateOnly(iso: string): string {
+  return new Date(iso).toLocaleDateString();
+}
+
+/** One read-only field: the entry form's label over its value. */
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Stack gap={0}>
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+      <Text size="sm" component="div">
+        {children}
+      </Text>
+    </Stack>
+  );
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  MANUAL: 'Entered by hand',
+  QOMON_IMPORT: 'Imported from Qomon',
+  LEGACY_IMPORT: 'Legacy import',
+};
+
+function IssueReceiptModal({ detail, onClose }: { detail: ContributionDetail; onClose: () => void }) {
+  const qc = useQueryClient();
+  const metadata = detail.metadata!;
+  const remaining = remainingEligibleCents(detail);
+  const [amount, setAmount] = useState<number | ''>('');
+  const [delivery, setDelivery] = useState<'MAIL' | 'EMAIL'>('MAIL');
+  const [label, setLabel] = useState(defaultPoliticalEntityLabel(metadata.entityKind));
+  const [reason, setReason] = useState('');
+
+  const issue = useMutation({
+    mutationFn: () =>
+      api.issueReceipt(detail.id, {
+        reason: reason.trim(),
+        amountCents: amount === '' ? undefined : Math.round(amount * 100),
+        delivery,
+        politicalEntityLabel: label.trim(),
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['contribution', detail.id] });
+      onClose();
+    },
+  });
+
+  return (
+    <Modal opened onClose={onClose} title="Issue a receipt">
+      <Stack gap="sm">
+        <Text size="sm" c="dimmed">
+          Remaining eligible: {money(remaining)}
+        </Text>
+        <NumberInput
+          label="Amount ($)"
+          description="Blank = the full remaining amount."
+          min={0.01}
+          max={remaining / 100}
+          decimalScale={2}
+          value={amount}
+          onChange={(v) => setAmount(typeof v === 'number' ? v : '')}
+        />
+        <NativeSelect
+          label="Delivery"
+          data={[
+            { value: 'MAIL', label: 'Mail' },
+            { value: 'EMAIL', label: 'Email' },
+          ]}
+          value={delivery}
+          onChange={(e) => setDelivery(e.currentTarget.value as 'MAIL' | 'EMAIL')}
+        />
+        <TextInput
+          label="Received-by label"
+          placeholder="e.g. Green Party of Ontario"
+          description={leadershipLabelNote(metadata.entityKind) ?? 'As it should print on the receipt. Required.'}
+          value={label}
+          onChange={(e) => setLabel(e.currentTarget.value)}
+        />
+        <TextInput
+          label="Reason (required)"
+          placeholder="e.g. donor requested annual receipt"
+          description="At least 3 characters."
+          value={reason}
+          onChange={(e) => setReason(e.currentTarget.value)}
+        />
+        {issue.error && (
+          <Alert color="red">{issue.error instanceof ApiError ? issue.error.message : 'Failed to issue receipt.'}</Alert>
+        )}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => issue.mutate()}
+            loading={issue.isPending}
+            disabled={reason.trim().length < 3 || label.trim().length === 0}
+          >
+            Issue receipt
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 export function ContributionDetailPage({ id }: { id: string }) {
   const qc = useQueryClient();
   const query = useQuery({
@@ -166,248 +180,117 @@ export function ContributionDetailPage({ id }: { id: string }) {
     queryFn: () => api.getContribution(id),
   });
   const periods = useQuery({ queryKey: ['admin-periods'], queryFn: api.listPeriods });
-  // Same queryKey as admin.tsx's RidingsSection so the two share a cache entry.
-  const ridings = useQuery({ queryKey: ['admin-ridings'], queryFn: api.listRidings });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
 
-  const [reason, setReason] = useState('');
-  const [form, setForm] = useState<Omit<MetadataEditInput, 'reason'> | null>(null);
-  const [editError, setEditError] = useState<string | null>(null);
-
-  const [receiptReason, setReceiptReason] = useState('');
-  const [receiptAmount, setReceiptAmount] = useState<number | ''>('');
-  const [receiptDelivery, setReceiptDelivery] = useState<'MAIL' | 'EMAIL'>('MAIL');
-  const [politicalEntityLabel, setPoliticalEntityLabel] = useState<string | null>(null);
-  const [receiptError, setReceiptError] = useState<string | null>(null);
-  // a committed correction retires this row, so the panel that shows what it did
-  // has to outlive the row turning into history
-  const [corrected, setCorrected] = useState(false);
+  const [editingPayment, setEditingPayment] = useState(false);
+  const [editingContribution, setEditingContribution] = useState(false);
+  const [issuing, setIssuing] = useState(false);
+  // a committed correction retires this row, so the modal showing what it did
+  // stays open after the row turns into history
+  const [correcting, setCorrecting] = useState(false);
 
   const detail = query.data;
-  const activeForm =
-    form ??
-    (detail?.metadata
-      ? {
-          periodId: detail.metadata.periodId,
-          ridingNumber: detail.metadata.ridingNumber,
-          entityKind: detail.metadata.entityKind,
-          leadershipContestantId: detail.metadata.leadershipContestantId,
-          receivedBy: detail.metadata.receivedBy,
-          goodsServices: detail.metadata.goodsServices,
-          nonDeductibleCents: detail.metadata.nonDeductibleCents,
-          processedDate: detail.metadata.processedDate,
-          sourceCode: detail.metadata.sourceCode,
-          exceptionReason: detail.metadata.exceptionReason,
-          // external_ref lives on the payment (data-model §2, D12), not on
-          // ContributionMetadata
-          externalRef: detail.payment.externalRef,
-        }
-      : null);
-
-  const periodOptions = periods.data?.data.map((p) => ({ value: String(p.id), label: p.name })) ?? [];
-  const periodSelectData =
-    activeForm && !periodOptions.some((o) => o.value === String(activeForm.periodId))
-      ? [...periodOptions, { value: String(activeForm.periodId), label: `Period ${activeForm.periodId} (not in list)` }]
-      : periodOptions;
-
-  const ridingOptions =
-    ridings.data?.data.map((r) => ({
-      value: String(r.ridingNumber),
-      label: `${r.ridingNumber} — ${r.name}${r.active ? '' : ' (inactive)'}`,
-    })) ?? [];
-  // Only flag a riding as unknown once the ridings list has actually loaded —
-  // otherwise every riding would flash "Unknown" while the query is pending.
-  const ridingUnknown =
-    activeForm?.ridingNumber != null &&
-    ridings.data !== undefined &&
-    !ridings.data.data.some((r) => r.ridingNumber === activeForm.ridingNumber);
-  const ridingSelectData =
-    ridingUnknown && activeForm?.ridingNumber != null
-      ? [...ridingOptions, { value: String(activeForm.ridingNumber), label: `${activeForm.ridingNumber} — Unknown` }]
-      : ridingOptions;
-
-  function updateForm<K extends keyof Omit<MetadataEditInput, 'reason'>>(
-    key: K,
-    value: Omit<MetadataEditInput, 'reason'>[K],
-  ) {
-    if (!activeForm) return;
-    setForm({ ...activeForm, [key]: value });
-  }
-
-  const [refreshOutcome, setRefreshOutcome] = useState<string | null>(null);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
-  const [editingDonor, setEditingDonor] = useState(false);
-  const donorRecord = useQuery({
-    queryKey: ['contact', detail?.contact.id],
-    queryFn: () => api.getContact(detail!.contact.id),
-    enabled: editingDonor && !!detail,
-  });
-
-  // A Qomon contact (D13) can change in Qomon, so a corrected donor address
-  // there reaches the tool through this on-demand refresh, not through the
-  // contribution itself, which is the tool's own.
-  const refreshDonor = useMutation({
-    mutationFn: () => api.refreshContributionContact(id),
-    onSuccess: ({ outcome }) => {
-      setRefreshError(null);
-      setRefreshOutcome(outcome);
-      return qc.invalidateQueries({ queryKey: ['contribution', id] });
-    },
-    onError: (err) => {
-      setRefreshOutcome(null);
-      setRefreshError(err instanceof ApiError ? err.message : 'Failed to refresh the donor from Qomon.');
-    },
-  });
-
-  const save = useMutation({
-    mutationFn: () => {
-      if (!activeForm) throw new Error('nothing to save');
-      return api.editContributionMetadata(id, { ...activeForm, reason });
-    },
-    onSuccess: () => {
-      setEditError(null);
-      setReason('');
-      setForm(null);
-      return qc.invalidateQueries({ queryKey: ['contribution', id] });
-    },
-    onError: (err) => {
-      setEditError(err instanceof ApiError ? err.message : 'Failed to save.');
-    },
-  });
-
-  const issueReceipt = useMutation({
-    mutationFn: () => {
-      const effectiveLabel = (
-        politicalEntityLabel ?? defaultPoliticalEntityLabel(detail?.metadata?.entityKind ?? '')
-      ).trim();
-      return api.issueReceipt(id, {
-        reason: receiptReason,
-        amountCents: receiptAmount === '' ? undefined : Math.round(receiptAmount * 100),
-        delivery: receiptDelivery,
-        politicalEntityLabel: effectiveLabel,
-      });
-    },
-    onSuccess: () => {
-      setReceiptError(null);
-      setReceiptReason('');
-      setReceiptAmount('');
-      setPoliticalEntityLabel(null);
-      return qc.invalidateQueries({ queryKey: ['contribution', id] });
-    },
-    onError: (err) => {
-      setReceiptError(err instanceof ApiError ? err.message : 'Failed to issue receipt.');
-    },
-  });
-
   if (query.isLoading) return <Loader />;
   if (query.isError || !detail) return <Text c="red">Contribution not found.</Text>;
 
+  const can = me.data?.can;
+  const active = detail.status === 'ACTIVE';
+  const fromQomon = detail.qomon !== null || detail.payment.source === 'QOMON_IMPORT';
+  const receipted = detail.allocations.some((a) => a.receipt.status === 'ISSUED');
+  const referenceLabel = paymentReferenceLabel(detail.payment.method);
+  const metadata = detail.metadata;
+  const periodName = (periodId: number) =>
+    periods.data?.data.find((p) => p.id === periodId)?.name ?? `Period ${periodId}`;
+  const remaining = remainingEligibleCents(detail);
+  const issueBlocked = !metadata
+    ? 'Waiting on metadata (intake derivation) before a receipt can be issued.'
+    : remaining <= 0
+      ? 'Nothing left to receipt: the full eligible amount is already issued.'
+      : null;
+  const refresh = () => qc.invalidateQueries({ queryKey: ['contribution', id] });
+
   return (
-    <Stack gap="lg">
+    <Stack gap="lg" maw={PAGE_WIDTH} mx="auto">
       <PageHeader title="Contribution" backTo="/contributions" backLabel="Back to list" />
-      {editingDonor && donorRecord.data && (
-        <ContactFormModal contact={donorRecord.data} onClose={() => setEditingDonor(false)} />
+      {editingPayment && (
+        <EditPaymentModal contributionId={detail.id} payment={detail.payment} onClose={() => setEditingPayment(false)} />
       )}
-      {editingDonor && donorRecord.isError && <Alert color="red">Could not load the donor to edit.</Alert>}
+      {editingContribution && metadata && (
+        <EditContributionModal detail={detail} onClose={() => setEditingContribution(false)} />
+      )}
+      {issuing && metadata && <IssueReceiptModal detail={detail} onClose={() => setIssuing(false)} />}
+      {correcting && can && (
+        <Modal opened onClose={() => setCorrecting(false)} title="Correct this contribution" size="xl">
+          <CorrectionPanel detail={detail} canFile={can.fileEOForms} onDone={refresh} />
+        </Modal>
+      )}
+
+      {!active && <Alert color="orange">This contribution is {detail.status}; it is history, not the working record.</Alert>}
 
       <Card withBorder>
-        <Stack gap="xs">
+        <Stack gap="sm">
           <Group justify="space-between">
-            <Text fw={600}>Payment</Text>
             <Group gap="xs">
-              {detail.qomon && (
-                <Text size="xs" c="dimmed">
-                  imported from Qomon transaction {detail.qomon.transactionId}; last seen:{' '}
-                  {detail.qomon.lastSyncedAt ? new Date(detail.qomon.lastSyncedAt).toLocaleString() : 'never'}
-                </Text>
-              )}
-              {me.data?.can.editContacts && (
-                <Button size="xs" variant="light" onClick={() => setEditingDonor(true)} loading={editingDonor && donorRecord.isLoading}>
-                  Edit donor
-                </Button>
-              )}
-              {detail.contact.qomonContactId !== null && (
-                <Button
-                  size="xs"
-                  variant="light"
-                  onClick={() => {
-                    setRefreshOutcome(null);
-                    refreshDonor.mutate();
-                  }}
-                  loading={refreshDonor.isPending}
-                >
-                  Refresh donor from Qomon
-                </Button>
+              <Text fw={600}>Payment</Text>
+              <Badge variant="light" color="gray">
+                {SOURCE_LABELS[detail.payment.source] ?? detail.payment.source}
+              </Badge>
+              {detail.payment.state !== 'RECEIVED' && (
+                <Badge variant="light" color="orange">
+                  {detail.payment.state}
+                </Badge>
               )}
             </Group>
+            {can?.enterPayments && (
+              <Tooltip label="Imported from Qomon: it can only change there." multiline w={240} disabled={!fromQomon}>
+                {/* a disabled button fires no hover events, so the span carries the tooltip */}
+                <span>
+                  <Button size="xs" disabled={fromQomon} onClick={() => setEditingPayment(true)}>
+                    Edit
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
           </Group>
-          {refreshOutcome && (
-            <Text size="xs" c="green">
-              Donor refresh — outcome: {refreshOutcome}.
-            </Text>
+          {detail.qomon?.deletedInQomonAt && (
+            <Alert color="red">
+              Sync incident: absent from Qomon as of {new Date(detail.qomon.deletedInQomonAt).toLocaleString()}. The
+              payment and this contribution are unchanged.
+            </Alert>
           )}
-          {refreshError && <Alert color="red">{refreshError}</Alert>}
-          {detail.payment.unattributedCents > 0 && me.data?.can.enterPayments && (
+          {detail.payment.unattributedCents > 0 && can?.enterPayments && (
             <Alert color="blue" variant="light">
-              {money(detail.payment.unattributedCents)} of this {money(detail.payment.amountCents)} payment is not attributed
-              to any contribution.{' '}
+              {money(detail.payment.unattributedCents)} of this {money(detail.payment.amountCents)} payment is not
+              attributed to any contribution.{' '}
               <Link to="/payments/$id/attribute" params={{ id: detail.payment.id }}>
                 Attribute the rest
               </Link>
             </Alert>
           )}
-          {detail.status !== 'ACTIVE' && (
-            <Alert color="orange">This contribution is {detail.status}; it is history, not the working record.</Alert>
-          )}
-          {detail.qomon?.deletedInQomonAt && (
-            <Alert color="red">
-              Sync incident: absent from Qomon as of {new Date(detail.qomon.deletedInQomonAt).toLocaleString()}.
-              The payment and this contribution are unchanged.
-            </Alert>
-          )}
-          <Group grow>
-            <Text>
-              Donor:{' '}
-              <Link to="/contributors/$id" params={{ id: detail.contact.id }}>
-                {detail.contact.name}
-              </Link>{' '}
-              (Individual)
+          <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md" verticalSpacing="sm">
+            <Field label="Donor who paid">
+              <Link to="/contributors/$id" params={{ id: detail.payment.contactId }}>
+                {detail.payment.contactName}
+              </Link>
+            </Field>
+            <Field label="Amount">{money(detail.payment.amountCents)}</Field>
+            <Field label="Received on">{dateOnly(detail.payment.receivedAt)}</Field>
+            <Field label="Method">{paymentMethodLabel(detail.payment.method)}</Field>
+            {referenceLabel && <Field label={referenceLabel}>{detail.payment.externalRef ?? '—'}</Field>}
+            <Field label="Payer name">{detail.payment.payerName ?? '—'}</Field>
+            <Field label="Note">{detail.payment.note ?? '—'}</Field>
+          </SimpleGrid>
+          {detail.qomon && (
+            <Text size="xs" c="dimmed">
+              Qomon transaction {detail.qomon.transactionId}
+              {detail.qomon.codeCampaign ? `, code campaign ${detail.qomon.codeCampaign}` : ''}; last seen{' '}
+              {detail.qomon.lastSyncedAt ? new Date(detail.qomon.lastSyncedAt).toLocaleString() : 'never'}.
             </Text>
-            <Text>Amount: {money(detail.amountCents)}</Text>
-            <Text>Accepted: {new Date(detail.acceptedAt).toLocaleDateString()}</Text>
-            <Text>Payment state: {detail.payment.state}</Text>
-          </Group>
-          <Group grow>
-            <Text>Source: {detail.payment.source}</Text>
-            <Text>Payment method: {detail.payment.method}</Text>
-            <Text>Code campaign: {detail.qomon?.codeCampaign ?? '—'}</Text>
-            <Text>External ref: {detail.payment.externalRef ?? '—'}</Text>
-          </Group>
-          {detail.payment.payerName && <Text size="sm">Payer: {detail.payment.payerName}</Text>}
-          <Text size="sm" c={detail.contact.address ? undefined : 'orange'}>
-            Address on file:{' '}
-            {detail.contact.address
-              ? `${detail.contact.address.line1}, ${detail.contact.address.city} ${detail.contact.address.province} ${detail.contact.address.postalCode}, ${detail.contact.address.country}`
-              : 'none — a receipt cannot be issued until this donor has an address on file'}
-          </Text>
-          <Text size="sm">
-            Contributor type: Individual · Contributor id: {detail.contact.contributorId}
-          </Text>
-          {detail.metadata && (
-            <Group gap="xs">
-              <Text size="sm">Directed to: {describeRecipient(detail.metadata)}</Text>
-              <Tooltip label={AGENCY_HELP} multiline w={300} withArrow>
-                <Badge color={detail.metadata.agencyContribution ? 'grape' : 'gray'} variant="light">
-                  Agency contribution: {detail.metadata.agencyContribution ? 'Yes' : 'No'}
-                </Badge>
-              </Tooltip>
-            </Group>
           )}
           {detail.payment.contributions.length > 1 && (
             <Stack gap={4}>
               <Text size="sm" fw={500}>
-                This {money(detail.payment.amountCents)} payment is split across {detail.payment.contributions.length}{' '}
-                contributions:
+                Split across {detail.payment.contributions.length} contributions:
               </Text>
               <Table withRowBorders={false} verticalSpacing={2}>
                 <Table.Tbody>
@@ -431,11 +314,6 @@ export function ContributionDetailPage({ id }: { id: string }) {
                       </Table.Td>
                       <Table.Td>
                         <Text size="sm">{describeRecipient(c)}</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm">Received by {c.receivedBy ?? '—'}</Text>
-                      </Table.Td>
-                      <Table.Td>
                         {c.agencyContribution && (
                           <Badge color="grape" variant="light" size="sm">
                             agency
@@ -448,134 +326,93 @@ export function ContributionDetailPage({ id }: { id: string }) {
               </Table>
             </Stack>
           )}
-          {(detail.note ?? detail.payment.note) && (
-            <Text size="sm">Note: {detail.note ?? detail.payment.note}</Text>
-          )}
         </Stack>
       </Card>
 
       <Card withBorder>
         <Stack gap="sm">
-          <Text fw={600}>Metadata</Text>
-          {!activeForm ? (
-            <Text c="dimmed">
-              No metadata yet — this contribution is waiting on intake derivation.
-            </Text>
-          ) : (
-            <>
-              <Group grow align="flex-start">
-                <NativeSelect
-                  label={<FieldLabel label="Recipient kind" help={METADATA_HELP.entityKind} />}
-                  data={ENTITY_KIND_OPTIONS}
-                  value={activeForm.entityKind}
-                  onChange={(e) => {
-                    const entityKind = e.currentTarget.value;
-                    setForm({
-                      ...activeForm,
-                      entityKind,
-                      // Rule A2: a party or leadership recipient never carries a
-                      // riding number, and only a leadership one names a contestant.
-                      ridingNumber: isRidingScoped(entityKind) ? activeForm.ridingNumber : null,
-                      leadershipContestantId: entityKind === 'LEADERSHIP' ? activeForm.leadershipContestantId : null,
-                    });
-                  }}
-                />
-                {activeForm.entityKind === 'LEADERSHIP' ? (
-                  <LeadershipContestantSelect
-                    label={
-                      <FieldLabel label="Leadership contestant" help={METADATA_HELP.leadershipContestantId} required />
-                    }
-                    value={activeForm.leadershipContestantId}
-                    onChange={(v) => updateForm('leadershipContestantId', v)}
-                    error={activeForm.leadershipContestantId === null ? 'Choose the contestant (rule A2).' : null}
-                  />
-                ) : (
-                  <Select
-                    label={
-                      <FieldLabel
-                        label="Riding number"
-                        help={METADATA_HELP.ridingNumber}
-                        required={isRidingScoped(activeForm.entityKind)}
-                      />
-                    }
-                    data={ridingSelectData}
-                    searchable
-                    clearable
-                    nothingFoundMessage="No matching riding"
-                    required={isRidingScoped(activeForm.entityKind)}
-                    withAsterisk={false}
-                    disabled={!isRidingScoped(activeForm.entityKind) || ridings.isLoading}
-                    placeholder={
-                      !isRidingScoped(activeForm.entityKind)
-                        ? 'N/A for party'
-                        : ridings.isLoading
-                          ? 'Loading ridings…'
-                          : 'Search by number or name'
-                    }
-                    value={activeForm.ridingNumber !== null ? String(activeForm.ridingNumber) : null}
-                    onChange={(v) => updateForm('ridingNumber', v !== null ? Number(v) : null)}
-                    error={
-                      a2RidingEntityWarning(activeForm.entityKind, activeForm.ridingNumber) ??
-                      (ridingUnknown ? `Riding ${activeForm.ridingNumber} — Unknown (no matching riding on file)` : null)
-                    }
-                  />
-                )}
-                <NativeSelect
-                  label={<FieldLabel label="Received by" help={METADATA_HELP.receivedBy} />}
-                  data={receivedByOptions(activeForm.entityKind)}
-                  value={activeForm.receivedBy}
-                  onChange={(e) => updateForm('receivedBy', e.currentTarget.value)}
-                />
-                <NativeSelect
-                  label={<FieldLabel label="Period" help={METADATA_HELP.periodId} />}
-                  data={periodSelectData}
-                  disabled={periods.isLoading}
-                  value={String(activeForm.periodId)}
-                  onChange={(e) => updateForm('periodId', Number(e.currentTarget.value))}
-                />
-              </Group>
-              <Group grow align="flex-end">
-                <NumberInput
-                  label={<FieldLabel label="Non-deductible ($)" help={METADATA_HELP.nonDeductibleCents} />}
-                  value={activeForm.nonDeductibleCents / 100}
-                  onChange={(v) =>
-                    updateForm('nonDeductibleCents', typeof v === 'number' ? Math.round(v * 100) : 0)
-                  }
-                />
-                <Checkbox
-                  label={<FieldLabel label="Goods & services" help={METADATA_HELP.goodsServices} />}
-                  checked={activeForm.goodsServices}
-                  onChange={(e) => updateForm('goodsServices', e.currentTarget.checked)}
-                />
-                <TextInput
-                  label={<FieldLabel label="Source code" help={METADATA_HELP.sourceCode} />}
-                  value={activeForm.sourceCode}
-                  onChange={(e) => updateForm('sourceCode', e.currentTarget.value)}
-                />
-              </Group>
-              <TextInput
-                label="Reason for this edit (required)"
-                placeholder="e.g. CFO subspace intake review"
-                value={reason}
-                onChange={(e) => setReason(e.currentTarget.value)}
-              />
-              {editError && <Alert color="red">{editError}</Alert>}
-              <Group>
-                <Button
-                  onClick={() => save.mutate()}
-                  loading={save.isPending}
-                  disabled={reason.trim().length < 3}
-                >
-                  Save metadata
-                </Button>
-                {form && (
-                  <Button variant="subtle" onClick={() => setForm(null)}>
-                    Discard changes
+          <Group justify="space-between">
+            <Text fw={600}>Contribution</Text>
+            {active && (
+              <Group gap="xs">
+                {can?.correctContributions && (
+                  <Button size="xs" variant="default" onClick={() => setCorrecting(true)}>
+                    Correct
                   </Button>
                 )}
+                {can?.editContributions && metadata && (
+                  <Tooltip
+                    label="This contribution backs an issued receipt; change it with Correct instead."
+                    multiline
+                    w={240}
+                    disabled={!receipted}
+                  >
+                    {/* a disabled button fires no hover events, so the span carries the tooltip */}
+                    <span>
+                      <Button size="xs" disabled={receipted} onClick={() => setEditingContribution(true)}>
+                        Edit
+                      </Button>
+                    </span>
+                  </Tooltip>
+                )}
               </Group>
-            </>
+            )}
+          </Group>
+          {!metadata && (
+            <Text size="sm" c="dimmed">
+              No metadata yet: this contribution is waiting on intake derivation.
+            </Text>
           )}
+          <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md" verticalSpacing="sm">
+            <Field label="Donor">
+              <Link to="/contributors/$id" params={{ id: detail.contact.id }}>
+                {detail.contact.name}
+              </Link>
+              <Text size="xs" c="dimmed">
+                Individual, contributor id {detail.contact.contributorId}
+              </Text>
+            </Field>
+            <Field label="Amount">{money(detail.amountCents)}</Field>
+            {metadata && (
+              <>
+                <Field label="Recipient">
+                  <Group gap="xs">
+                    {describeRecipient(metadata)}
+                    {metadata.agencyContribution && (
+                      <Tooltip label={AGENCY_HELP} multiline w={300} withArrow>
+                        <Badge color="grape" variant="light" size="sm">
+                          agency
+                        </Badge>
+                      </Tooltip>
+                    )}
+                  </Group>
+                </Field>
+                <Field label="Period">{periodName(metadata.periodId)}</Field>
+              </>
+            )}
+            <Field label="Accepted on">{dateOnly(detail.acceptedAt)}</Field>
+            {metadata && (
+              <>
+                <Field label="Received by">
+                  {receivedByOptions(metadata.entityKind).find((o) => o.value === metadata.receivedBy)?.label ??
+                    metadata.receivedBy}
+                </Field>
+                <Field label="Source code">{metadata.sourceCode || '—'}</Field>
+                <Field label="Donor received goods or services">{metadata.goodsServices ? 'Yes' : 'No'}</Field>
+                <Field label="Non-deductible">{money(metadata.nonDeductibleCents)}</Field>
+              </>
+            )}
+            <Field label="Note">{detail.note ?? '—'}</Field>
+          </SimpleGrid>
+          <Field label="Address on file">
+            {detail.contact.address ? (
+              `${detail.contact.address.line1}, ${detail.contact.address.city} ${detail.contact.address.province} ${detail.contact.address.postalCode}, ${detail.contact.address.country}`
+            ) : (
+              <Text size="sm" c="orange" span>
+                None: a receipt cannot be issued until this donor has an address on file.
+              </Text>
+            )}
+          </Field>
         </Stack>
       </Card>
 
@@ -608,7 +445,7 @@ export function ContributionDetailPage({ id }: { id: string }) {
                       {w.status}
                     </Badge>
                   </Table.Td>
-                  <Table.Td>{new Date(w.openedAt).toLocaleDateString()}</Table.Td>
+                  <Table.Td>{dateOnly(w.openedAt)}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -618,7 +455,18 @@ export function ContributionDetailPage({ id }: { id: string }) {
 
       <Card withBorder>
         <Stack gap="sm">
-          <Text fw={600}>Allocations &amp; receipts</Text>
+          <Group justify="space-between">
+            <Text fw={600}>Allocations &amp; receipts</Text>
+            {can?.issueReceipts && (
+              <Tooltip label={issueBlocked} multiline w={240} disabled={issueBlocked === null}>
+                <span>
+                  <Button size="xs" disabled={issueBlocked !== null} onClick={() => setIssuing(true)}>
+                    Issue a receipt
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+          </Group>
           {detail.allocations.length === 0 ? (
             <Text c="dimmed">None issued yet.</Text>
           ) : (
@@ -629,7 +477,7 @@ export function ContributionDetailPage({ id }: { id: string }) {
                     <Table.Td>{a.receipt.receiptNumber}</Table.Td>
                     <Table.Td>{a.receipt.status}</Table.Td>
                     <Table.Td>{money(a.amountCents)}</Table.Td>
-                    <Table.Td>{new Date(a.receipt.issueDate).toLocaleDateString()}</Table.Td>
+                    <Table.Td>{dateOnly(a.receipt.issueDate)}</Table.Td>
                     <Table.Td>
                       <Text
                         component="a"
@@ -646,15 +494,15 @@ export function ContributionDetailPage({ id }: { id: string }) {
                       <CancellationNoticeActions
                         receipt={a.receipt}
                         donorEmail={detail.contact.email}
-                        canSend={me.data?.can.correctReceipts ?? false}
-                        onDone={() => qc.invalidateQueries({ queryKey: ['contribution', id] })}
+                        canSend={can?.correctReceipts ?? false}
+                        onDone={refresh}
                       />
-                      {me.data?.can.correctReceipts && (
+                      {can?.correctReceipts && (
                         <ReceiptActions
                           receipt={a.receipt}
                           donorName={detail.contact.name}
-                          defaultLabel={defaultPoliticalEntityLabel(detail.metadata?.entityKind ?? '')}
-                          onDone={() => qc.invalidateQueries({ queryKey: ['contribution', id] })}
+                          defaultLabel={defaultPoliticalEntityLabel(metadata?.entityKind ?? '')}
+                          onDone={refresh}
                         />
                       )}
                     </Table.Td>
@@ -663,103 +511,21 @@ export function ContributionDetailPage({ id }: { id: string }) {
               </Table.Tbody>
             </Table>
           )}
-
-          {me.data?.can.issueReceipts && (
-            <>
-              <Text fw={600} mt="sm">
-                Issue a receipt
-              </Text>
-              {!detail.metadata ? (
-                <Text c="dimmed">Waiting on metadata (intake derivation) before a receipt can be issued.</Text>
-              ) : remainingEligibleCents(detail) <= 0 ? (
-                <Text c="dimmed">Nothing left to receipt — the full eligible amount is already issued.</Text>
-              ) : (
-                <>
-                  <Text size="sm" c="dimmed">
-                    Remaining eligible: {money(remainingEligibleCents(detail))}
-                  </Text>
-                  <Group grow align="flex-start">
-                    <NumberInput
-                      label="Amount ($, blank = full remaining amount)"
-                      min={0.01}
-                      max={remainingEligibleCents(detail) / 100}
-                      value={receiptAmount}
-                      onChange={(v) => setReceiptAmount(typeof v === 'number' ? v : '')}
-                    />
-                    <NativeSelect
-                      label="Delivery"
-                      data={[
-                        { value: 'MAIL', label: 'Mail' },
-                        { value: 'EMAIL', label: 'Email' },
-                      ]}
-                      value={receiptDelivery}
-                      onChange={(e) => setReceiptDelivery(e.currentTarget.value as 'MAIL' | 'EMAIL')}
-                    />
-                    <TextInput
-                      label="Received-by label (as it should print on the receipt)"
-                      placeholder="e.g. Green Party of Ontario"
-                      description={leadershipLabelNote(detail.metadata.entityKind)}
-                      value={politicalEntityLabel ?? defaultPoliticalEntityLabel(detail.metadata.entityKind)}
-                      onChange={(e) => setPoliticalEntityLabel(e.currentTarget.value)}
-                    />
-                  </Group>
-                  <TextInput
-                    label="Reason for issuing this receipt (required)"
-                    placeholder="e.g. donor requested annual receipt"
-                    value={receiptReason}
-                    onChange={(e) => setReceiptReason(e.currentTarget.value)}
-                  />
-                  {receiptError && <Alert color="red">{receiptError}</Alert>}
-                  <Group>
-                    <Button
-                      onClick={() => issueReceipt.mutate()}
-                      loading={issueReceipt.isPending}
-                      disabled={
-                        receiptReason.trim().length < 3 ||
-                        (politicalEntityLabel ?? defaultPoliticalEntityLabel(detail.metadata.entityKind)).trim()
-                          .length === 0
-                      }
-                    >
-                      Issue receipt
-                    </Button>
-                  </Group>
-                </>
-              )}
-            </>
-          )}
         </Stack>
       </Card>
 
-      {me.data?.can.correctContributions && (detail.status === 'ACTIVE' || corrected) && (
-        <CorrectionPanel
-          detail={detail}
-          canFile={me.data.can.fileEOForms}
-          onDone={() => {
-            setCorrected(true);
-            return qc.invalidateQueries({ queryKey: ['contribution', id] });
-          }}
-        />
-      )}
-
-      <Card withBorder>
-        <Text fw={600} mb="xs">
-          Change-log
-        </Text>
-        {detail.changeLog.length === 0 ? (
-          <Text c="dimmed">None yet.</Text>
-        ) : (
-          <Stack gap="xs">
-            {detail.changeLog.map((c) => (
-              <Group key={c.id} justify="space-between" wrap="nowrap">
-                <Text size="sm">{c.reason}</Text>
-                <Text size="xs" c="dimmed">
-                  {new Date(c.at).toLocaleString()}
-                </Text>
-              </Group>
-            ))}
-          </Stack>
-        )}
-      </Card>
+      <ChangeHistoryCard entries={detail.changeLog}>
+        <Stack gap="xs">
+          {detail.changeLog.map((c) => (
+            <Group key={c.id} justify="space-between" wrap="nowrap">
+              <Text size="sm">{c.reason}</Text>
+              <Text size="xs" c="dimmed">
+                {new Date(c.at).toLocaleString()}
+              </Text>
+            </Group>
+          ))}
+        </Stack>
+      </ChangeHistoryCard>
     </Stack>
   );
 }
