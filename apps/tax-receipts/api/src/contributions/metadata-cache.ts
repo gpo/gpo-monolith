@@ -39,7 +39,6 @@ export function descriptiveToColumns(d: GpoMetadataDescriptive) {
     nonDeductibleCents: d.non_deductible_cents,
     processedDate: d.processed_date ? new Date(d.processed_date) : null,
     sourceCode: d.source_code,
-    eoContributorId: d.eo_contributor_id,
     exceptionReason: d.exception_reason,
   };
 }

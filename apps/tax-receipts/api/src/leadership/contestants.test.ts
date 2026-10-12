@@ -130,7 +130,6 @@ describe('leadership contestants (EO evaluation rows 25, 26, 28)', () => {
           non_deductible_cents: 0,
           processed_date: null,
           source_code: 'LDR',
-          eo_contributor_id: null,
           exception_reason: null,
           external_ref: null,
         },

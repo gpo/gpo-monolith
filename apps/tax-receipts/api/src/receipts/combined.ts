@@ -29,7 +29,6 @@ export interface CombinableContribution {
   receivedBy: ReceivedBy;
   goodsServices: boolean;
   acceptedAt: Date;
-  eoContributorId: string | null;
 }
 
 const MUST_AGREE: { field: keyof CombinableContribution; label: string }[] = [
@@ -43,14 +42,12 @@ const MUST_AGREE: { field: keyof CombinableContribution; label: string }[] = [
 ];
 
 /** Why these contributions cannot share one receipt, as readable labels;
- *  empty when they can. Two different non-null EO contributor ids also
- *  conflict (a missing one does not). */
+ *  empty when they can. The EO contributor id belongs to the contact, so a
+ *  shared contact means a shared id. */
 export function combinationConflicts(contributions: readonly CombinableContribution[]): string[] {
   const conflicts = MUST_AGREE.filter(
     ({ field }) => new Set(contributions.map((c) => String(c[field]))).size > 1,
   ).map(({ label }) => label);
-  const eoIds = new Set(contributions.map((c) => c.eoContributorId).filter((id) => id !== null));
-  if (eoIds.size > 1) conflicts.push('EO contributor id');
   return conflicts;
 }
 
@@ -60,7 +57,6 @@ export interface ReceiptPrintedFields {
   /** latest acceptance date: the ALL report's deposit date */
   acceptedThrough: Date;
   goodsServices: boolean;
-  eoContributorId: string | null;
   /** the earliest contribution, for the fields every contribution shares
    *  (entity, contestant) */
   primary: CombinableContribution;
@@ -78,7 +74,6 @@ export function receiptPrintedFields<C extends CombinableContribution>(
     acceptedFrom: byDate[0]!.acceptedAt,
     acceptedThrough: byDate[byDate.length - 1]!.acceptedAt,
     goodsServices: contributions.every((c) => c.goodsServices),
-    eoContributorId: contributions.find((c) => c.eoContributorId !== null)?.eoContributorId ?? null,
     primary: byDate[0]!,
   };
 }

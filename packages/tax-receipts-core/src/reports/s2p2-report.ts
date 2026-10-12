@@ -69,11 +69,10 @@ export interface S2p2SourceRow {
   leadershipContestant?: { id: string; name: string } | null;
   periodId: number;
   amountCents: number;
-  /** the grouping key's donor identity. Deliberately NOT
-   *  `eoContributorId` — that field is frequently unset today (O38), and
-   *  grouping by it would silently collapse every Contributor_ID-less donor
-   *  into a single row. `eoContributorId` is carried separately, for
-   *  display only. */
+  /** the grouping key's donor identity. Not `eoContributorId`: that is
+   *  typed nullable here, and grouping by it would collapse every
+   *  Contributor_ID-less donor into a single row. `eoContributorId` is
+   *  carried separately, for display only. */
   contactId: string;
   /** carried through only so the caller can recover which receipts fed a
    *  surviving (>$200) group, for `EntityReportReceipt` linking and

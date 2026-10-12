@@ -45,9 +45,10 @@ export interface RtdFilingSourceRow {
   acceptedAt: Date;
   amountCents: number;
   aggregateAfterCents: number;
-  /** Contribution.eoContributorId. Emitted blank when unset
-   *  (open-questions.md O38) rather than fabricated, the same choice
-   *  `all-report.ts` makes for the ALL/S2P2 `Contributor_ID` column. */
+  /** the contributor's Contact.contributorId, assigned to every contact
+   *  at insert. Still emitted blank if null rather than fabricated, the
+   *  same choice `all-report.ts` makes for the ALL/S2P2 `Contributor_ID`
+   *  column. */
   eoContributorId: string | null;
 }
 

@@ -23,7 +23,6 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
     overrides: {
       entityKind?: EntityKind;
       goodsServices?: boolean;
-      eoContributorId?: string | null;
       periodId?: number;
     } = {},
   ) {
@@ -34,7 +33,6 @@ describe('RTD draft builder, DB-backed (ticket 2.2)', () => {
           ridingNumber: null,
           receivedBy: 'GPO',
           goodsServices: overrides.goodsServices ?? false,
-          eoContributorId: overrides.eoContributorId ?? null,
         } });
       await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;

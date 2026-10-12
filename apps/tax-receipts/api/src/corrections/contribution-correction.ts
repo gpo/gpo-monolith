@@ -966,6 +966,10 @@ export async function attachIssuedPdfs(
       await Promise.all(planned.lines.map((line) => opts.contributionFor(line.contributionRef))),
     );
     const primary = printed.primary;
+    const { contributorId } = await deps.prisma.contact.findUniqueOrThrow({
+      where: { id: planned.contactId },
+      select: { contributorId: true },
+    });
     const pdfBytes = await renderReceiptPdf({
       receiptNumber: receipt.receiptNumber,
       issueDate: receipt.issueDate,
@@ -978,7 +982,7 @@ export async function attachIssuedPdfs(
         primary,
         opts.labelFor(planned.entityKind, planned.ridingNumber),
       ),
-      eoContributorId: printed.eoContributorId,
+      eoContributorId: contributorId,
       contributorName: planned.contactName,
       replacesReceiptNumber: planned.replacesReceiptNumber,
       addressLine1,
@@ -1101,10 +1105,8 @@ export async function applyCorrection(deps: ArtifactStoreDeps, input: Correction
               nonDeductibleCents: r.nonDeductibleCents,
               processedDate: old.processedDate,
               sourceCode: old.sourceCode,
-              // an EO contributor id belongs to the donor, and an exception
-              // was granted to this row's facts: neither carries to a
-              // different contact or a corrected row
-              eoContributorId: r.contactId === old.contactId ? old.eoContributorId : null,
+              // an exception was granted to this row's facts: it does not
+              // carry to a different contact or a corrected row
               exceptionReason: null,
               createdByUserId: input.actorUserId,
             },

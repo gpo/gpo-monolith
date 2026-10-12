@@ -23,7 +23,7 @@ const ONE_DRAFT_ROW = {
       contributionYear: 2026,
       aggregateAfterCents: 20_001,
       periodId: 67,
-      eoContributorId: null,
+      eoContributorId: '12515',
       dueDate: '2026-03-25',
       businessDaysRemaining: 10,
       overdue: false,

@@ -24,7 +24,6 @@ describe('PATCH /contributions/:id/metadata (ticket 1.2)', () => {
     nonDeductibleCents: 0,
     processedDate: null,
     sourceCode: 'subspace:84',
-    eoContributorId: null,
     exceptionReason: null,
     externalRef: null,
   };

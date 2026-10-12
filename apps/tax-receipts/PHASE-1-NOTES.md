@@ -108,7 +108,7 @@ fallback, flagged, not guessed):
 | Field | What changed | Still blocked on |
 |---|---|---|
 | `period_id` | Now scoped by the derived riding (below), so by-election periods resolve correctly instead of always falling through to the party-wide annual period. | nothing |
-| `riding_number` | New `packages/tax-receipts-core/src/source-code.ts`: `parseRidingFromSourceCode` extracts rule A7's directed riding segment (`TSF.W.007` → 7); an undirected code (`NC.W.DON.DBK.BTN50`) or none still falls back to null, flagged. | subspace-based derivation (B3) |
+| `riding_number` | New `packages/tax-receipts-core/src/source-code.ts`: `parseRidingFromSourceCode` extracts rule A7's directed riding segment (`TSF.W.007` → 7); an undirected code (`NC.W.DON.DBK.BTN50`) or none falls back to null, unflagged (null is correct for the PARTY default under rule A2; the `entity_kind` flag covers a possibly riding-scoped contribution). | subspace-based derivation (B3) |
 | `received_by` | Invariant 8's "a processor record forces GPO" clause is applied (a non-empty `external_ref` is the signal) — confident, unflagged. | distinguishing CFO-subspace (ENTITY) from central-manual (GPO) when there's no processor record — same space-identification gap as riding (B3) |
 | `entity_kind` | Unchanged: always PARTY, flagged. D6 forbids deriving it from the space regardless of any blocker, and no "directed-to" field/convention exists yet. | B8 |
 
@@ -206,7 +206,7 @@ a real schedule exists (ticket 1.15), same pattern as 1.1's sync trigger.
 
 **1.6 integration**: `deriveIntakeDefaults`' per-field `flags` (added in
 1.6, unused until now) turn into their own WorkItems, `ruleRef` prefixed
-`INTAKE:` (e.g. `INTAKE:riding_number`) — a distinct concern from
+`INTAKE:` (e.g. `INTAKE:entity_kind`) — a distinct concern from
 validation-rules.md's registry (an intake flag means "couldn't derive this
 with confidence," not "violates a rule"), so `run.ts`'s reconciliation
 explicitly excludes that prefix: it never auto-resolves or reopens an intake

@@ -164,7 +164,7 @@ export function ContributorDetailPage({ id }: { id: string }) {
           </Group>
           <Group grow>
             <Text>Email: {c.email ?? '—'}</Text>
-            <Text>Contributor id: {c.id}</Text>
+            <Text>Contributor id: {c.contributorId}</Text>
             <Text>Qomon contact: {c.qomonContactId ?? 'none (kept in this tool)'}</Text>
           </Group>
           <Text size="sm" c={c.formattedAddress ? undefined : 'orange'}>

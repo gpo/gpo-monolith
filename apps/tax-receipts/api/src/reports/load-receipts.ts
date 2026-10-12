@@ -112,11 +112,9 @@ export interface LoadedReceiptRow {
   acceptedAt: Date;
   goodsServices: boolean;
   receivedBy: ReceivedBy;
-  /** Contribution.eoContributorId. Null in the common case today —
-   *  no ticket populates it yet (data-model.md §3 marks it optional). EO's
-   *  spec calls this mandatory for GPO (eo-reporting.md §1); tracked as
-   *  open-questions.md O38, not fabricated here. */
-  eoContributorId: string | null;
+  /** the receipt contact's Contact.contributorId: EO's `Contributor_ID`,
+   *  mandatory for GPO (eo-reporting.md §1). */
+  eoContributorId: string;
   /** each contribution's acceptance and processed dates: the REP4/REP6 gate
    *  (ticket 4.3) checks every contribution on a combined receipt, not just
    *  the one date the row reports. `processedDate` is null when the
@@ -212,7 +210,7 @@ export async function loadReportReceipts(prisma: PrismaClient, scope: ReportScop
       acceptedAt: printed.acceptedThrough,
       goodsServices: printed.goodsServices,
       receivedBy: contribution.receivedBy,
-      eoContributorId: printed.eoContributorId,
+      eoContributorId: receipt.contact.contributorId,
       contributionDates: contributions.map((c) => ({ acceptedAt: c.acceptedAt, processedDate: c.processedDate })),
       contactId: receipt.contact.id,
       contributorLastName: receipt.contact.lastName ?? receipt.contact.name,

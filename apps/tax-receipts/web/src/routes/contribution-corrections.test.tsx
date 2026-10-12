@@ -58,7 +58,6 @@ const DETAIL = {
     nonDeductibleCents: 0,
     processedDate: null,
     sourceCode: '',
-    eoContributorId: null,
     exceptionReason: null,
   },
   allocations: [

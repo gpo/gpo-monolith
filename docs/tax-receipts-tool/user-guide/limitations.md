@@ -61,6 +61,5 @@ gap still being there.
 | Only the *issued* and *delivered* stages move on their own; *queue-clear*, *reconciled*, *reported*, and *sent-to-cfo* do not. | Use the dashboard's open-flag count and the entity reports screen's statuses instead. |
 | The dashboard has no RTD deadline column. | Deadlines are on the [RTD filings](rtd-filings.md) screen. |
 | Combined (all-entities) ALL and S2P2 files cannot be generated from the screen. | |
-| EO's contributor id is usually blank in the ALL, S2P2, and RTD files, as nothing populates it yet. | |
 | RTD filings are emailed to EO by hand. | Download, email, then confirm sent. |
 | The AR-1 annual return package is not built. | |

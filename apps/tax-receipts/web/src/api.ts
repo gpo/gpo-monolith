@@ -147,6 +147,8 @@ export interface ContributionDetail {
     email: string | null;
     address: { line1: string; city: string; province: string; postalCode: string; country: string } | null;
     contributorType: 'INDIVIDUAL';
+    /** the contributor id on EO filings, assigned once and never changed */
+    contributorId: string;
     /** null for a tool-owned contact (D13) */
     qomonContactId: string | null;
   };
@@ -203,7 +205,6 @@ export interface ContributionDetail {
     nonDeductibleCents: number;
     processedDate: string | null;
     sourceCode: string;
-    eoContributorId: string | null;
     exceptionReason: string | null;
   } | null;
   allocations: Array<{
@@ -357,6 +358,8 @@ export interface ContactRecord {
   lastName: string | null;
   email: string | null;
   contributorType: 'INDIVIDUAL';
+  /** the contributor id on EO filings, assigned once and never changed */
+  contributorId: string;
   address: ContactAddress | null;
   formattedAddress: FormattedAddress | null;
   qomonContactId: string | null;
@@ -523,7 +526,6 @@ export interface MetadataEditInput {
   nonDeductibleCents: number;
   processedDate: string | null;
   sourceCode: string;
-  eoContributorId: string | null;
   exceptionReason: string | null;
   externalRef: string | null;
 }
@@ -975,7 +977,7 @@ export interface RtdDraftRow {
   contributionYear: number;
   aggregateAfterCents: number;
   periodId: number;
-  eoContributorId: string | null;
+  eoContributorId: string;
   dueDate: string;
   businessDaysRemaining: number;
   overdue: boolean;

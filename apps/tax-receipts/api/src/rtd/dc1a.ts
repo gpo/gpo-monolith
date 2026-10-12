@@ -125,7 +125,7 @@ export async function generateDc1aAmendment(
     aggregateAfterCents: original.aggregateAfterCents,
     contributionYear: contributionYear(contribution.acceptedAt),
     periodId,
-    eoContributorId: contribution.eoContributorId,
+    eoContributorId: contribution.contact.contributorId,
   };
 
   const formText = formatDc1aAmendmentForm({

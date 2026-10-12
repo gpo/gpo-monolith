@@ -31,7 +31,7 @@ import { ENTITY_KIND_OPTIONS } from '../entity-kind.js';
  * The bulk-edit bar exposes one field change at a time — the common cases
  * (PRD C2's "reassigning periods for an election window is one operation")
  * — not every field `POST /contributions/bulk-edit` accepts (goodsServices,
- * processedDate, eoContributorId, exceptionReason, externalRef are edge
+ * processedDate, exceptionReason, externalRef are edge
  * cases better done per-row on the detail screen).
  */
 

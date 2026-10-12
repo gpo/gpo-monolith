@@ -35,7 +35,6 @@ describe('S2P2 report generator (ticket 4.2)', () => {
     overrides: {
       entityKind?: EntityKind;
       ridingNumber?: number | null;
-      eoContributorId?: string | null;
     } = {},
   ) {
     return withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'seed metadata' }, async (ctx) => {
@@ -44,7 +43,6 @@ describe('S2P2 report generator (ticket 4.2)', () => {
           entityKind: overrides.entityKind ?? 'PARTY',
           ridingNumber: overrides.ridingNumber ?? null,
           receivedBy: 'GPO',
-          eoContributorId: overrides.eoContributorId ?? null,
         } });
       await ctx.log({ subjectType: 'Contribution', subjectId: contributionId, after });
       return after;
@@ -56,7 +54,8 @@ describe('S2P2 report generator (ticket 4.2)', () => {
     amountCents?: number;
     entityKind?: EntityKind;
     ridingNumber?: number | null;
-    eoContributorId?: string | null;
+    /** the contact's Qomon id, and so its EO contributor id */
+    qomonContactId?: bigint;
     status?: 'ISSUED' | 'CANCELLED' | 'VOID';
     contactLastName?: string;
     /** reuse the same donor across several calls, to build up an aggregate. */
@@ -77,7 +76,7 @@ describe('S2P2 report generator (ticket 4.2)', () => {
       contributionId = contribution.id;
     } else {
       const made = await makeContribution(prisma, {
-        qomonContactId: nextContactId++,
+        qomonContactId: opts.qomonContactId ?? nextContactId++,
         qomonTransactionId: nextTxId++,
         amountCents,
         contactFirstName: 'Dana',
@@ -89,7 +88,6 @@ describe('S2P2 report generator (ticket 4.2)', () => {
     await seedMetadata(contributionId, {
       entityKind: opts.entityKind,
       ridingNumber: opts.ridingNumber,
-      eoContributorId: opts.eoContributorId,
     });
     const receiptId = await fixtureIssueReceipt(prisma, {
       contactId,
@@ -108,7 +106,7 @@ describe('S2P2 report generator (ticket 4.2)', () => {
     space.entityKind === 'PARTY' ? 'Green Party of Ontario' : `084 Parry Sound Muskoka (${space.entityKind})`;
 
   it('aggregates two receipts for the same donor into one row over $200', async () => {
-    const first = await seedReportableReceipt({ amountCents: 15_000, eoContributorId: '198176' });
+    const first = await seedReportableReceipt({ amountCents: 15_000, qomonContactId: 198176n });
     await seedReportableReceipt({ amountCents: 10_000, contributionSeed: { contactId: first.contactId } });
 
     const result = await generateS2p2Report(

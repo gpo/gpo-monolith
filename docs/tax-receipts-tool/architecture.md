@@ -122,6 +122,13 @@ Who owns a contact depends on whether the API has a Qomon client
 - A Qomon-linked contact cannot be edited while Qomon is not configured
   (409). A contact with no Qomon link stays tool-owned either way.
 
+Every contact has a `contributorId`: the `Contributor ID` on EO filings
+(RTD, ALL, S2P2, DC-1A) and receipts, at most 10 alphanumeric characters.
+The database assigns it at insert (migration `contact_contributor_id`): the
+Qomon contact id when there is one, otherwise `T` plus a sequence number, so
+the two never collide. A trigger refuses any later change. Contributions
+carry no id of their own; filings and receipts read it from the contact.
+
 The import sweep and the "refresh donor from Qomon" action write contacts
 through the same module (`mirrorQomonContact`), so every contact change has a
 `Contact` change-log entry: the sweep's with no actor, the others with the

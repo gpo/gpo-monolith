@@ -61,6 +61,7 @@ function serializeContact(c: Contact) {
     lastName: c.lastName,
     email: c.email,
     contributorType: c.contributorType,
+    contributorId: c.contributorId,
     /** the raw address, for the edit form */
     address: address
       ? {

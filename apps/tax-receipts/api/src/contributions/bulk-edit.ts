@@ -30,7 +30,6 @@ export interface BulkMetadataChanges {
   nonDeductibleCents?: number;
   processedDate?: string | null;
   sourceCode?: string;
-  eoContributorId?: string | null;
   exceptionReason?: string | null;
   externalRef?: string | null;
 }
@@ -45,7 +44,6 @@ const CHANGE_KEYS = [
   'nonDeductibleCents',
   'processedDate',
   'sourceCode',
-  'eoContributorId',
   'exceptionReason',
   'externalRef',
 ] as const satisfies readonly (keyof BulkMetadataChanges)[];
@@ -102,7 +100,6 @@ function mergeDescriptive(
     nonDeductibleCents: number;
     processedDate: Date | null;
     sourceCode: string;
-    eoContributorId: string | null;
     exceptionReason: string | null;
   },
   externalRefCurrent: string | null,
@@ -128,7 +125,6 @@ function mergeDescriptive(
         ? (changes.processedDate ?? null)
         : (current.processedDate?.toISOString().slice(0, 10) ?? null),
     source_code: changes.sourceCode ?? current.sourceCode,
-    eo_contributor_id: 'eoContributorId' in changes ? (changes.eoContributorId ?? null) : current.eoContributorId,
     exception_reason: 'exceptionReason' in changes ? (changes.exceptionReason ?? null) : current.exceptionReason,
     external_ref: 'externalRef' in changes ? (changes.externalRef ?? null) : externalRefCurrent,
   };

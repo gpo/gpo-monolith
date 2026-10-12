@@ -9,12 +9,11 @@ import type { GpoMetadataDescriptive } from '@gpo/tax-receipts-core';
  * literal UI labels, editable by Qomon staff directly through that form —
  * not an opaque blob owned exclusively by this tool.
  *
- * Five of GpoMetadataDescriptive's fields have no Qomon counterpart at all
+ * Four of GpoMetadataDescriptive's fields have no Qomon counterpart at all
  * and stay tool-local only, never written to or read from Qomon:
  * `received_by` (derived at intake — see intake/defaults.ts, and confirmed
  * unnecessary here since it's determined from the entry space, not the
- * transaction), `eo_contributor_id`, `exception_reason`,
- * `non_deductible_cents`, `external_ref`.
+ * transaction), `exception_reason`, `non_deductible_cents`, `external_ref`.
  *
  * Qomon's "Political Entity Type" dropdown's "Leadership Contestant" maps to
  * LEADERSHIP. Which contestant is tool-local (`leadership_contestant_id`):

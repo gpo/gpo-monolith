@@ -134,9 +134,8 @@ pnpm exec tsx scratch-seed.ts
       select * from contribution_metadata where "contributionId" = '<id>';
       select kind, "ruleRef", status from work_item where "subjectId" = '<id>';
       ```
-      A brand-new contribution should have **1–4 `VALIDATION` work items
-      with `ruleRef` like `INTAKE:riding_number`, `INTAKE:entity_kind`,
-      `INTAKE:received_by`** (and `INTAKE:period_id` if no period covers its
+      A brand-new contribution should have **1–3 `VALIDATION` work items
+      with `ruleRef` like `INTAKE:entity_kind`, `INTAKE:received_by`** (and `INTAKE:period_id` if no period covers its
       date) — this is expected, not a bug: ticket 1.6's derivation is a
       stub for anything B3/B8-blocked. See "Known non-issues" below.
 - [ ] Re-run the sweep with nothing new in Qomon — `pulled: 0` in the
@@ -153,9 +152,11 @@ pnpm exec tsx scratch-seed.ts
 - [ ] If you can create a Qomon transaction with a **directed** source
       code (`code_campaign` ending in a zero-padded riding number, e.g.
       `TSF.W.007`), sweep it and confirm `contribution_metadata.ridingNumber`
-      is set **without** an `INTAKE:riding_number` work item.
+      is set.
 - [ ] A transaction with an **undirected** code (or none) should land with
-      `ridingNumber = null`, `entityKind = 'PARTY'`, flagged.
+      `ridingNumber = null`, `entityKind = 'PARTY'`, with an
+      `INTAKE:entity_kind` work item but **no** `INTAKE:riding_number` one
+      (a party contribution carries no riding, rule A2).
 
 ## 4. Validation engine (1.7)
 
@@ -339,8 +340,8 @@ through than write SQL.
 
 Straight from `PHASE-1-NOTES.md` — if you hit one of these, it's expected:
 
-- New contributions almost always carry 1–3 `INTAKE:*` work items (riding,
-  entity kind, received-by) because ticket 1.6's real derivation rules are
+- New contributions almost always carry 1–2 `INTAKE:*` work items (entity
+  kind, received-by) because ticket 1.6's real derivation rules are
   blocked on B3/B8 (Qomon subspace → riding mapping, the "directed-to"
   field). Only source-code-directed ridings and processor-record
   `received_by` are actually derived; everything else defaults and flags.
