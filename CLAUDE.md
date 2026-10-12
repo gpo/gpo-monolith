@@ -18,6 +18,8 @@ Contributions tool** under `apps/tax-receipts/` (not yet scaffolded).
 
 - **Backend:** Fastify + Zod (schema-first routes) + Prisma + PostgreSQL.
 - **Frontend:** Vite + React + Mantine + Tanstack Router/Query.
+  UI conventions for tables, modals, and buttons:
+  [`docs/tax-receipts-tool/ui-patterns.md`](docs/tax-receipts-tool/ui-patterns.md).
 - **Tooling:** Turborepo + pnpm, SWC, ESLint, Vitest.
 - **Auth:** Passport + bcrypt, stateful sessions; authorization at the query layer
   (CASL + Prisma).

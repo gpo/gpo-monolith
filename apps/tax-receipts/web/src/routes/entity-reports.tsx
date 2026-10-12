@@ -235,7 +235,7 @@ export function EntityReportsPage(params: EntityReportsParams) {
                     {row.sentToCfoAt ? (
                       <Badge color="green">{new Date(row.sentToCfoAt).toLocaleDateString()}</Badge>
                     ) : canShare ? (
-                      <Button size="xs" variant="light" loading={markSent.isPending} onClick={() => markSent.mutate(row.id)}>
+                      <Button size="xs" variant="subtle" loading={markSent.isPending} onClick={() => markSent.mutate(row.id)}>
                         Mark sent
                       </Button>
                     ) : (

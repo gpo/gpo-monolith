@@ -1238,7 +1238,7 @@ export const api = {
   ) =>
     request<AdminUserRow>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   resetUserPassword: (id: string, newPassword: string, reason: string) =>
-    request<{ ok: true; sessionsSignedOut: number }>(`/admin/users/${id}/password`, {
+    request<{ ok: true }>(`/admin/users/${id}/password`, {
       method: 'POST',
       body: JSON.stringify({ newPassword, reason }),
     }),

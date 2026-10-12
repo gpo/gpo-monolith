@@ -67,7 +67,7 @@ export function LeadershipContestantsSection() {
                   <Table.Td>
                     <Badge color={c.active ? 'green' : 'gray'}>{c.active ? 'active' : 'inactive'}</Badge>
                   </Table.Td>
-                  <Table.Td>
+                  <Table.Td ta="right">
                     <Button
                       size="xs"
                       variant="subtle"

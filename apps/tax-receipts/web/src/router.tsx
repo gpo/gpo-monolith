@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   createRootRoute,
   createRoute,
@@ -133,7 +133,6 @@ function RootLayout() {
   const isDonorPrecheckRoute = pathname.startsWith('/donor-precheck/');
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false, enabled: !isDonorPrecheckRoute });
   const navigate = useNavigate();
-  const qc = useQueryClient();
 
   // Signed-in users shouldn't land back on the login form.
   useEffect(() => {
@@ -164,7 +163,9 @@ function RootLayout() {
 
   async function signOut() {
     await api.logout();
-    await qc.invalidateQueries({ queryKey: ['me'] });
+    // A full page load, not a client-side navigation, so nothing the signed-out
+    // user had in memory (query cache, component state) survives for the next.
+    window.location.assign('/login');
   }
 
   return (

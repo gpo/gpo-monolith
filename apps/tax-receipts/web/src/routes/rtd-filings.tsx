@@ -230,45 +230,29 @@ function SendControls({ filing }: { filing: RtdFilingSummary }) {
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to mark the filing sent.'),
   });
 
-  const download = filing.artifactId ? (
-    <Text component="a" href={api.rtdFilingDownloadUrl(filing.id)} c="blue" size="sm">
-      Download
-    </Text>
-  ) : null;
-
   if (filing.submittedAt) {
     return (
-      <Stack gap={2}>
-        {download}
-        <Badge color="green" size="sm">
-          Sent {new Date(filing.submittedAt).toLocaleDateString()}
-        </Badge>
-      </Stack>
+      <Badge color="green" size="sm">
+        Sent {new Date(filing.submittedAt).toLocaleDateString()}
+      </Badge>
     );
   }
   if (!(me.data?.can.sendRtdFilings ?? false)) {
     return (
-      <Stack gap={2}>
-        {download}
-        <Text c="dimmed" size="xs">
-          Not yet sent
-        </Text>
-      </Stack>
+      <Text c="dimmed" size="xs">
+        Not yet sent
+      </Text>
     );
   }
   if (!open) {
     return (
-      <Stack gap={2}>
-        {download}
-        <Button size="xs" variant="light" onClick={() => setOpen(true)}>
-          Send
-        </Button>
-      </Stack>
+      <Button size="xs" variant="light" onClick={() => setOpen(true)}>
+        Send
+      </Button>
     );
   }
   return (
     <Stack gap={4} miw={220}>
-      {download}
       <TextInput
         size="xs"
         placeholder="Reason (e.g. emailed to EO 2026-03-06)"
@@ -339,7 +323,14 @@ function FilingTable() {
               </Badge>
             </Table.Td>
             <Table.Td>{filing.rowCount}</Table.Td>
-            <Table.Td>{new Date(filing.generatedAt).toLocaleString()}</Table.Td>
+            <Table.Td>
+              <Text size="sm">{new Date(filing.generatedAt).toLocaleString()}</Text>
+              {filing.artifactId && (
+                <Text component="a" href={api.rtdFilingDownloadUrl(filing.id)} c="blue" size="sm">
+                  Download
+                </Text>
+              )}
+            </Table.Td>
             <Table.Td>
               <SendControls filing={filing} />
             </Table.Td>

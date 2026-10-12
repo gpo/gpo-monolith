@@ -86,7 +86,7 @@ export function DashboardPage() {
                   )}
                 </Table.Td>
                 <Table.Td>
-                  <Group gap="xs" wrap="nowrap">
+                  <Group gap="xs" wrap="nowrap" justify="flex-end">
                     <Link
                       to="/contributions"
                       search={{
@@ -95,7 +95,7 @@ export function DashboardPage() {
                         entityKind: s.entityKind,
                       }}
                     >
-                      <Button size="xs" variant="default">
+                      <Button size="xs" variant="subtle">
                         Contributions
                       </Button>
                     </Link>
@@ -104,7 +104,7 @@ export function DashboardPage() {
                       params={{ periodId: String(s.periodId), entityKind: s.entityKind }}
                       search={s.ridingNumber ? { ridingNumber: s.ridingNumber } : {}}
                     >
-                      <Button size="xs" variant="light">
+                      <Button size="xs" variant="subtle">
                         Issue
                       </Button>
                     </Link>
@@ -114,7 +114,7 @@ export function DashboardPage() {
                         params={{ periodId: String(s.periodId), entityKind: s.entityKind }}
                         search={s.ridingNumber ? { ridingNumber: s.ridingNumber } : {}}
                       >
-                        <Button size="xs" variant="default">
+                        <Button size="xs" variant="subtle">
                           Reports
                         </Button>
                       </Link>

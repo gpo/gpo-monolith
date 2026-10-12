@@ -94,14 +94,13 @@ Riding grants are currently set through the API, not the Users screen (see
 
 Under **Admin > Users** (needs *Manage users and roles*):
 
-- **Add a user** with a name, email, role, and a temporary password of at
-  least 12 characters.
-- **Change a user's role** from the inline role picker.
+- **Add a user** with the **New user** button, giving a name, email, role,
+  and a temporary password of at least 12 characters.
+- **Edit a user** to change their name, email, role, or active status.
+  Every edit needs a reason. Deactivating stops a user signing in; accounts
+  are never deleted, so the change log can always name who did something.
 - **Mark a user as a CFO designate.**
-- **Deactivate** a user. Accounts are never deleted, so the change log can
-  always name who did something.
-- **Edit a user's name or email**, or **reset their password**. A reset
-  signs that user out everywhere.
+- **Reset a user's password.** A reset does not sign that user out.
 
 Every user change is recorded in the change log (never the password
 itself).

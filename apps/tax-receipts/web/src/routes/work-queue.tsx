@@ -114,10 +114,10 @@ function WorkItemRowView({ item }: { item: WorkItemRow }) {
           </Group>
         ) : (
           <Group gap="xs">
-            <Button size="xs" variant="light" onClick={() => setAction('RESOLVED')}>
+            <Button size="xs" variant="subtle" onClick={() => setAction('RESOLVED')}>
               Resolve
             </Button>
-            <Button size="xs" variant="light" color="yellow" onClick={() => setAction('EXCEPTION')}>
+            <Button size="xs" variant="subtle" color="yellow" onClick={() => setAction('EXCEPTION')}>
               Exception
             </Button>
           </Group>

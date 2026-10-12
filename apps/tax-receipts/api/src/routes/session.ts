@@ -25,8 +25,14 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
   });
 
   r.post('/auth/logout', async (request, reply) => {
+    // logout() regenerates the session, swapping request.session for a fresh
+    // one without removing the signed-in one from the store, so that row is
+    // destroyed here by id; otherwise the browser's cookie stays signed in.
+    const signedInSid = request.session.sessionId;
     await request.logout();
-    await new Promise<void>((resolve) => request.session.destroy(() => resolve()));
+    await request.session.destroy();
+    await app.prisma.session.deleteMany({ where: { sid: signedInSid } });
+    reply.clearCookie('gpo_tr_sid', { path: '/' });
     return reply.send({ ok: true });
   });
 

@@ -49,7 +49,9 @@ export function RolesSection() {
               A role is a named set of permissions. Assign roles to people on the Users page.
             </Text>
           </div>
-          <Button onClick={() => setEditing('new')}>New role</Button>
+          <Button size="xs" onClick={() => setEditing('new')}>
+            New role
+          </Button>
         </Group>
         <Table>
           <Table.Thead>
@@ -88,8 +90,8 @@ export function RolesSection() {
                   )}
                 </Table.Td>
                 <Table.Td>{role.userCount}</Table.Td>
-                <Table.Td>
-                  <Button size="xs" variant="light" onClick={() => setEditing(role)}>
+                <Table.Td ta="right">
+                  <Button size="xs" variant="subtle" onClick={() => setEditing(role)}>
                     {role.locked ? 'View' : 'Edit'}
                   </Button>
                 </Table.Td>
