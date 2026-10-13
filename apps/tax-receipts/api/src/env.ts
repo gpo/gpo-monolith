@@ -50,7 +50,7 @@ const EnvSchema = z.object({
    *  production so donor links never point at localhost */
   PUBLIC_WEB_URL: z.string().url().optional(),
   /** the commit the image was built from, baked in by the Dockerfile's
-   *  GIT_SHA build arg; reported by /health */
+   *  GIT_SHA build arg; reported by /version */
   GIT_SHA: z.string().default('unknown'),
 }).superRefine((env, ctx) => {
   if (env.EMAIL_PROVIDER === 'resend') {

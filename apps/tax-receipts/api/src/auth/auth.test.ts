@@ -37,7 +37,13 @@ describe('auth + authorization (ticket 0.5)', () => {
     const root = await app.inject({ method: 'GET', url: '/' });
     expect(root.statusCode).toBe(200);
     const health = await app.inject({ method: 'GET', url: '/health' });
-    expect(health.json()).toMatchObject({ status: 'ok', db: 'up', gitSha: 'unknown' });
+    expect(health.json()).toMatchObject({ status: 'ok', db: 'up' });
+  });
+
+  it('reports the build commit without authentication', async () => {
+    const version = await app.inject({ method: 'GET', url: '/version' });
+    expect(version.statusCode).toBe(200);
+    expect(version.json()).toEqual({ gitSha: 'unknown' });
   });
 
   it('logs a user in and exposes their identity + permissions', async () => {
