@@ -100,6 +100,8 @@ export interface BuildAppOptions {
   emailLiveSendingAllowed?: boolean;
   /** the web app's origin, for links in donor email */
   publicWebUrl?: string;
+  /** the commit this build came from, reported by /health */
+  gitSha?: string;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -211,7 +213,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     secureCookie: opts.secureCookie ?? false,
   });
 
-  await app.register(healthRoutes);
+  await app.register(healthRoutes, { gitSha: opts.gitSha ?? 'unknown' });
   await app.register(sessionRoutes);
   await app.register(killSwitchRoutes);
   await app.register(syncRoutes, {

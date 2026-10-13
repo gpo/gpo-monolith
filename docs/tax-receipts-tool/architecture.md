@@ -75,7 +75,8 @@ evaluation seed on request), and `web` (nginx serving the SPA and proxying
 environment variables, rollout order, and the single-instance constraint
 (PDFs on local disk, in-process email dispatcher). The api's `build` copies
 the generated Prisma client into `dist/`, so `node dist/server.js` runs on
-its own.
+its own. The `api` image takes a `GIT_SHA` build arg, and `GET /api/health`
+reports it as `gitSha`, so a deployment shows which commit it runs.
 
 ## Data model and invariants
 

@@ -3,7 +3,8 @@
 # Images for the Tax Receipts & Contributions tool. Build from the REPO ROOT
 # (the pnpm workspace spans apps/tax-receipts/* and packages/*):
 #
-#   docker build -f apps/tax-receipts/Dockerfile --target api       -t tax-receipts-api .
+#   docker build -f apps/tax-receipts/Dockerfile --target api       -t tax-receipts-api \
+#     --build-arg GIT_SHA=$(git rev-parse --short HEAD) .
 #   docker build -f apps/tax-receipts/Dockerfile --target api-tools -t tax-receipts-api-tools .
 #   docker build -f apps/tax-receipts/Dockerfile --target web       -t tax-receipts-web .
 #
@@ -87,6 +88,10 @@ ENV ARTIFACT_STORAGE_DIR=/data/artifacts \
   PORT=3000
 RUN mkdir -p /data/artifacts && chown -R node:node /data
 VOLUME ["/data"]
+
+# last, so a new commit does not invalidate the layers above
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
 
 USER node
 WORKDIR /repo/apps/tax-receipts/api

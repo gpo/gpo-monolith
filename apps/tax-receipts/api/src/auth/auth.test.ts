@@ -37,7 +37,7 @@ describe('auth + authorization (ticket 0.5)', () => {
     const root = await app.inject({ method: 'GET', url: '/' });
     expect(root.statusCode).toBe(200);
     const health = await app.inject({ method: 'GET', url: '/health' });
-    expect(health.json()).toMatchObject({ status: 'ok', db: 'up' });
+    expect(health.json()).toMatchObject({ status: 'ok', db: 'up', gitSha: 'unknown' });
   });
 
   it('logs a user in and exposes their identity + permissions', async () => {

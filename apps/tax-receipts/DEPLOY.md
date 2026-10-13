@@ -25,16 +25,18 @@ All three come from [`Dockerfile`](Dockerfile), built with the **repo root**
 as context (the pnpm workspace spans `apps/tax-receipts/*` and `packages/*`):
 
 ```bash
-docker build -f apps/tax-receipts/Dockerfile --target api       -t tax-receipts-api .
+docker build -f apps/tax-receipts/Dockerfile --target api       -t tax-receipts-api --build-arg GIT_SHA=$(git rev-parse --short HEAD) .
 docker build -f apps/tax-receipts/Dockerfile --target api-tools -t tax-receipts-api-tools .
 docker build -f apps/tax-receipts/Dockerfile --target web       -t tax-receipts-web .
 ```
 
 | Target | Runs | Port | Notes |
 |---|---|---|---|
-| `api` | `node dist/server.js` | 3000 | Production deps only, runs as `node`. Health: `GET /health` (503 when the database is down). |
+| `api` | `node dist/server.js` | 3000 | Production deps only, runs as `node`. Health: `GET /health` (503 when the database is down); its `gitSha` is the `GIT_SHA` build arg, `unknown` when not passed. |
 | `api-tools` | `prisma migrate deploy` | none | One-off job. Needs only `DATABASE_URL`. Exits 0 when the schema is current. |
 | `web` | nginx | 8080 | Health: `GET /healthz`. Set `API_UPSTREAM` to the api's internal URL (default `http://api:3000`). |
+
+To check which commit a deployment runs: `curl https://<host>/api/health`.
 
 ## Rollout order
 

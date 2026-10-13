@@ -54,6 +54,8 @@ services:
       context: ../..
       dockerfile: apps/tax-receipts/Dockerfile
       target: api
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     image: tax-receipts-api:${IMAGE_TAG:-staging}
     restart: unless-stopped
     environment:
