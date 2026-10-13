@@ -37,7 +37,8 @@ const EnvSchema = z.object({
   /** `whsec_...` from the Resend webhook settings; without it the webhook
    *  route refuses every request */
   RESEND_WEBHOOK_SECRET: z.string().optional(),
-  EMAIL_FROM: z.string().default('GPO Tax Receipts <receipts@localhost>'),
+  /** required when EMAIL_PROVIDER=resend; the default only suits `dev` */
+  EMAIL_FROM: z.string().optional(),
   EMAIL_REPLY_TO: z.string().optional(),
   /** sends per second; Resend's default team limit is 10 */
   EMAIL_RATE_PER_SECOND: z.coerce.number().positive().default(5),
@@ -45,13 +46,26 @@ const EnvSchema = z.object({
    *  domain; unset means no cap */
   EMAIL_DAILY_LIMIT: z.coerce.number().int().positive().optional(),
   EMAIL_DISPATCH_INTERVAL_MS: z.coerce.number().int().positive().default(15_000),
-  /** the web app's public origin, for links in donor email */
-  PUBLIC_WEB_URL: z.string().url().default('http://localhost:5173'),
+  /** the web app's public origin, for links in donor email; required in
+   *  production so donor links never point at localhost */
+  PUBLIC_WEB_URL: z.string().url().optional(),
 }).superRefine((env, ctx) => {
-  if (env.EMAIL_PROVIDER === 'resend' && !env.RESEND_API_KEY) {
-    ctx.addIssue({ code: 'custom', path: ['RESEND_API_KEY'], message: 'required when EMAIL_PROVIDER=resend' });
+  if (env.EMAIL_PROVIDER === 'resend') {
+    if (!env.RESEND_API_KEY) {
+      ctx.addIssue({ code: 'custom', path: ['RESEND_API_KEY'], message: 'required when EMAIL_PROVIDER=resend' });
+    }
+    if (!env.EMAIL_FROM) {
+      ctx.addIssue({ code: 'custom', path: ['EMAIL_FROM'], message: 'required when EMAIL_PROVIDER=resend' });
+    }
   }
-});
+  if (env.NODE_ENV === 'production' && !env.PUBLIC_WEB_URL) {
+    ctx.addIssue({ code: 'custom', path: ['PUBLIC_WEB_URL'], message: 'required when NODE_ENV=production' });
+  }
+}).transform((env) => ({
+  ...env,
+  EMAIL_FROM: env.EMAIL_FROM || 'GPO Tax Receipts <receipts@localhost>',
+  PUBLIC_WEB_URL: env.PUBLIC_WEB_URL ?? 'http://localhost:5173',
+}));
 
 export type Env = z.infer<typeof EnvSchema>;
 
