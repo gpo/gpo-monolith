@@ -59,6 +59,7 @@ import { deliveryRoutes } from './routes/delivery.js';
 import { donorPrecheckRoutes } from './routes/donor-precheck.js';
 import { entityReportRoutes } from './routes/entity-reports.js';
 import { healthRoutes } from './routes/health.js';
+import { versionRoutes } from './routes/version.js';
 import { killSwitchRoutes } from './routes/kill-switch.js';
 import { paymentRoutes } from './routes/payments.js';
 import { receiptRoutes } from './routes/receipts.js';
@@ -100,6 +101,8 @@ export interface BuildAppOptions {
   emailLiveSendingAllowed?: boolean;
   /** the web app's origin, for links in donor email */
   publicWebUrl?: string;
+  /** the commit this build came from, reported by /version */
+  gitSha?: string;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -212,6 +215,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   });
 
   await app.register(healthRoutes);
+  await app.register(versionRoutes, { gitSha: opts.gitSha ?? 'unknown' });
   await app.register(sessionRoutes);
   await app.register(killSwitchRoutes);
   await app.register(syncRoutes, {

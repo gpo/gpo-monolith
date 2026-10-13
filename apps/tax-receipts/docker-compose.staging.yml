@@ -41,6 +41,8 @@ services:
       context: ../..
       dockerfile: apps/tax-receipts/Dockerfile
       target: api-tools
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     image: tax-receipts-api-tools:${IMAGE_TAG:-staging}
     environment:
       <<: *api-env
@@ -54,6 +56,8 @@ services:
       context: ../..
       dockerfile: apps/tax-receipts/Dockerfile
       target: api
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     image: tax-receipts-api:${IMAGE_TAG:-staging}
     restart: unless-stopped
     environment:
@@ -85,6 +89,8 @@ services:
       context: ../..
       dockerfile: apps/tax-receipts/Dockerfile
       target: web
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     image: tax-receipts-web:${IMAGE_TAG:-staging}
     restart: unless-stopped
     environment:
