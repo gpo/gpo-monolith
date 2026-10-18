@@ -28,6 +28,7 @@ import { IMPLEMENTED_RULE_REFS } from '@gpo/tax-receipts-core/validation/rules.j
 import { api, type AdminUserRow, type RidingImportRow, type RidingRow } from '../api.js';
 import { EmailsSection } from './admin-emails.js';
 import { LeadershipContestantsSection } from './admin-leadership.js';
+import { QomonSettingsSection } from './admin-qomon.js';
 import { ReceiptSettingsSection } from './admin-receipts.js';
 import { RolesSection } from './admin-roles.js';
 import { ChangeLogPage } from './change-log.js';
@@ -37,7 +38,7 @@ import { RULE_LABELS } from '../rule-labels.js';
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
  * ContributionLimit buckets, users, roles, the RTD holiday calendar,
- * per-riding Qomon spaces, leadership contestants, receipt settings, and the kill switch. Writes are permission-gated
+ * the party-level and per-riding Qomon spaces, leadership contestants, receipt settings, and the kill switch. Writes are permission-gated
  * server-side (settings: `settings.administer`; users and roles:
  * `users.administer`); a 403 here just means "ask a sysadmin."
  *
@@ -61,6 +62,7 @@ export const ADMIN_SECTIONS = [
   { slug: 'periods', label: 'Periods', component: () => <PeriodsSection />, devOnly: false },
   { slug: 'contribution-limits', label: 'Contribution limits', component: () => <ContributionLimitsSection />, devOnly: false },
   { slug: 'rtd-holidays', label: 'RTD holidays', component: () => <HolidaysSection />, devOnly: false },
+  { slug: 'qomon', label: 'Qomon', component: () => <QomonSettingsSection />, devOnly: false },
   { slug: 'ridings', label: 'Ridings', component: () => <RidingsSection />, devOnly: false },
   {
     slug: 'leadership-contestants',
@@ -500,7 +502,7 @@ function RidingsSection() {
         </Group>
         <Text size="sm" c="dimmed">
           A riding here runs its own Qomon space, separate from the party-level space
-          (QOMON_API_KEY). A mirror sweep can target one by riding number instead of the
+          (Admin, Qomon), whose base URL it uses unless it sets its own. A mirror sweep can target one by riding number instead of the
           party space (see Dev tools). The API key is never shown again once saved. Import
           upserts by riding number — re-importing an updated file never creates duplicates,
           and a blank key in the file leaves an existing riding's key in place.

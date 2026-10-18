@@ -719,6 +719,23 @@ export interface ReceiptSettings {
   updatedAt: string | null;
 }
 
+/** The party-level Qomon space (api/src/qomon/settings.ts); the key is
+ *  write-only, so only whether one is on file comes back. */
+export interface QomonSettings {
+  enabled: boolean;
+  apiBase: string;
+  apiKeySet: boolean;
+  updatedByUserId: string | null;
+  updatedAt: string | null;
+}
+
+export interface QomonSettingsInput {
+  enabled?: boolean;
+  apiBase?: string;
+  apiKey?: string;
+  reason: string;
+}
+
 export interface EmailDeliverySettings {
   provider: string;
   liveSendingAllowed: boolean;
@@ -1220,6 +1237,9 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ receiptLayout, reason }),
     }),
+  getQomonSettings: () => request<QomonSettings>('/admin/qomon-settings'),
+  setQomonSettings: (input: QomonSettingsInput) =>
+    request<QomonSettings>('/admin/qomon-settings', { method: 'PUT', body: JSON.stringify(input) }),
   getEmailSettings: () => request<EmailDeliverySettings>('/admin/email-settings'),
   setLiveSending: (liveSendingEnabled: boolean, reason: string) =>
     request<EmailDeliverySettings>('/admin/email-settings', {

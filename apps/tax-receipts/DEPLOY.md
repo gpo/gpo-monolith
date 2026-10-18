@@ -82,7 +82,6 @@ Optional:
 | `EMAIL_PROVIDER` | `dev` | `resend` needs `RESEND_API_KEY` and `EMAIL_FROM`. |
 | `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` | unset | Secrets. Webhook URL: `https://<host>/api/webhooks/email`. |
 | `EMAIL_FROM`, `EMAIL_REPLY_TO` | placeholder, unset | Sender on a domain verified in Resend. `EMAIL_FROM` is required with `EMAIL_PROVIDER=resend`. |
-| `QOMON_API_KEY`, `QOMON_API_BASE` | unset | Party-level Qomon space. Secret. Unset disables the mirror sweep, and the tool then owns its contributors (D13): ones added in the tool stay in the tool, and Qomon-linked ones cannot be edited. Set, a contributor added or edited in the tool is written to Qomon first. |
 | `EMAIL_RATE_PER_SECOND`, `EMAIL_DAILY_LIMIT`, `EMAIL_DISPATCH_INTERVAL_MS` | 5, none, 15000 | Send throttling. |
 
 The api validates its environment at start and exits non-zero with a list of
@@ -102,6 +101,19 @@ docker run --rm -e DATABASE_URL=... tax-receipts-api-tools pnpm exec tsx prisma/
 
 It is idempotent. Change the seeded passwords straight away, or deactivate
 those accounts, on any environment reachable from the internet.
+
+## After deploying: Qomon
+
+Qomon is not configured through the environment. A new deployment starts
+with Qomon off: the tool owns its contributors (D13), Qomon-linked ones
+cannot be edited, and the mirror sweep refuses. To connect it, sign in as a
+system administrator and open **Admin > Qomon**: enter the API key (and the
+base URL if it is not `https://incoming.qomon.app`), tick **Enabled**, and
+save with a reason. It takes effect on the next request. On staging, use a
+sandbox space, never the production one.
+
+An environment that used to set `QOMON_API_KEY` must be configured this way
+once after upgrading; the variable is no longer read.
 
 ## Running the stack with Compose
 

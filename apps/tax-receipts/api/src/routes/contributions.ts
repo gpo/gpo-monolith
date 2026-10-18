@@ -1,5 +1,4 @@
 import { EntityKind, ReceivedBy, type GpoMetadataDescriptive } from '@gpo/tax-receipts-core';
-import type { QomonApi } from '@gpo/qomon-client';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -9,18 +8,19 @@ import { listContributions } from '../contributions/list.js';
 import { editContributionMetadata } from '../contributions/metadata-edit.js';
 import { refreshContributionContact } from '../contributions/refresh-contact.js';
 import type { SessionUser } from '../plugins/auth.js';
+import type { QomonSource } from '../qomon/settings.js';
 
 /**
  * Contributions list (ticket 1.3, screens.md 2), detail (ticket 1.5,
  * screens.md 3), metadata edit (ticket 1.2), and bulk edit (ticket 1.4).
  * The tool owns contributions (D12), so the edit and bulk-edit routes work on
  * the local database only. The one route that talks to Qomon is the donor
- * refresh, for contacts Qomon owns (D13); it returns 501 until a Qomon
- * client is configured.
+ * refresh, for contacts Qomon owns (D13); it returns 501 until Qomon is
+ * enabled in Admin > Qomon.
  */
 export async function contributionRoutes(
   app: FastifyInstance,
-  opts: { qomon?: QomonApi },
+  opts: { qomon: QomonSource },
 ): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -100,12 +100,13 @@ export async function contributionRoutes(
     handler: async (request, reply) => {
       const user = request.user as SessionUser | undefined;
       if (!user) return reply.code(401).send({ error: 'authentication required' });
-      if (!opts.qomon) {
+      const qomon = await opts.qomon();
+      if (!qomon) {
         return reply
           .code(501)
-          .send({ error: 'Qomon is not configured (QOMON_API_KEY unset); cannot refresh the donor' });
+          .send({ error: 'Qomon is not enabled (Admin > Qomon); cannot refresh the donor' });
       }
-      const outcome = await refreshContributionContact(app.prisma, opts.qomon, request.params.id, user.id);
+      const outcome = await refreshContributionContact(app.prisma, qomon, request.params.id, user.id);
       return reply.send({ outcome });
     },
   });

@@ -49,6 +49,7 @@ import { RtdAlreadyIncludedError, RtdExportBlockedError, RtdPrepareSelectionErro
 import { SpaceIssuanceBlockedError } from './space/issuance.js';
 import { WorkItemAlreadyClosedError, WorkItemNotFoundError } from './work-items/resolve.js';
 import authPlugin from './plugins/auth.js';
+import { qomonFromSettings, type BuildQomon, type QomonSource } from './qomon/settings.js';
 import prismaPlugin from './plugins/prisma.js';
 import { adminRoutes } from './routes/admin.js';
 import { changeLogRoutes } from './routes/change-log.js';
@@ -77,15 +78,14 @@ export interface BuildAppOptions {
   secureCookie?: boolean;
   trustProxy?: boolean;
   logger?: boolean;
-  /** the party-level Qomon space; the mirror-sweep trigger (ticket 1.1)
-   *  registers regardless, but a party sweep 404s without this. Its
-   *  presence also decides who owns contacts (D13): with it, contributors
-   *  added or edited in the tool are written to Qomon first; without it,
-   *  the tool owns them. */
+  /** tests only: a fixed party-level Qomon client, in place of the one
+   *  QomonSettings (Admin > Qomon) configures. Whether there is a party
+   *  client decides who owns contacts (D13): with one, contributors added
+   *  or edited in the tool are written to Qomon first; without one, the
+   *  tool owns them, and a party mirror sweep 404s. */
   qomon?: QomonApi;
-  /** default base URL for a riding's own Qomon space when the riding row
-   *  doesn't override it (see routes/sync.ts). */
-  qomonApiBase?: string;
+  /** tests only: how the party client is built from QomonSettings */
+  buildQomon?: BuildQomon;
   /** overrides how a riding's own Qomon client is built (tests only). */
   buildRidingQomon?: (riding: { qomonApiKey: string; qomonApiBase: string | null }) => QomonApi;
   /** where receipt PDF artifacts are written (ticket 3.1); see env.ts. */
@@ -214,13 +214,13 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(healthRoutes);
   await app.register(sessionRoutes);
   await app.register(killSwitchRoutes);
-  await app.register(syncRoutes, {
-    qomon: opts.qomon,
-    qomonApiBase: opts.qomonApiBase,
-    buildRidingQomon: opts.buildRidingQomon,
-  });
-  await app.register(contributionRoutes, { qomon: opts.qomon });
-  await app.register(contactRoutes, { qomon: opts.qomon });
+  const fixedQomon = opts.qomon;
+  const qomon: QomonSource = fixedQomon
+    ? () => Promise.resolve(fixedQomon)
+    : qomonFromSettings(opts.prisma, opts.buildQomon);
+  await app.register(syncRoutes, { qomon, buildRidingQomon: opts.buildRidingQomon });
+  await app.register(contributionRoutes, { qomon });
+  await app.register(contactRoutes, { qomon });
   await app.register(paymentRoutes);
   await app.register(donorPrecheckRoutes);
   await app.register(receiptRoutes, {
