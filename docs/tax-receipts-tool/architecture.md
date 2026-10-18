@@ -109,8 +109,16 @@ need a contact or contribution row directly use `fixtureContact` and
 Contributors (`contact` rows) are added and edited under **Contributors**
 (`/contributors`), from the donor picker on payment entry, and from a
 contribution's detail page. All writes go through `api/src/contacts/write.ts`.
-Who owns a contact depends on whether the API has a Qomon client
-(`QOMON_API_KEY` set):
+Who owns a contact depends on whether Qomon is enabled. That is a database
+setting (`qomon_settings`, `api/src/qomon/settings.ts`), not an environment
+variable: a system administrator enables the party-level space under
+**Admin > Qomon** with an API key, and until then the tool never talks to
+Qomon, so a fresh database (a new deployment, the e2e suite) is
+Qomon-free whatever its environment holds. The setting is read on each
+request, so a change takes effect without a restart. The key is write-only:
+the API reports only whether one is on file, and the `QomonSettings`
+change-log entry records the same. Riding spaces (Admin > Ridings) use the
+party-level base URL unless they set their own.
 
 - **Without Qomon**, contacts are owned by the tool: a new one has no
   `qomonContactId`, and edits update the row.
@@ -119,8 +127,8 @@ Who owns a contact depends on whether the API has a Qomon client
   changed fields to Qomon (read, merge, full replace, via
   `QomonApi.updateContact`) and then mirrors what Qomon holds. If Qomon
   refuses, nothing is written locally.
-- A Qomon-linked contact cannot be edited while Qomon is not configured
-  (409). A contact with no Qomon link stays tool-owned either way.
+- A Qomon-linked contact cannot be edited while Qomon is off (409). A
+  contact with no Qomon link stays tool-owned either way.
 
 Every contact has a `contributorId`: the `Contributor ID` on EO filings
 (RTD, ALL, S2P2, DC-1A) and receipts, at most 10 alphanumeric characters.

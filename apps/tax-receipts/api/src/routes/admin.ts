@@ -14,20 +14,24 @@ import {
   updateLeadershipContestant,
 } from '../leadership/contestants.js';
 import type { SessionUser } from '../plugins/auth.js';
+import { getQomonSettings, QomonKeyRequiredError, setQomonSettings } from '../qomon/settings.js';
 import { getReceiptSettings, setReceiptLayout } from '../receipts/settings.js';
 import { runValidationForAllContributions } from '../validation/run.js';
 
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
  * ContributionLimit buckets, users/roles, the RTD holiday calendar,
- * per-riding Qomon spaces, and leadership contestants. Period, limit, and
+ * the party-level Qomon space, per-riding Qomon spaces, and leadership
+ * contestants. Period, limit, and
  * contestant writes take a reason and are change-logged (EO evaluation row
  * 19). Settings writes need `administer Period` (`settings.administer`);
  * user and role writes need `administer User` (`users.administer`); see
  * auth/permissions.ts. Reads need only authentication, matching every other
  * list route.
- * The one exception is a riding's `qomonApiKey`: never round-tripped back
- * out of a GET, sysadmin-only or not (see `redactRiding` below).
+ * The exceptions are the Qomon API keys, party and riding: never
+ * round-tripped back out of a GET (see `redactRiding` and
+ * `qomon/settings.ts`). The party-level Qomon settings are read and written
+ * by the system administrator only (`manage all`), like the mirror sweep.
  *
  * Not built here: the receipt letter template (Phase 3 — no template
  * system exists yet, and template changes route through the EO
@@ -120,6 +124,45 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
       const { receiptLayout, reason } = request.body;
       return reply.send(await setReceiptLayout(app.prisma, { userId: auth.user.id, reason }, receiptLayout));
+    },
+  });
+
+  // ---- Qomon (party-level space) ---------------------------------------
+
+  function requireSysadmin(user: SessionUser | undefined, ability: AppAbility) {
+    if (!user) return { ok: false as const, code: 401, error: 'authentication required' };
+    if (!ability.can('manage', 'all')) return { ok: false as const, code: 403, error: 'sysadmin only' };
+    return { ok: true as const, user };
+  }
+
+  r.get('/admin/qomon-settings', async (request, reply) => {
+    const auth = requireSysadmin(request.user as SessionUser | undefined, request.ability);
+    if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+    return reply.send(await getQomonSettings(app.prisma));
+  });
+
+  r.route({
+    method: 'PUT',
+    url: '/admin/qomon-settings',
+    schema: {
+      body: z.object({
+        enabled: z.boolean().optional(),
+        apiBase: z.string().trim().url().optional(),
+        /** omit to keep the key on file; it is never read back */
+        apiKey: z.string().trim().min(1).optional(),
+        reason: z.string().trim().min(3),
+      }),
+    },
+    handler: async (request, reply) => {
+      const auth = requireSysadmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const { reason, ...input } = request.body;
+      try {
+        return reply.send(await setQomonSettings(app.prisma, { userId: auth.user.id, reason }, input));
+      } catch (err) {
+        if (err instanceof QomonKeyRequiredError) return reply.code(400).send({ error: err.message });
+        throw err;
+      }
     },
   });
 

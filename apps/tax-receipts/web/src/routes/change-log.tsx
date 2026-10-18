@@ -46,6 +46,7 @@ const SUBJECT_TYPES = [
   'Role',
   'LeadershipContestant',
   'ReceiptSettings',
+  'QomonSettings',
 ];
 
 function jsonCell(value: unknown): string {
