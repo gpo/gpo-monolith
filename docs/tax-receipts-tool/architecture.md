@@ -16,6 +16,7 @@ live in the private `gpo/qomon-migration-documents` repo.
 apps/tax-receipts/
   api/     Fastify + Zod + Prisma + PostgreSQL   (@gpo/tax-receipts-api)
   web/     Vite + React + Mantine + Tanstack     (@gpo/tax-receipts-web)
+  e2e/     Playwright browser tests               (@gpo/tax-receipts-e2e)
 packages/
   tax-receipts-core/   domain enums, money, the Qomon metadata schema,
                        the period calendar, the ContributionLimit service,
@@ -58,6 +59,18 @@ pnpm --filter @gpo/tax-receipts-api db:seed  # dev/eval seed data (sysadmin@gpo.
 # before running `dev` or it'll keep pointing at whatever you last exported.
 pnpm --filter @gpo/tax-receipts-api dev      # Fastify on :3000
 pnpm --filter @gpo/tax-receipts-web dev      # Vite on :5173, proxies /api -> :3000
+```
+
+The Playwright suite in `apps/tax-receipts/e2e/` drives the real app in a
+browser. It needs only the dev Postgres (`pnpm db:dev:up`): it resets and
+seeds its own `tax_receipts_e2e` database on every run and starts its own api
+(:3100) and web (:5174) servers, so dev data is left alone. Qomon stays off,
+because the fresh database never enables it. The suite covers every row of
+the EO Evaluation Tool: plans in `e2e/specs/`, tests in `e2e/tests/eo/`. It
+is not part of `turbo run test`; see its README.
+
+```bash
+pnpm --filter @gpo/tax-receipts-e2e e2e
 ```
 
 CI is `.github/workflows/tax-receipts-ci.yml`: lint, typecheck, tests
