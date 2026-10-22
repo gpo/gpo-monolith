@@ -72,3 +72,9 @@ individual_receipts
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# tax-receipts e2e (Playwright)
+apps/tax-receipts/e2e/.storage/
+apps/tax-receipts/e2e/test-results/
+apps/tax-receipts/e2e/playwright-report/
+.playwright-mcp/
