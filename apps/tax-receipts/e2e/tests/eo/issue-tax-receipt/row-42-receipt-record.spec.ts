@@ -9,10 +9,6 @@ test.describe('Issue Tax Receipt: receipt records and audit', () => {
   test('Row 42: Receipt records its allocation, an immutable address and name snapshot, and the stored PDF', async ({
     page,
   }) => {
-    // Known app bug: a reissued receipt keeps the donor's OLD name because
-    // api/src/corrections/cancel.ts copies receipt.contactNameSnapshot, while
-    // the user guide says a reissue uses current data. Expected to fail until fixed.
-    test.fail();
     const sfx = newSuffix();
     const upper = sfx.toUpperCase();
 

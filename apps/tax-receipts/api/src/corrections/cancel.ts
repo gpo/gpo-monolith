@@ -355,7 +355,9 @@ export async function reissueReceipt(
           periodId: receipt.periodId,
           issueDate: new Date(),
           contactId: receipt.contactId,
-          contactNameSnapshot: receipt.contactNameSnapshot,
+          // a reissue is issued from current data, name as well as address
+          // (corrections.md); the cancelled original keeps its own snapshot
+          contactNameSnapshot: receipt.contact.name,
           addressSnapshotId: snapshot.id,
           delivery: input.delivery ?? receipt.delivery,
           reissuedFromId: receipt.id,
@@ -406,7 +408,7 @@ export async function reissueReceipt(
     isGoodsServices: printed.goodsServices,
     politicalEntityLabel: await receiptEntityLabel(deps.prisma, primary, input.politicalEntityLabel),
     eoContributorId: receipt.contact.contributorId,
-    contributorName: receipt.contactNameSnapshot,
+    contributorName: receipt.contact.name,
     replacesReceiptNumber: receipt.receiptNumber,
     addressLine1,
     addressLine2: null,
