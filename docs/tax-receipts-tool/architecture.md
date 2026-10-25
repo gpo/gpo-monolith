@@ -52,7 +52,13 @@ pnpm turbo run lint typecheck test build     # everything
 # for dev data.
 pnpm db:test:up
 export DATABASE_URL="postgresql://gpo:gpo@localhost:5433/tax_receipts_test"
-pnpm --filter @gpo/tax-receipts-api test
+pnpm turbo run test --filter=@gpo/tax-receipts-api
+
+# The api's build, typecheck, and test scripts don't run `prisma generate`
+# themselves: turbo runs it once first (api/turbo.json), because three
+# parallel generates rewriting src/generated raced each other's tsc. Going
+# through turbo, as above, handles it; to run a script with plain
+# `pnpm --filter`, run `prisma:generate` first after any schema change.
 
 # day-to-day dev/manual-testing data is a SEPARATE Postgres on :5434
 # (docker-compose.dev.yml), with a persistent named volume. This is what
