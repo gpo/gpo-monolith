@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Alert, Badge, Button, Card, Group, Loader, Stack, Table, Text, TextInput } from '@mantine/core';
 import { api, type ContactSource, type FormattedAddress } from '../api.js';
-import { ChangeHistoryCard } from '../components/change-history.js';
+import { ChangeHistoryCard, ChangeHistoryTable } from '../components/change-history.js';
 import { ContactFormModal, ownershipNote } from '../components/contact-form-modal.js';
 import { ContributorContributions } from '../components/contributor-contributions.js';
 import { PageHeader } from '../components/PageHeader.js';
@@ -114,11 +114,6 @@ export function ContributorsPage() {
   );
 }
 
-function jsonCell(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  return JSON.stringify(value);
-}
-
 export function ContributorDetailPage({ id }: { id: string }) {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const detail = useQuery({ queryKey: ['contact', id], queryFn: () => api.getContact(id) });
@@ -132,9 +127,16 @@ export function ContributorDetailPage({ id }: { id: string }) {
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
         <PageHeader title={c.name} backTo="/contributors" backLabel="Back to contributors" />
-        {me.data?.can.editContacts && c.editable && !c.mergedIntoId && (
-          <Button onClick={() => setEditing(true)}>Edit contributor</Button>
-        )}
+        <Group gap="sm">
+          {me.data?.can.enterPayments && !c.mergedIntoId && (
+            <Link to="/payments/new" search={{ contactId: c.id }}>
+              <Button variant="light">Add a payment</Button>
+            </Link>
+          )}
+          {me.data?.can.editContacts && c.editable && !c.mergedIntoId && (
+            <Button onClick={() => setEditing(true)}>Edit contributor</Button>
+          )}
+        </Group>
       </Group>
 
       {c.mergedIntoId && (
@@ -174,10 +176,12 @@ export function ContributorDetailPage({ id }: { id: string }) {
               ? `${formatAddress(c.formattedAddress)}, ${c.formattedAddress.country}`
               : 'none on file; a receipt cannot be issued until one is added'}
           </Text>
-          <Text size="xs" c="dimmed">
-            {ownershipNote('edit', c.source)}
-            {c.lastSyncedAt && ` Last copied from Qomon ${new Date(c.lastSyncedAt).toLocaleString()}.`}
-          </Text>
+          {(ownershipNote('edit', c.source) || c.lastSyncedAt) && (
+            <Text size="xs" c="dimmed">
+              {ownershipNote('edit', c.source)}
+              {c.lastSyncedAt && ` Last copied from Qomon ${new Date(c.lastSyncedAt).toLocaleString()}.`}
+            </Text>
+          )}
         </Stack>
       </Card>
 
@@ -188,36 +192,7 @@ export function ContributorDetailPage({ id }: { id: string }) {
       />
 
       <ChangeHistoryCard entries={c.changeLog}>
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>At</Table.Th>
-              <Table.Th>By</Table.Th>
-              <Table.Th>Reason</Table.Th>
-              <Table.Th>Before</Table.Th>
-              <Table.Th>After</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {c.changeLog.map((e) => (
-              <Table.Tr key={e.id}>
-                <Table.Td>{new Date(e.at).toLocaleString()}</Table.Td>
-                <Table.Td>{e.actorName ?? 'System'}</Table.Td>
-                <Table.Td>{e.reason}</Table.Td>
-                <Table.Td>
-                  <Text size="xs" ff="monospace" style={{ wordBreak: 'break-all' }}>
-                    {jsonCell(e.before)}
-                  </Text>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="xs" ff="monospace" style={{ wordBreak: 'break-all' }}>
-                    {jsonCell(e.after)}
-                  </Text>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+        <ChangeHistoryTable entries={c.changeLog} subjectType="Contact" />
       </ChangeHistoryCard>
 
       {editing && <ContactFormModal contact={c} onClose={() => setEditing(false)} />}

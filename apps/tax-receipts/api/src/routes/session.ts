@@ -166,6 +166,9 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         correctContributions: request.ability.can('correct', 'Contribution'),
         correctReceipts: request.ability.can('correct', 'Receipt'),
         administerUsers: request.ability.can('administer', 'User'),
+        administerSettings: request.ability.can('administer', 'Period'),
+        manageSystem: request.ability.can('manage', 'all'),
+        readAllRecords: request.ability.can('read', 'all'),
       },
     });
   });

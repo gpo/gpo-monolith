@@ -14,12 +14,14 @@ import {
   Title,
 } from '@mantine/core';
 import { api, type ChangeLogFilters, type ChangeLogRow } from '../api.js';
+import { ChangeEntryModal, changeSummary } from '../components/change-entry-modal.js';
 
 /**
  * Change-log explorer (ticket 1.11, screens.md 12): the audit surface
  * underpinning guarantee G4, part of the EO virtual-evaluation demo script.
  * Filter by subject, actor, correlation id, date; every entry shows
- * before/after and reason; exportable as CSV.
+ * before/after and reason; exportable as CSV. Clicking a row opens a
+ * field-by-field view of what changed.
  */
 
 const SUBJECT_TYPES = [
@@ -49,16 +51,11 @@ const SUBJECT_TYPES = [
   'QomonSettings',
 ];
 
-function jsonCell(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  const s = JSON.stringify(value);
-  return s.length > 80 ? `${s.slice(0, 80)}…` : s;
-}
-
 export function ChangeLogPage() {
   const [filters, setFilters] = useState<ChangeLogFilters>({});
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [accumulated, setAccumulated] = useState<ChangeLogRow[]>([]);
+  const [viewing, setViewing] = useState<ChangeLogRow | null>(null);
 
   const query = useQuery({
     queryKey: ['change-log', filters, cursor],
@@ -145,13 +142,23 @@ export function ChangeLogPage() {
                 <Table.Th>Subject</Table.Th>
                 <Table.Th>Actor</Table.Th>
                 <Table.Th>Reason</Table.Th>
-                <Table.Th>Before</Table.Th>
-                <Table.Th>After</Table.Th>
+                <Table.Th>Changes</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {rows.map((e) => (
-                <Table.Tr key={e.id}>
+                <Table.Tr
+                  key={e.id}
+                  onClick={() => setViewing(e)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                      ev.preventDefault();
+                      setViewing(e);
+                    }
+                  }}
+                  tabIndex={0}
+                  style={{ cursor: 'pointer' }}
+                >
                   <Table.Td>{new Date(e.at).toLocaleString()}</Table.Td>
                   <Table.Td>
                     {e.subjectType} ({e.subjectId})
@@ -160,12 +167,7 @@ export function ChangeLogPage() {
                   <Table.Td>{e.reason}</Table.Td>
                   <Table.Td>
                     <Text size="xs" ff="monospace">
-                      {jsonCell(e.before)}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs" ff="monospace">
-                      {jsonCell(e.after)}
+                      {changeSummary(e)}
                     </Text>
                   </Table.Td>
                 </Table.Tr>
@@ -185,6 +187,19 @@ export function ChangeLogPage() {
             </Group>
           )}
         </>
+      )}
+
+      {viewing && (
+        <ChangeEntryModal
+          entry={viewing}
+          onClose={() => setViewing(null)}
+          onShowCorrelated={(id) => {
+            setViewing(null);
+            setCursor(undefined);
+            setAccumulated([]);
+            setFilters({ correlationId: id });
+          }}
+        />
       )}
     </Stack>
   );

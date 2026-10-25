@@ -18,7 +18,6 @@ test.describe('Issue Tax Receipt: delivery', () => {
     await page.getByRole('link', { name: 'Email Emma' }).click();
     await expect(page.getByText('Email: email.emma@g4.fixture.test')).toBeVisible();
     await expect(page.getByText('Qomon contact: none (kept in this tool)')).toBeVisible();
-    await expect(page.getByText('This contributor is kept in this tool only.')).toBeVisible();
 
     // 2. Click 'Edit contributor', read the Email field, then click Cancel. Do NOT save.
     await page.getByRole('button', { name: 'Edit contributor' }).click();

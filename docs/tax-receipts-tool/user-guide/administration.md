@@ -7,18 +7,19 @@ review-interval-days: 90
 
 [Back to the guide](README.md)
 
-The **Admin** area holds the tool's configuration. Anyone signed in can
-view most sections; changing them needs the permission named for each
-section. Almost every change asks for a reason and is recorded in the
-[change log](change-log.md).
+The **Admin** area holds the tool's configuration. You see only the
+sections your role has a use for, listed below; if it has none, the
+**Admin** link is not shown at all. Almost every change asks for a reason
+and is recorded in the [change log](change-log.md).
 
-| Section | Needs |
+| Section | Shown to anyone with |
 |---|---|
 | Periods, Contribution limits, RTD holidays, Ridings, Leadership contestants, Receipts, Emails | *Manage annual settings* |
 | Users, Roles | *Manage users and roles* |
 | Kill switch | *Operate the issuance kill switch* |
 | Qomon | System administrator only |
-| Validation rules, Change log | Reading only |
+| Validation rules (reading only) | *Manage annual settings*, *Edit contribution details*, or *Correct contributions* |
+| Change log (reading only) | *Read all records*, *Manage annual settings*, or *Manage users and roles* |
 
 ## Annual settings
 

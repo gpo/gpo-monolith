@@ -26,6 +26,5 @@ test.describe('Contributors', () => {
     await expect(page.getByRole('heading', { name: 'Email Emma' })).toBeVisible();
     await expect(page.getByText(/Contributor id: T\d+/)).toBeVisible();
     await expect(page.getByText('Qomon contact: none (kept in this tool)')).toBeVisible();
-    await expect(page.getByText('This contributor is kept in this tool only.')).toBeVisible();
   });
 });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, Outlet, useRouterState } from '@tanstack/react-router';
+import { Link, Navigate, Outlet, useRouterState } from '@tanstack/react-router';
 import {
   Alert,
   Badge,
@@ -25,7 +25,7 @@ import {
 // rule-labels.ts's doc comment). validation/rules.js's own dependency
 // chain has no node:crypto import, so this subpath is browser-safe.
 import { IMPLEMENTED_RULE_REFS } from '@gpo/tax-receipts-core/validation/rules.js';
-import { api, type AdminUserRow, type RidingImportRow, type RidingRow } from '../api.js';
+import { api, type AdminUserRow, type Me, type RidingImportRow, type RidingRow } from '../api.js';
 import { EmailsSection } from './admin-emails.js';
 import { LeadershipContestantsSection } from './admin-leadership.js';
 import { QomonSettingsSection } from './admin-qomon.js';
@@ -50,38 +50,88 @@ import { RULE_LABELS } from '../rule-labels.js';
  * value for either — see api/src/routes/admin.ts).
  */
 
+type AdminCan = Me['can'];
+const settings = (can: AdminCan) => can.administerSettings;
+const sysadmin = (can: AdminCan) => can.manageSystem;
+const userAdmin = (can: AdminCan) => can.administerUsers;
+
 /**
  * Each admin section lives at its own path under /admin (e.g. /admin/ridings)
  * rather than behind in-page tab state, so a section can be linked to or
  * reloaded directly. router.tsx builds the child routes from this array;
  * AdminLayout below builds the nav from it too, so a new section only needs
  * an entry here. `devOnly` sections (Dev tools) are kept out of both in
- * production — see visibleAdminSections below.
+ * production — see visibleAdminSections below. `allowed` says which
+ * permission makes a section worth showing (mirroring its server-side write
+ * guard); see adminSectionsFor below.
  */
+
 export const ADMIN_SECTIONS = [
-  { slug: 'periods', label: 'Periods', component: () => <PeriodsSection />, devOnly: false },
-  { slug: 'contribution-limits', label: 'Contribution limits', component: () => <ContributionLimitsSection />, devOnly: false },
-  { slug: 'rtd-holidays', label: 'RTD holidays', component: () => <HolidaysSection />, devOnly: false },
-  { slug: 'qomon', label: 'Qomon', component: () => <QomonSettingsSection />, devOnly: false },
-  { slug: 'ridings', label: 'Ridings', component: () => <RidingsSection />, devOnly: false },
+  { slug: 'periods', label: 'Periods', component: () => <PeriodsSection />, devOnly: false, allowed: settings },
+  {
+    slug: 'contribution-limits',
+    label: 'Contribution limits',
+    component: () => <ContributionLimitsSection />,
+    devOnly: false,
+    allowed: settings,
+  },
+  { slug: 'rtd-holidays', label: 'RTD holidays', component: () => <HolidaysSection />, devOnly: false, allowed: settings },
+  { slug: 'qomon', label: 'Qomon', component: () => <QomonSettingsSection />, devOnly: false, allowed: sysadmin },
+  { slug: 'ridings', label: 'Ridings', component: () => <RidingsSection />, devOnly: false, allowed: settings },
   {
     slug: 'leadership-contestants',
     label: 'Leadership contestants',
     component: () => <LeadershipContestantsSection />,
     devOnly: false,
+    allowed: settings,
   },
-  { slug: 'users', label: 'Users', component: () => <UsersSection />, devOnly: false },
-  { slug: 'roles', label: 'Roles', component: () => <RolesSection />, devOnly: false },
-  { slug: 'kill-switch', label: 'Kill switch', component: () => <KillSwitchSection />, devOnly: false },
-  { slug: 'receipts', label: 'Receipts', component: () => <ReceiptSettingsSection />, devOnly: false },
-  { slug: 'emails', label: 'Emails', component: () => <EmailsSection />, devOnly: false },
-  { slug: 'validation-rules', label: 'Validation rules', component: () => <ValidationRulesSection />, devOnly: false },
-  { slug: 'change-log', label: 'Change log', component: () => <ChangeLogPage />, devOnly: false },
-  { slug: 'dev-tools', label: 'Dev tools', component: () => <DevToolsPage />, devOnly: true },
-] as const satisfies ReadonlyArray<{ slug: string; label: string; component: () => JSX.Element; devOnly: boolean }>;
+  { slug: 'users', label: 'Users', component: () => <UsersSection />, devOnly: false, allowed: userAdmin },
+  { slug: 'roles', label: 'Roles', component: () => <RolesSection />, devOnly: false, allowed: userAdmin },
+  {
+    slug: 'kill-switch',
+    label: 'Kill switch',
+    component: () => <KillSwitchSection />,
+    devOnly: false,
+    allowed: (can) => can.administerKillSwitch,
+  },
+  { slug: 'receipts', label: 'Receipts', component: () => <ReceiptSettingsSection />, devOnly: false, allowed: settings },
+  { slug: 'emails', label: 'Emails', component: () => <EmailsSection />, devOnly: false, allowed: settings },
+  {
+    slug: 'validation-rules',
+    label: 'Validation rules',
+    component: () => <ValidationRulesSection />,
+    devOnly: false,
+    // a read-only reference for whoever judges or fixes the contributions
+    // the rules flag
+    allowed: (can) => can.administerSettings || can.editContributions || can.correctContributions,
+  },
+  {
+    slug: 'change-log',
+    label: 'Change log',
+    component: () => <ChangeLogPage />,
+    devOnly: false,
+    // the API lets any signed-in user read it, but it is oversight material:
+    // shown to those who read everything or administer what it records
+    allowed: (can) => can.readAllRecords || can.administerSettings || can.administerUsers,
+  },
+  { slug: 'dev-tools', label: 'Dev tools', component: () => <DevToolsPage />, devOnly: true, allowed: sysadmin },
+] as const satisfies ReadonlyArray<{
+  slug: string;
+  label: string;
+  component: () => JSX.Element;
+  devOnly: boolean;
+  allowed: (can: AdminCan) => boolean;
+}>;
 
-/** Sections actually shown/routed: devOnly ones only outside production. */
+/** Sections actually routed: devOnly ones only outside production. */
 export const visibleAdminSections = ADMIN_SECTIONS.filter((s) => !s.devOnly || import.meta.env.DEV);
+
+/** The routed sections this user has a use for. The nav shows only these,
+ *  and the header hides Admin entirely when the list is empty. This is
+ *  presentation only: the API enforces every permission on its own. */
+export function adminSectionsFor(can: AdminCan) {
+  return visibleAdminSections.filter((s) => s.allowed(can));
+}
 
 function KillSwitchSection() {
   const qc = useQueryClient();
@@ -837,7 +887,7 @@ function EditUserModal({
 }
 
 /** Admin password reset (EO evaluation row 12): sets a temporary password
- *  the admin passes on. The user's sessions stay signed in. */
+ *  the admin passes on. The user's sessions are signed out. */
 function ResetPasswordModal({ user, onClose }: { user: AdminUserRow; onClose: () => void }) {
   const [password, setPassword] = useState('');
   const [reason, setReason] = useState('');
@@ -848,8 +898,8 @@ function ResetPasswordModal({ user, onClose }: { user: AdminUserRow; onClose: ()
       {reset.isSuccess ? (
         <Stack gap="sm">
           <Alert color="green">
-            Password reset. Give {user.name} the temporary password and ask them to change it from their
-            account menu.
+            Password reset, and {user.name} is signed out everywhere. Give them the temporary password and
+            ask them to change it from their account menu.
           </Alert>
           <Group justify="flex-end">
             <Button onClick={onClose}>Done</Button>
@@ -962,12 +1012,26 @@ function ValidationRulesSection() {
 
 export function AdminLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+  if (!me.data) return <Loader />;
+
+  const sections = adminSectionsFor(me.data.can);
+  // Bare /admin, or a section this user has no use for (an old bookmark, a
+  // pasted link): land on their first section, or home if they have none.
+  // Only for paths under /admin: while navigating away, the location changes
+  // before this layout unmounts, and redirecting then would bounce the user
+  // back into admin.
+  const inAdmin = pathname === '/admin' || pathname.startsWith('/admin/');
+  if (inAdmin && !sections.some((s) => pathname === `/admin/${s.slug}`)) {
+    const first = sections[0];
+    return <Navigate to={first ? `/admin/${first.slug}` : '/'} replace />;
+  }
 
   return (
     <Stack gap="lg">
       <Title order={2}>Annual settings &amp; admin</Title>
       <Group>
-        {visibleAdminSections.map((s) => {
+        {sections.map((s) => {
           const to = `/admin/${s.slug}`;
           return (
             <Button

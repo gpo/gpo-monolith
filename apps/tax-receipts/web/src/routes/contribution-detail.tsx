@@ -20,7 +20,7 @@ import {
 } from '@mantine/core';
 import { api, ApiError, type ContributionDetail } from '../api.js';
 import { describeRuleRef } from '../rule-labels.js';
-import { ChangeHistoryCard } from '../components/change-history.js';
+import { ChangeHistoryCard, ChangeHistoryTable } from '../components/change-history.js';
 import { CorrectionPanel } from '../components/correction-panel.js';
 import { EditContributionModal, receivedByOptions } from '../components/edit-contribution-modal.js';
 import { EditPaymentModal } from '../components/edit-payment-modal.js';
@@ -515,16 +515,7 @@ export function ContributionDetailPage({ id }: { id: string }) {
       </Card>
 
       <ChangeHistoryCard entries={detail.changeLog}>
-        <Stack gap="xs">
-          {detail.changeLog.map((c) => (
-            <Group key={c.id} justify="space-between" wrap="nowrap">
-              <Text size="sm">{c.reason}</Text>
-              <Text size="xs" c="dimmed">
-                {new Date(c.at).toLocaleString()}
-              </Text>
-            </Group>
-          ))}
-        </Stack>
+        <ChangeHistoryTable entries={detail.changeLog} />
       </ChangeHistoryCard>
     </Stack>
   );

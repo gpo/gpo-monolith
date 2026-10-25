@@ -211,15 +211,26 @@ changes their name and email (an email change needs the current password,
 since the email is the sign-in name), and **Change password** needs the
 current password and signs out the user's other sessions. An administrator
 holding `users.administer` can edit any user's name and email and reset a
-password (which leaves that user's sessions signed in) from Admin, Users. User
+password (which signs out every session of that user, apart from the
+admin's own when they reset their own) from Admin, Users. User
 creates and edits are change-logged under subject type `User`, never with
 the password hash. Sessions are tied to their user through
 `session.userId` and the passport field in the session data
 (`sessionsOfUser` in `api/src/auth/session-store.ts`).
 
+`users.administer` is not a path to `system.manage`: the role and user
+routes in `api/src/routes/admin.ts` refuse (403) any write by a user without
+`manage all` that adds `system.manage` to a role or removes it, or that
+moves a user onto or off a role holding it.
+
 The web app's root layout (`web/src/router.tsx`) gates every route on
 `GET /auth/me`: while signed out it renders only the login form, and the nav
-shell and all app routes stay hidden until sign-in succeeds.
+shell and all app routes stay hidden until sign-in succeeds. The Admin
+area shows only the sections the user's role has a use for: each entry in
+`ADMIN_SECTIONS` (`web/src/routes/admin.tsx`) carries an `allowed` check
+against the `can` flags from `/auth/me`, the header hides Admin when none
+pass, and a link to a hidden section redirects to the first permitted one.
+This is presentation only; the API enforces each permission itself.
 
 ## What is faked in Phase 0
 

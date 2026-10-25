@@ -420,7 +420,7 @@ const CASES = [
 { id: 'r21', sec: 'contributors', rows: [21], title: 'First and last name are recorded', mins: '4 min', who: ['admin'],
   ask: 'The contributor\'s full name is recorded, first and last separately.',
   steps: [
-    { d: '[[Add a contributor]].', s: ['"Qomon is not connected, so this contributor will be kept in this tool only."'] },
+    { d: '[[Add a contributor]].', s: ['The Add a contributor dialog opens.'] },
     { d: 'Fill only First name {{Ada}} and Reason {{New donor added at event}}.', s: ['[[Add contributor]] stays disabled: last name is required.'] },
     { d: 'Last name {{Lovelace}}, Email {{ada.demo@example.test}}, [[Add contributor]].', s: ['"First name: Ada" and "Last name: Lovelace" on separate lines.'] },
     { d: '[[Edit contributor]], First name {{Augusta}}, Reason {{Corrected first name spelling}}, save. [[Show 2 changes]].', s: ['Before "firstName":"Ada", After "firstName":"Augusta", By Receipt Administrator.'] },

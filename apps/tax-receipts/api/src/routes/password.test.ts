@@ -111,8 +111,9 @@ describe('password change and reset (EO evaluation row 12)', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('an admin resets a password, leaving that user\'s sessions signed in', async () => {
+  it('an admin resets a password, signing out every session of that user', async () => {
     const userSession = (await login('cfo@gpo.test', 'original-pass-phrase'))!;
+    const otherUserSession = (await login('cfo@gpo.test', 'original-pass-phrase'))!;
     const admin = (await login('sysadmin@gpo.test', 'sysadmin-pass-phrase'))!;
     const res = await app.inject({
       method: 'POST',
@@ -121,12 +122,29 @@ describe('password change and reset (EO evaluation row 12)', () => {
       payload: { newPassword: 'temporary-pass-phrase', reason: 'forgot password, ticket 42' },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true });
-    expect(await signedIn(userSession)).toBe(true);
+    expect(res.json()).toEqual({ ok: true, sessionsSignedOut: 2 });
+    expect(await signedIn(userSession)).toBe(false);
+    expect(await signedIn(otherUserSession)).toBe(false);
+    expect(await signedIn(admin)).toBe(true);
     expect(await login('cfo@gpo.test', 'temporary-pass-phrase')).not.toBeNull();
 
     const entry = await prisma.changeLogEntry.findFirstOrThrow({ where: { subjectType: 'User', subjectId: cfoId } });
     expect(entry).toMatchObject({ actorUserId: sysadminId, reason: 'forgot password, ticket 42' });
+    expect(entry.after).toMatchObject({ passwordReset: true, sessionsSignedOut: 2 });
+  });
+
+  it('an admin resetting their own password stays signed in in this session', async () => {
+    const admin = (await login('sysadmin@gpo.test', 'sysadmin-pass-phrase'))!;
+    const adminElsewhere = (await login('sysadmin@gpo.test', 'sysadmin-pass-phrase'))!;
+    const res = await app.inject({
+      method: 'POST',
+      url: `/admin/users/${sysadminId}/password`,
+      cookies: admin,
+      payload: { newPassword: 'temporary-pass-phrase', reason: 'rotating my own password' },
+    });
+    expect(res.json()).toEqual({ ok: true, sessionsSignedOut: 1 });
+    expect(await signedIn(admin)).toBe(true);
+    expect(await signedIn(adminElsewhere)).toBe(false);
   });
 
   it('only users.administer may reset someone else\'s password', async () => {

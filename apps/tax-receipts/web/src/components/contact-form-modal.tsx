@@ -66,15 +66,12 @@ function addressFrom(f: FormState): ContactAddress | null | 'incomplete' {
   };
 }
 
-export function ownershipNote(mode: 'create' | 'edit', source: ContactSource): string {
-  if (mode === 'create') {
-    return source === 'qomon'
-      ? 'This contributor will be created in Qomon first, then copied here.'
-      : 'Qomon is not connected, so this contributor will be kept in this tool only.';
-  }
-  return source === 'qomon'
-    ? 'This is a Qomon contact: your changes are written to Qomon first, then copied here.'
-    : 'This contributor is kept in this tool only.';
+/** Only Qomon-backed contributors need a note; tool-only ones say nothing. */
+export function ownershipNote(mode: 'create' | 'edit', source: ContactSource): string | null {
+  if (source !== 'qomon') return null;
+  return mode === 'create'
+    ? 'This contributor will be created in Qomon first, then copied here.'
+    : 'This is a Qomon contact: your changes are written to Qomon first, then copied here.';
 }
 
 export function ContactFormModal({
@@ -180,8 +177,8 @@ export function ContactFormModal({
             value={form.reason}
             onChange={set('reason')}
           />
-          {source && (
-            <Alert color={source === 'qomon' ? 'blue' : 'gray'} variant="light">
+          {source && ownershipNote(mode, source) && (
+            <Alert color="blue" variant="light">
               {ownershipNote(mode, source)}
             </Alert>
           )}

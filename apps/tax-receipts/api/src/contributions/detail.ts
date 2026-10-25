@@ -119,6 +119,7 @@ export interface ContributionDetail {
     id: string;
     subjectType: string;
     actorUserId: string | null;
+    actorName: string | null;
     reason: string;
     before: unknown;
     after: unknown;
@@ -184,6 +185,7 @@ export async function getContributionDetail(
         ],
       },
       orderBy: { at: 'desc' },
+      include: { actor: { select: { name: true } } },
     }),
   ]);
 
@@ -308,6 +310,7 @@ export async function getContributionDetail(
       id: c.id,
       subjectType: c.subjectType,
       actorUserId: c.actorUserId,
+      actorName: c.actor?.name ?? null,
       reason: c.reason,
       before: c.before,
       after: c.after,
