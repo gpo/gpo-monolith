@@ -32,8 +32,19 @@ resolves from every package. Node version is pinned in `.nvmrc`.
 
 ## Commands
 
+The one-command way to run the tool locally, from the repo root:
+
 ```bash
 pnpm install
+pnpm dev    # dev Postgres up (waits for healthy), migrate:deploy, builds the
+            # packages, then api (:3000) and web (:5173) in watch mode
+```
+
+It reads `apps/tax-receipts/api/.env` (copy `.env.example` first) and does not
+seed: run `db:seed` once on a fresh database (below). The step-by-step
+equivalent, plus tests:
+
+```bash
 pnpm turbo run lint typecheck test build     # everything
 
 # the api's tests need a Postgres on :5433 (docker-compose.test.yml).
@@ -41,7 +52,13 @@ pnpm turbo run lint typecheck test build     # everything
 # for dev data.
 pnpm db:test:up
 export DATABASE_URL="postgresql://gpo:gpo@localhost:5433/tax_receipts_test"
-pnpm --filter @gpo/tax-receipts-api test
+pnpm turbo run test --filter=@gpo/tax-receipts-api
+
+# The api's build, typecheck, and test scripts don't run `prisma generate`
+# themselves: turbo runs it once first (api/turbo.json), because three
+# parallel generates rewriting src/generated raced each other's tsc. Going
+# through turbo, as above, handles it; to run a script with plain
+# `pnpm --filter`, run `prisma:generate` first after any schema change.
 
 # day-to-day dev/manual-testing data is a SEPARATE Postgres on :5434
 # (docker-compose.dev.yml), with a persistent named volume. This is what
@@ -52,6 +69,11 @@ pnpm db:dev:up
 export DATABASE_URL="postgresql://gpo:gpo@localhost:5434/tax_receipts_dev"
 pnpm --filter @gpo/tax-receipts-api migrate:deploy
 pnpm --filter @gpo/tax-receipts-api db:seed  # dev/eval seed data (sysadmin@gpo.test, etc.)
+pnpm --filter @gpo/tax-receipts-api db:seed:fixtures  # manual-test fixtures (Split Sam, Lost Lena, ...)
+# EO evaluation demo: records the demo issues, corrects, and resolves live,
+# the "With contributor type" receipt layout, and every seeded login's
+# password set to `gpo`. Local databases only, unless run with --allow-remote.
+pnpm --filter @gpo/tax-receipts-api db:seed:demo
 
 # `dev`/`db:seed` load apps/tax-receipts/api/.env themselves (tsx --env-file)
 # — but env vars already exported in your shell win over .env, so if you

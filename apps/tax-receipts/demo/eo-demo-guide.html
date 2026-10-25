@@ -1,0 +1,1039 @@
+<title>EO Demo Companion</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: a narrow single column meant to sit beside the app; sticky header with row jump, fixed prev/next bar for the thumb. */
+:root {
+  --bg: #f4f7f3;
+  --surface: #ffffff;
+  --ink: #16201a;
+  --muted: #5a6a5e;
+  --line: #d9e1d8;
+  --accent: #2e7a34;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2efdf;
+  --type-bg: #fff3c9;
+  --type-ink: #5a4300;
+  --type-line: #e9d58a;
+  --see: #24577a;
+  --see-soft: #e4eef5;
+  --warn-soft: #fdeee6;
+  --warn-ink: #8a3a12;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1411; --surface: #161d18; --ink: #e4ebe4; --muted: #9aa99d; --line: #29332c;
+    --accent: #72c46e; --accent-ink: #0c160d; --accent-soft: #1c2d1d;
+    --type-bg: #3a3214; --type-ink: #f4dc8a; --type-line: #5c4f1f;
+    --see: #8cc3ea; --see-soft: #18262f; --warn-soft: #36211a; --warn-ink: #f2b394;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1411; --surface: #161d18; --ink: #e4ebe4; --muted: #9aa99d; --line: #29332c;
+  --accent: #72c46e; --accent-ink: #0c160d; --accent-soft: #1c2d1d;
+  --type-bg: #3a3214; --type-ink: #f4dc8a; --type-line: #5c4f1f;
+  --see: #8cc3ea; --see-soft: #18262f; --warn-soft: #36211a; --warn-ink: #f2b394;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.5 var(--font-body);
+  -webkit-text-size-adjust: 100%;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 620px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+header.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+header.top .wrap { display: flex; align-items: center; gap: 8px; padding-block: 8px; }
+.home-btn {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  font: 600 13px/1 var(--font-display); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--accent); background: var(--accent-soft); border: 0; border-radius: 6px; padding: 8px 10px; cursor: pointer;
+}
+.crumb { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jump { display: flex; align-items: center; gap: 4px; flex: none; }
+.jump label { font-size: 12px; color: var(--muted); }
+.jump input {
+  width: 3.6em; font: 500 15px var(--font-mono); padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--ink);
+}
+.jump button { font: 600 13px var(--font-body); border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 6px 8px; cursor: pointer; }
+.jump-msg { font-size: 12px; color: var(--warn-ink); }
+
+main { padding-block: 16px 96px; }
+
+/* index */
+.hero h1 { font: 600 28px/1.15 var(--font-display); margin: 4px 0 6px; text-wrap: balance; }
+.hero p { margin: 0 0 6px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sec { margin-top: 22px; }
+.sec h2 {
+  font: 600 13px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+  margin: 0 0 8px; display: flex; justify-content: space-between; gap: 8px;
+}
+.sec h2 small { font: 500 12px var(--font-mono); letter-spacing: 0; text-transform: none; }
+.list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.list li + li { border-top: 1px solid var(--line); }
+.list a { display: grid; grid-template-columns: 4.6em 1fr auto; gap: 10px; align-items: center; padding: 11px 12px; color: inherit; text-decoration: none; }
+.list a:hover, .list a:focus-visible { background: var(--accent-soft); outline: none; }
+.rowtag { font: 500 12px/1.25 var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; }
+.ltitle { min-width: 0; }
+.ltitle b { display: block; font-weight: 500; }
+.ltitle small { color: var(--muted); font-size: 12px; }
+.prog { font: 500 12px var(--font-mono); color: var(--muted); white-space: nowrap; }
+.prog.done { color: var(--accent); }
+
+/* case page */
+.eyebrow { font: 600 12px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.rowpill { font: 500 12px var(--font-mono); letter-spacing: 0; text-transform: none; color: var(--accent-ink); background: var(--accent); border-radius: 4px; padding: 3px 6px; }
+h1.case { font: 600 26px/1.15 var(--font-display); margin: 8px 0 8px; text-wrap: balance; }
+.ask { margin: 0 0 14px; color: var(--muted); }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 14px; font-size: 14px; }
+.facts dt { color: var(--muted); font-size: 13px; padding-top: 1px; }
+.facts dd { margin: 0; min-width: 0; }
+.note { border-radius: 8px; padding: 10px 12px; font-size: 14px; margin: 0 0 14px; }
+.note.warn { background: var(--warn-soft); color: var(--warn-ink); }
+.note.info { background: var(--see-soft); color: var(--ink); }
+.note b { font-weight: 600; }
+h3.part { font: 600 14px/1 var(--font-display); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 22px 0 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+h3.part button { font: 500 12px var(--font-body); text-transform: none; letter-spacing: 0; color: var(--muted); background: none; border: 0; text-decoration: underline; cursor: pointer; padding: 0; }
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; counter-reset: s; }
+ol.steps li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 10px 44px; position: relative; counter-increment: s; }
+ol.steps li.opt { border-style: dashed; }
+ol.steps li .tick {
+  position: absolute; left: 10px; top: 10px; width: 24px; height: 24px; border-radius: 50%;
+  border: 1.5px solid var(--line); background: var(--bg); color: var(--muted);
+  font: 500 12px/21px var(--font-mono); text-align: center; cursor: pointer; padding: 0;
+}
+ol.steps li .tick::before { content: counter(s); }
+ol.steps li.done { opacity: .55; }
+ol.steps li.done .tick { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+ol.steps li.done .tick::before { content: "✓"; }
+.do { margin: 0; }
+.optlabel { font: 600 11px var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+ul.see { list-style: none; margin: 8px 0 0; padding: 8px 10px; background: var(--see-soft); border-radius: 6px; display: grid; gap: 4px; font-size: 14px; }
+ul.see li { padding-left: 18px; position: relative; }
+ul.see li::before { content: "→"; position: absolute; left: 0; color: var(--see); font-weight: 600; }
+.say { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 10px 12px; margin: 0; display: grid; gap: 8px; font-size: 14px; }
+.say p { margin: 0; }
+
+/* inline tokens */
+.ui { font: 500 .92em var(--font-body); border: 1px solid var(--line); background: var(--bg); border-radius: 5px; padding: 0 5px; white-space: nowrap; }
+.val {
+  font: 500 .9em var(--font-mono); background: var(--type-bg); color: var(--type-ink); border: 1px solid var(--type-line);
+  border-radius: 5px; padding: 0 5px; cursor: copy; word-break: break-all;
+}
+.val.copied { outline: 2px solid var(--accent); }
+a.path { font: 500 .88em var(--font-mono); color: var(--see); word-break: break-all; }
+code { font: .9em var(--font-mono); }
+
+/* login card */
+.logins { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.logins th, .logins td { text-align: left; padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+.logins th { font: 600 12px var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-top: 0; }
+.tablewrap { overflow-x: auto; }
+.field { display: grid; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.field label { font-weight: 500; }
+.field input { font: 15px var(--font-mono); padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 100%; }
+.field small { color: var(--muted); }
+.p { margin: 0 0 10px; }
+
+/* bottom bar */
+nav.pager {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+nav.pager .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-block: 8px; }
+nav.pager a {
+  display: grid; gap: 1px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line);
+  color: var(--ink); text-decoration: none; min-width: 0;
+}
+nav.pager a.next { text-align: right; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+nav.pager a small { font: 600 11px var(--font-display); letter-spacing: .06em; text-transform: uppercase; opacity: .8; }
+nav.pager a span { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+nav.pager a[aria-disabled="true"] { visibility: hidden; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <button class="home-btn" id="homeBtn" type="button" aria-label="Back to the index">☰ Index</button>
+    <div class="crumb" id="crumb"></div>
+    <form class="jump" id="jumpForm" autocomplete="off">
+      <label for="jumpInput">Row</label>
+      <input id="jumpInput" inputmode="numeric" pattern="[0-9]*" placeholder="41" aria-label="Jump to checklist row">
+      <button type="submit">Go</button>
+    </form>
+  </div>
+  <div class="wrap"><div class="jump-msg" id="jumpMsg" hidden></div></div>
+</header>
+
+<main class="wrap" id="view"></main>
+
+<nav class="pager" id="pager" aria-label="Previous and next page">
+  <div class="wrap">
+    <a id="prevLink" class="prev" href="#index"><small>‹ Previous</small><span></span></a>
+    <a id="nextLink" class="next" href="#index"><small>Next ›</small><span></span></a>
+  </div>
+</nav>
+
+<script>
+/*
+  Markup inside step text:
+    [[Label]]   a button, link, field, or menu in the app
+    {{value}}   something to type (tap to copy)
+    <<path>>    an app address, linked to the app address set on the setup page
+    **text**    bold
+*/
+const PASSWORD = 'gpo';
+const DEMO_DATA = [
+  ['Iris Issue, Devon Issue', 'Demo — issue live (9601), not yet issued', '41, 46, 47, 64', 'r41'],
+  ['Snapshot Sid', 'Demo — corrections (9602), issued', '42', 'r42'],
+  ['Oscar Combine', 'Demo — corrections (9602), two gifts not yet issued', '43', 'r43'],
+  ['Printed Paula', 'Demo — corrections (9602), issued', '44, 45, 48–58', 'r48'],
+  ['Lost Liam', 'Demo — corrections (9602), issued', '59, 60', 'r59'],
+  ['Cancel Cara', 'Demo — corrections (9602), issued', '61, 62', 'r61'],
+  ['Reissue Rhys', 'Demo — corrections (9602), issued', '63', 'r63'],
+  ['Ineligible Refund, Ineligible Except', '2025 General Election, B1 and C3 open', '33, 40', 'r33'],
+  ['Dupone Merge, Duptwo Merge', '2025 General Election, B4 open', '35', 'r35'],
+  ['Repeat Rowan', '2025 General Election, A6 open', '37', 'r37'],
+  ['Overlimit Olive', '2026 Annual, $6,000 to the party, B2 open', '39', 'r39'],
+];
+const LOGINS = {
+  sysadmin: { email: 'sysadmin@gpo.test', shows: 'Sys Admin', role: 'System administrator' },
+  cfo: { email: 'cfo@gpo.test', shows: 'Party CFO', role: 'Party CFO' },
+  admin: { email: 'admin@gpo.test', shows: 'Receipt Administrator', role: 'Receipt administrator' },
+  readonly: { email: 'readonly@gpo.test', shows: 'Read only', role: 'Read only' },
+};
+
+const SECTIONS = [
+  ['setup', 'Start here'],
+  ['general', 'General'],
+  ['security', 'Security'],
+  ['history', 'Transaction history'],
+  ['contributors', 'Contributors'],
+  ['contributions', 'Contributions'],
+  ['validation', 'Validation and controls'],
+  ['issue', 'Issue tax receipt'],
+  ['reporting', 'Reporting'],
+];
+
+const CASES = [
+/* ---------------- START HERE ---------------- */
+{ id: 'setup', sec: 'setup', rows: [], title: 'Before the meeting', special: 'setup' },
+{ id: 'data', sec: 'setup', rows: [], title: 'Demo records', special: 'data' },
+
+/* ---------------- GENERAL ---------------- */
+{ id: 'r01', sec: 'general', rows: [1], title: 'The tool is an electronic database', mins: '2 min', who: ['cfo'],
+  ask: 'EO wants to see that contributions are kept in an electronic database, not a spreadsheet or paper.',
+  steps: [
+    { d: 'In a private window (signed out), open <</contributions>>.', s: ['The Sign in form. No contribution data and no navigation.'] },
+    { d: 'Sign in as **cfo**.', s: ['Home page heading "Spaces", a table with Period, Riding, Entity, Stage, Stage owner, Contributions, Open flags.'] },
+    { d: 'Click [[Contributions]] in the top bar.', s: ['Every contribution in one searchable table: Date, Donor, Amount, Period, Entity, Receipt.'] },
+    { d: 'Click [[Contributors]].', s: ['The contributor list.'] },
+  ],
+  say: ['A custom web application backed by a PostgreSQL database. Every page sits behind a sign-in.'],
+},
+{ id: 'r02', sec: 'general', rows: [2], title: 'Records are relational', mins: '3 min', who: ['cfo'],
+  ask: 'EO wants a relational database: contributors, payments, contributions, and receipts linked to each other.',
+  steps: [
+    { d: 'Open <</contributions?periodId=9503&entityKind=PARTY>>. Click the donor link [[Split Sam]] on the $300.00 row.',
+      s: ['Payment panel: Entered by hand, $500.00, Cheque.', '"Split across 2 contributions:" this one ($300.00, Party) and a linked $200.00 to the Constituency association, riding 121, marked agency.'] },
+    { d: 'Point at [[Allocations & receipts]].', s: ['A receipt number GPO-..., ISSUED, $300.00.'] },
+    { d: 'Click [[Split Sam]] under Donor in the Contribution panel.', s: ['Contributor page: Email, Contributor id T33, and both contributions ($300.00 PARTY and $200.00 CA riding 121).'] },
+    { d: 'Click the date [[3/1/2029]] on the $300.00 row.', s: ['Back on the same contribution. The link works both ways.'] },
+  ],
+  say: ['One payment links to its contributions, each contribution to its contributor and its receipts.',
+        'Foreign keys and "no hard deletes" are enforced by the database and checked by automated API tests (db-invariants.test.ts, payment-contribution.test.ts).'],
+},
+
+/* ---------------- SECURITY ---------------- */
+{ id: 'r03', sec: 'security', rows: [3], title: 'Sign-in is required', mins: '2 min', who: ['sysadmin'],
+  ask: 'Access needs a user name and password.',
+  steps: [
+    { d: 'In a private window open the app home, then <</admin/users>>, then <</contributions>>.', s: ['The Sign in form each time, with no data shown.'] },
+    { d: 'Email {{sysadmin@gpo.test}}, password {{wrong-password-123456}}, click [[Sign in]].', s: ['An error. Still on the Sign in form.'] },
+    { d: 'Clear both fields and click [[Sign in]].', s: ['Refused.'] },
+    { d: 'Sign in with the correct password.', s: ['The navigation appears: Contributions, Contributors, Admin, Account menu.'] },
+  ],
+},
+{ id: 'r04', sec: 'security', rows: [4], title: 'An administrator creates a user', mins: '3 min', who: ['sysadmin'],
+  ask: 'An administrator can create user accounts.',
+  steps: [
+    { d: 'Open [[Admin]] then [[Users]].', s: ['"Users & roles" table: Name, Email, Role, CFO designate, Status. A [[New user]] button.'] },
+    { d: 'Click [[New user]]. Name {{Demo Reader}}, Email {{demo.reader@gpo.test}}, Temporary password {{short}}.', s: ['[[Create user]] is disabled, "At least 12 characters (5 so far)".'] },
+    { d: 'Change the password to {{reader-pass-12345}}, Role [[Read only]], click [[Create user]].', s: ['A new row: Demo Reader, Read only, Active.'] },
+    { d: 'In a private window sign in as {{demo.reader@gpo.test}} / {{reader-pass-12345}}.', s: ['Signed in. No way to manage users (Read only role).'] },
+  ],
+  notes: [['info', 'Rows 5 and 11 can reuse this user. If the email is taken from a rehearsal, add a number.']],
+},
+{ id: 'r05', sec: 'security', rows: [5], title: 'Editing a user is logged', mins: '4 min', who: ['sysadmin'],
+  ask: 'An administrator can edit users, and the change is recorded with before and after values.',
+  needs: 'The Demo Reader user from row 4.',
+  steps: [
+    { d: '[[Admin]] then [[Users]], click [[Edit]] on Demo Reader. Change Name to {{Demo Reader Renamed}} and Email to {{demo.reader2@gpo.test}}.', s: ['[[Save]] stays disabled while Reason is empty.'] },
+    { d: 'Reason {{Fix name and email for audit demo}}, click [[Save]].', s: ['The row shows the new name and email.'] },
+    { d: 'Open [[Admin]] then [[Change log]], Subject type [[User]].', s: ['Newest row: Actor Sys Admin, the reason, Before with the old name and email, After with the new ones.'] },
+    { opt: true, d: 'In the private window sign in as {{demo.reader2@gpo.test}}. [[Account menu]] then [[Edit profile]]: change only the name and save.', s: ['Saves without a password.'] },
+    { opt: true, d: 'Edit profile again and change the email.', s: ['Now [[Current password]] is required; a wrong one is refused.'] },
+  ],
+},
+{ id: 'r06', sec: 'security', rows: [6], title: 'Every user is distinct', mins: '4 min', who: ['sysadmin'],
+  ask: 'Each user is uniquely identified, so actions are attributed to the right person.',
+  steps: [
+    { d: '[[Admin]] then [[Users]], [[New user]]: Name {{Demo Twin}}, Email {{demo.twin.a@gpo.test}}, password {{twin-pass-12345}}, Read only. Repeat with the same name and {{demo.twin.b@gpo.test}}.', s: ['Two rows with the same name, told apart by email.'] },
+    { d: 'Try [[New user]] again with Email {{demo.twin.a@gpo.test}}.', s: ['Refused: the email is already in use. No new row.'] },
+    { d: 'In the private window sign in as {{demo.twin.b@gpo.test}}. [[Account menu]] then [[Edit profile]], name {{Demo Twin B}}, save.' },
+    { d: 'Back as sysadmin: [[Change log]], Subject type [[User]].', s: ['The entry\'s Actor is Demo Twin B, and the subject is twin B. Twin A is unchanged in Users.'] },
+  ],
+  say: ['Every user has a system id that cannot be reused or edited. It is stored as the actor on every change. Covered by API tests users.test.ts and auth.test.ts.'],
+},
+{ id: 'r07', sec: 'security', rows: [7], title: 'An administrator creates a role', mins: '3 min', who: ['sysadmin'],
+  ask: 'Roles can be created, and creating one is logged.',
+  steps: [
+    { d: 'Open [[Admin]] then [[Roles]].', s: ['Ten roles. Nine marked Built-in, System administrator marked Locked.'] },
+    { d: 'Click [[New role]]: Name {{Riding Auditor}}, Description {{Reads records for audit}}, tick [[Read all records]].', s: ['[[Create role]] is disabled until a reason is entered.'] },
+    { d: 'Reason {{Create auditor role for EO demo}}, click [[Create role]].', s: ['The role is listed with its permission and 0 users.'] },
+    { d: '[[Change log]], Subject type [[Role]].', s: ['Newest row: Sys Admin, the reason, Before empty, After with the role name and permission.'] },
+    { opt: true, d: 'Try to create another role named {{Riding Auditor}}.', s: ['Refused. No duplicate.'] },
+  ],
+},
+{ id: 'r08', sec: 'security', rows: [8], title: 'A role controls what a user can do', mins: '6 min', who: ['sysadmin'],
+  ask: 'Functions assigned to a role take effect, and the system administrator role is protected.',
+  notes: [['info', 'Uses two windows: normal (sysadmin) and private (the new user).']],
+  steps: [
+    { d: '[[Roles]], [[New role]]: {{Demo Reporter Role}}, tick [[Read all records]] and [[Generate entity reports]] only, Reason {{Reporter role}}.' },
+    { d: '[[Users]], [[New user]]: {{Demo Reporter}}, {{demo.reporter@gpo.test}}, password {{reporter-pass-12345}}, Role [[Demo Reporter Role]].' },
+    { d: 'Private window: sign in as Demo Reporter. On the home page row "2025 Annual" / "Party (province-wide)", click [[Reports]]. Reason {{Reporter generate}}, click [[Generate]].', s: ['A new report row with a grey "Not sent" badge and no [[Mark sent]] button.'] },
+    { d: 'Go back home, click [[Issue]] on the same row and go to the Generate step.', s: ['[[Generate receipts]] is disabled: "Only the party CFO (or an authorized designate) may issue receipts (s. 25.1(6))."'] },
+    { d: 'Normal window: [[Roles]], [[Edit]] Demo Reporter Role, tick [[Share entity reports]], Reason {{Add share}}, save.' },
+    { d: 'Private window: reload the Entity reports page.', s: ['[[Mark sent]] now appears. Still signed in. Issuing is still blocked.'] },
+    { d: '[[Change log]], Subject type [[Role]].', s: ['Before lists two permissions, After lists three.'] },
+    { d: '[[Roles]], click [[View]] on System administrator.', s: ['Locked, "Full system access". It cannot be edited or deleted.'] },
+  ],
+},
+{ id: 'r09', sec: 'security', rows: [9], title: 'Roles are assigned to users', mins: '4 min', who: ['sysadmin'],
+  ask: 'Roles, including custom ones, can be assigned to users, and many users can share a role.',
+  steps: [
+    { d: '[[Roles]], [[New role]]: {{Demo Shared Role}}, tick [[View entity reports]], Reason {{Shared role}}.', s: ['Listed with 0 users.'] },
+    { d: '[[Users]], [[New user]], open the [[Role]] list.', s: ['All ten built-in roles plus the custom roles.'] },
+    { d: 'Create {{Demo Holder One}} ({{demo.holder1@gpo.test}}, {{holder-pass-12345}}) with Demo Shared Role, and {{Demo Holder Two}} ({{demo.holder2@gpo.test}}) with Read only.' },
+    { d: '[[Edit]] Holder Two, Role [[Demo Shared Role]], Reason {{Assign shared role}}, [[Save]].', s: ['Both users show the custom role.'] },
+    { d: 'Open [[Roles]].', s: ['Demo Shared Role shows 2 users.'] },
+  ],
+},
+{ id: 'r10', sec: 'security', rows: [10], title: 'The system administrator role can be assigned', mins: '3 min', who: ['sysadmin'],
+  ask: 'There is a system administrator role and it can be given to another user.',
+  steps: [
+    { d: '[[Admin]] then [[Users]].', s: ['sysadmin@gpo.test has Role System administrator.'] },
+    { d: '[[New user]]: {{Demo Second Admin}}, {{demo.admin2@gpo.test}}, {{second-admin-12345}}, Role [[System administrator]].', s: ['Active, System administrator.'] },
+    { d: 'Private window: sign in as the new user, open [[Admin]] then [[Users]].', s: ['[[New user]] and [[Edit]] are available. Roles shows System administrator with 2 or more users.'] },
+  ],
+},
+{ id: 'r11', sec: 'security', rows: [11], title: 'Deactivated users are locked out', mins: '4 min', who: ['sysadmin'],
+  ask: 'A user can be deactivated, which stops them signing in.',
+  steps: [
+    { d: '[[Users]], [[New user]]: {{Demo Leaver}}, {{demo.leaver@gpo.test}}, {{leaver-pass-12345}}, Read only.' },
+    { d: 'Private window: sign in as Demo Leaver and open [[Contributions]].' },
+    { d: 'Normal window: [[Edit]] Demo Leaver, untick [[Active (inactive users cannot sign in)]], Reason {{Left the party}}, [[Save]].', s: ['Status is no longer Active.'] },
+    { d: 'Private window: reload.', s: ['Signed out straight away: the Sign in form.'] },
+    { d: 'Sign in again with the correct password.', s: ['Refused.'] },
+    { opt: true, d: 'Re-tick Active with Reason {{Returned}}; sign in again works. [[Change log]], Subject type [[User]] shows both changes.' },
+  ],
+},
+{ id: 'r12', sec: 'security', rows: [12], title: 'Password changes and resets', mins: '6 min', who: ['sysadmin'],
+  ask: 'Users can change their password, administrators can reset one, and old sessions end.',
+  steps: [
+    { d: 'As sysadmin create {{Demo Password}}, {{demo.pwd@gpo.test}}, password {{pwd-initial-12345}}, Read only. Sign out.' },
+    { d: 'Sign in as demo.pwd in both the normal and the private window.' },
+    { d: 'Normal window: [[Account menu]] then [[Change password]]. Current {{pwd-initial-12345}}, New and Confirm {{short}}.', s: ['"At least 12 characters", button disabled.'] },
+    { d: 'New {{pwd-changed-67890}}, Confirm {{different-67890}}.', s: ['"Does not match the new password".'] },
+    { d: 'Confirm {{pwd-changed-67890}}, click [[Change password]].', s: ['"Your password has been changed." Other sessions were signed out. Click [[Done]].'] },
+    { d: 'Private window: reload.', s: ['Signed out. The normal window is still signed in.'] },
+    { d: 'Private window: the old password is refused, the new one works.' },
+    { d: 'Normal window: sign out, sign in as sysadmin. [[Users]], [[Reset password]] on Demo Password: Temporary password {{reset-temp-67890-ab}}, Reason {{Forgot password}}, [[Reset password]].', s: ['The private window, on reload, is signed out again.'] },
+    { d: '[[Change log]], Subject type [[User]].', s: ['Entries for the change and the reset. No password or hash is shown.'] },
+  ],
+},
+
+/* ---------------- TRANSACTION HISTORY ---------------- */
+{ id: 'r13', sec: 'history', rows: [13, 14, 15, 16, 17], title: 'Every change is an audit entry', mins: '5 min', who: ['admin'],
+  ask: 'One edit shows all five rows: a unique entry (13), the new value (14), the old value (15), the user (16), and the date and time (17).',
+  steps: [
+    { d: '[[Contributors]], [[Add a contributor]]: {{Audrey}} {{Trail}}, {{10}} {{Elm St}}, {{Toronto}}, ON, {{M5V 2T6}}, Reason {{Demo create}}. [[Add contributor]].' },
+    { d: '[[Edit contributor]], City {{Ottawa}}, Reason {{Demo city change}}, [[Save changes]].', s: ['Address: 10 Elm St, Ottawa ON M5V 2T6, CA.'] },
+    { d: 'At the bottom, [[Change history]], click [[Show 2 changes]].',
+      s: ['Two separate entries (row 13).', 'After has "city":"Ottawa" (row 14).', 'Before has "city":"Toronto" (row 15).', 'By: Receipt Administrator (row 16).', 'At: the date and time (row 17).'] },
+    { d: 'Copy the contributor id from the address bar (/contributors/<id>). Open [[Admin]] then [[Change log]], paste it into [[Subject id]].', s: ['The same two Contact entries, newest first.'] },
+    { opt: true, d: 'Set [[From]] to tomorrow.', s: ['Both rows disappear. Set it to today and they return.'] },
+    { opt: true, d: 'In a new tab open <</api/change-log?subjectId=>> followed by the contributor id.', s: ['The raw entries: each has its own "id" and "correlationId".'] },
+  ],
+  say: ['Every entry has its own id, stored in the database and covered by API tests write.test.ts and list.test.ts.'],
+},
+{ id: 'r18', sec: 'history', rows: [18], title: 'A reason is required for every change', mins: '4 min', who: ['admin'],
+  ask: 'Each change records a task description.',
+  steps: [
+    { d: '[[Add a contributor]]: {{Rhea}} {{Reason}}, {{10}} {{Elm St}}, {{Toronto}}, ON, {{M5V 2T6}}. Leave Reason blank.', s: ['[[Add contributor]] is disabled.'] },
+    { d: 'Reason {{Demo create}}, add. Then [[Edit contributor]], City {{London}}, Reason blank.', s: ['[[Save changes]] is disabled.'] },
+    { d: 'Reason {{Donor moved to London}}, save.' },
+    { d: '[[Change log]], Subject id = the contributor id.', s: ['The Reason column reads exactly "Donor moved to London" and "Demo create".'] },
+    { opt: true, d: 'Record a payment for Rhea (<</payments/new>>, Amount {{25}}, Period [[2025 General Election]], Reason {{Cheque at the office}}), then [[Open the contribution]] and [[Show 2 changes]].', s: ['Payment and Contribution entries share the same reason.'] },
+  ],
+},
+{ id: 'r19', sec: 'history', rows: [19], title: 'New records are audited too', mins: '4 min', who: ['admin'],
+  ask: 'Creating a record is logged, not only edits, and the log can be exported for EO.',
+  steps: [
+    { d: '[[Add a contributor]]: {{Carla}} {{Create}}, {{10}} {{Elm St}}, {{Toronto}}, ON, {{M5V 2T6}}, Reason {{Demo new record}}.' },
+    { d: '[[Change history]], [[Show 1 change]].', s: ['Before is blank (—). After holds the whole new record.'] },
+    { d: '<</payments/new>>: donor Carla Create, Amount {{40}}, Period [[2025 General Election]], Reason {{Demo new payment}}, [[Save payment]], [[Open the contribution]], [[Show 2 changes]].', s: ['Two entries, both with Before blank.'] },
+    { d: '[[Change log]], Subject type [[Contribution]], Subject id = the contribution id from the address bar.', s: ['Contribution (<id>), Receipt Administrator, Before —, After filled.'] },
+    { d: 'Click [[Export CSV (for EO)]].', s: ['change-log-export.csv downloads with at, subjectType, subjectId, actor, reason, correlationId, before, after.'] },
+  ],
+},
+
+/* ---------------- CONTRIBUTORS ---------------- */
+{ id: 'r20', sec: 'contributors', rows: [20], title: 'Each contributor has a unique id', mins: '4 min', who: ['admin'],
+  ask: 'Contributors have a unique, system-assigned id that does not change.',
+  steps: [
+    { d: '[[Contributors]], open [[Baseline Donor]].', s: ['Contributor id 800001 and Qomon contact 800001. A banner says it is a Qomon contact and cannot be edited here.'] },
+    { d: 'Open [[Email Emma]].', s: ['Contributor id T followed by digits. "Qomon contact: none (kept in this tool)".'] },
+    { d: '[[Add a contributor]].', s: ['There is no Contributor id field.'] },
+    { d: 'Add {{Ida}} {{Unique}}, Reason {{Demo id}}. Then add a second {{Ida}} {{Unique2}}.', s: ['Each gets its own T number.'] },
+    { d: 'On the second, [[Edit contributor]], First name {{Idabel}}, Reason {{Demo rename}}, save.', s: ['The edit dialog has no id field. The Contributor id is unchanged after saving.'] },
+  ],
+  say: ['For a Qomon contact the id EO files carry is the Qomon contact id; for a contributor kept only in this tool it is the T number.'],
+},
+{ id: 'r21', sec: 'contributors', rows: [21], title: 'First and last name are recorded', mins: '4 min', who: ['admin'],
+  ask: 'The contributor\'s full name is recorded, first and last separately.',
+  steps: [
+    { d: '[[Add a contributor]].', s: ['"Qomon is not connected, so this contributor will be kept in this tool only."'] },
+    { d: 'Fill only First name {{Ada}} and Reason {{New donor added at event}}.', s: ['[[Add contributor]] stays disabled: last name is required.'] },
+    { d: 'Last name {{Lovelace}}, Email {{ada.demo@example.test}}, [[Add contributor]].', s: ['"First name: Ada" and "Last name: Lovelace" on separate lines.'] },
+    { d: '[[Edit contributor]], First name {{Augusta}}, Reason {{Corrected first name spelling}}, save. [[Show 2 changes]].', s: ['Before "firstName":"Ada", After "firstName":"Augusta", By Receipt Administrator.'] },
+    { opt: true, d: '<</payments/new>>, click [[Not on file? Add a new contributor]].', s: ['The same name fields, so a new donor can be added while entering a cheque.'] },
+  ],
+},
+{ id: 'r22', sec: 'contributors', rows: [22], title: 'The address is recorded in parts', mins: '4 min', who: ['admin'],
+  ask: 'The contributor\'s full address is recorded.',
+  steps: [
+    { d: '[[Add a contributor]]: {{Edith}} {{Address}}, Reason {{Demo address}}.', s: ['"Optional here, but a receipt cannot be issued without one." Province defaults to ON, Country to CA.'] },
+    { d: 'Fill only Street {{Elm St}}.', s: ['"Fill in the street, city, province, postal code, and country, or leave the address blank." [[Add contributor]] is disabled.'] },
+    { d: 'Street number {{10}}, City {{Toronto}}, Postal code {{M5V 2T6}}.', s: ['The message goes away.'] },
+    { d: '[[Add contributor]].', s: ['Address: 10 Elm St, Toronto ON M5V 2T6, CA.'] },
+    { d: '[[Edit contributor]]: City {{Ottawa}}, Postal code {{K1A 0B1}}, Reason {{Donor moved}}, save.', s: ['Address: 10 Elm St, Ottawa ON K1A 0B1, CA.'] },
+  ],
+  say: ['Every contribution page also shows the "Address on file", and the receipt prints the address as it was when the receipt was issued (row 42).'],
+},
+{ id: 'r23', sec: 'contributors', rows: [23], title: 'Contributor type is Individual', mins: '2 min', who: ['admin'],
+  ask: 'The contributor type is recorded.',
+  steps: [
+    { d: '[[Add a contributor]].', s: ['Contributor type is fixed at "Individual". Note: "Ontario accepts political contributions from individuals only."'] },
+    { d: 'Close the dialog. Open [[Baseline Donor]], then [[Email Emma]].', s: ['Both read "Contributor type: Individual".'] },
+    { d: 'Open any contribution from [[Contributions]].', s: ['Under the donor name: "Individual, contributor id T...".'] },
+  ],
+},
+
+/* ---------------- CONTRIBUTIONS ---------------- */
+{ id: 'r24', sec: 'contributions', rows: [24], title: 'Each contribution has a unique id', mins: '2 min', who: ['admin'],
+  ask: 'Every contribution is uniquely identified.',
+  steps: [
+    { d: '[[Contributions]]. Click [[Agency Alex]] ($150.00, period 9503).', s: ['The address bar ends /contributions/<id>. That is its id.'] },
+    { d: '[[← Back to list]], open [[Direct Dee]] ($120.00).', s: ['A different id.'] },
+    { d: 'Go back to the first address.', s: ['The same Agency Alex contribution. The id is stable.'] },
+  ],
+},
+{ id: 'r25', sec: 'contributions', rows: [25], title: 'Which entity received it', mins: '4 min', who: ['admin'],
+  ask: 'Each contribution records the political entity: party, constituency association, campaign, or leadership contestant.',
+  steps: [
+    { d: '[[Contributions]]. Read the Entity column.', s: ['Split Sam $300.00: PARTY.', 'Agency Alex $150.00: CA, riding 121.', 'Leadership Lee $250.00: LEADERSHIP: Jordan Rivers.', 'By-Election Donor $50.00: CAMPAIGN, riding 121, period 9501.'] },
+    { d: 'Set the [[Entity kind]] filter to [[Leadership contestant]].', s: ['Only leadership contributions remain.'] },
+    { d: 'Open [[Leadership Lee]].', s: ['Recipient: "Leadership contestant: Jordan Rivers". [[Edit]] is disabled because it backs an issued receipt.'] },
+    { d: '[[Admin]] then [[Leadership contestants]].', s: ['Registry with Jordan Rivers and Sam Okafor.'] },
+    { opt: true, d: '<</payments/new>>: in the Contribution block set Recipient [[Leadership contestant]].', s: ['A contestant picker replaces the Riding field.'] },
+  ],
+},
+{ id: 'r26', sec: 'contributions', rows: [26], title: 'Agency contributions', mins: '3 min', who: ['admin'],
+  ask: 'The record shows whether the party received the contribution on behalf of another entity.',
+  steps: [
+    { d: 'Open [[Agency Alex]].', s: ['Recipient "Constituency association, riding 121" with an "agency" badge. Received by: GPO (party office, central).'] },
+    { d: 'Hover the "agency" badge.', s: ['Explains it; it files as Agency_Contribution = Y in the ALL report.'] },
+    { d: 'Open [[Direct Dee]].', s: ['Same riding, no badge: the association received it directly.'] },
+    { d: 'On [[Contributions]], [[Show advanced filters]], [[Agency contribution]] = [[Agency only]], then [[Not agency]].', s: ['The list filters accordingly.'] },
+    { opt: true, d: '<</payments/new>>: Recipient [[Constituency association]], Riding {{121}}. Switch Received by between GPO and [[Entity / subspace entry]].', s: ['The hint "Agency contribution: GPO received it for another entity" appears and disappears. The flag is worked out, not typed.'] },
+  ],
+},
+{ id: 'r27', sec: 'contributions', rows: [27], title: 'Total amount', mins: '2 min', who: ['admin'],
+  ask: 'The total amount of each contribution is recorded.',
+  steps: [
+    { d: 'Open [[Agency Alex]].', s: ['Payment $150.00, Contribution $150.00.'] },
+    { d: 'Open the [[Split Sam]] $300.00 contribution.', s: ['Payment $500.00 (what was paid), Contribution $300.00 (this part). The split lists $300.00 + $200.00 = $500.00.'] },
+  ],
+},
+{ id: 'r28', sec: 'contributions', rows: [28], title: 'One payment split across entities', mins: '5 min', who: ['admin'],
+  ask: 'A single payment can be split between entities, with the amount for each.',
+  steps: [
+    { d: 'Open the [[Split Sam]] $300.00 contribution.', s: ['"Split across 2 contributions:" $300.00 Party, $200.00 riding 121 (agency).'] },
+    { d: 'Click the other [[Split Sam]] link in the split list.', s: ['The $200.00 half, same $500.00 payment, its own receipt number.'] },
+    { d: 'Live: <</payments/new>>, [[Not on file? Add a new contributor]]: {{Split}} {{Live}}, {{11}} {{Queen St}}, {{Toronto}}, ON, {{M5V 2T6}}, Reason {{Demo split}}. Amount {{500}}, Received on {{2025-03-16}}.' },
+    { d: 'Click [[Split across more contributions]]. Contribution 1: {{300}}, Party. Contribution 2: {{200}}, [[Constituency association]], Riding {{121}}.', s: ['"$500.00 of $500.00 attributed".'] },
+    { d: 'Reason {{Demo split}}, [[Save payment]].', s: ['"The payment and its 2 contributions were recorded."'] },
+  ],
+},
+{ id: 'r29', sec: 'contributions', rows: [29], title: 'Goods and services received', mins: '3 min', who: ['admin'],
+  ask: 'Whether the donor received goods or services, and the non-deductible amount.',
+  steps: [
+    { d: '[[Contributions]], find [[Goods Gita]].', s: ['$100.00 with Non-deductible $20.00. Other rows show a dash.'] },
+    { d: 'Open Goods Gita.', s: ['"Donor received goods or services: Yes", Non-deductible $20.00.'] },
+    { d: 'Open [[Agency Alex]] for contrast.', s: ['"No", $0.00.'] },
+    { opt: true, d: '<</payments/new>>: Non-deductible ($) is disabled until you tick [[Donor received goods or services]].' },
+  ],
+  say: ['The receipt then shows $80.00 eligible, not $100.00 (row 52).'],
+},
+{ id: 'r30', sec: 'contributions', rows: [30], title: 'Date accepted', mins: '2 min', who: ['admin'],
+  ask: 'The day, month, and year the contribution was accepted.',
+  steps: [
+    { d: '[[Contributions]], find [[Agency Alex]].', s: ['Date 3/1/2029.'] },
+    { d: 'Open it.', s: ['"Accepted on" 3/1/2029, and "Received on" on the payment.'] },
+    { opt: true, d: '<</payments/new>>: Received on {{2025-03-15}}. The contribution\'s [[Accepted on]] hint reads "blank = 2025-03-15", and can be set to a different day.' },
+  ],
+},
+{ id: 'r31', sec: 'contributions', rows: [31], title: 'Contribution period', mins: '2 min', who: ['admin'],
+  ask: 'The contribution period each contribution belongs to.',
+  steps: [
+    { d: '[[Contributions]], read the Period column.', s: ['Agency Alex 9503, By-Election Donor 9501.'] },
+    { d: 'Open Agency Alex, then By-Election Donor.', s: ['Period names: "Fixture — EO evaluation (not a real EO period)" and "Fixture by-election (not a real EO period)".'] },
+    { d: 'Use the [[Period]] filter on the list.', s: ['Only that period\'s rows remain.'] },
+  ],
+},
+
+/* ---------------- VALIDATION ---------------- */
+{ id: 'r32', sec: 'validation', rows: [32], title: 'Ineligible contributors are flagged', mins: '3 min', who: ['admin'],
+  ask: 'The system identifies contributors who are not eligible.',
+  steps: [
+    { d: 'Open [[Work queue]] (<</work-queue>>). The Validation tab is open.', s: ['Columns Subject, Donor, Rule, Opened, Due, Status, Resolution.'] },
+    { d: 'Find [[Out Of Province Donor]].', s: ['Rule "Donor\'s address is out of province" (B1), OPEN, with Resolve and Exception buttons. Do not click them.'] },
+    { d: 'Click its [[Contribution]] link.', s: ['Address on file in Vancouver BC; Work items lists B1 OPEN.'] },
+    { d: 'Back in the queue, find a row for [[Anonymous]].', s: ['"Donor is anonymous or unidentifiable" (B3).'] },
+  ],
+},
+{ id: 'r33', sec: 'validation', rows: [33], title: 'Resolving an ineligible contributor', mins: '5 min', who: ['admin'],
+  ask: 'An ineligible contribution can be refunded or excepted, with a reason.',
+  needs: 'Demo records Ineligible Refund and Ineligible Except (BC addresses).',
+  steps: [
+    { d: '[[Contributors]], search {{Ineligible Refund}}, open the $50.00 contribution.', s: ['Work items: B1 (out of province) and C3 (postal code), both OPEN.'] },
+    { d: 'Click [[Correct]], Action [[Refund]].', s: ['Explains it marks the payment refunded and cancels any receipt. [[Commit correction]] is disabled.'] },
+    { d: 'Reason {{Out of province, refunded}}, [[Preview cascade]].', s: ['The contribution will be refunded. "Payment: $50.00 → $50.00, RECEIVED → REFUNDED". "None affected: nothing had been receipted."'] },
+    { d: '[[Commit correction]], then close the dialog.', s: ['Banner: "This contribution is REFUNDED; it is history, not the working record." B1 and C3 RESOLVED.'] },
+    { d: '[[Work queue]]: find Ineligible Except\'s B1 row, click [[Exception]]. Type {{ab}}.', s: ['[[Confirm]] stays disabled (needs three characters).'] },
+    { d: 'Type {{Donor is a BC resident accepted by head office}}, [[Confirm]].', s: ['Status EXCEPTION with that note. The C3 row is still OPEN; the exception covers only B1.'] },
+  ],
+},
+{ id: 'r34', sec: 'validation', rows: [34], title: 'Duplicate contributors are flagged', mins: '3 min', who: ['admin'],
+  ask: 'The system identifies possible duplicate contributors.',
+  steps: [
+    { d: '[[Work queue]], find [[Morgan Ellis]] and [[Morgan Elis]].', s: ['Each has "Possible duplicate donor record" (B4), OPEN.'] },
+    { d: '[[Contributors]], search {{morgan.ellis@fixture.test}}.', s: ['Two contributors sharing one email.'] },
+    { d: 'Live: <</payments/new>>, [[Not on file? Add a new contributor]], type Email {{morgan.ellis@fixture.test}} with any name.', s: ['Warning: "this may be a contributor already on file: ..." and a checkbox "This is a different person; add them anyway". Click [[Cancel]].'] },
+  ],
+},
+{ id: 'r35', sec: 'validation', rows: [35], title: 'Merging duplicate contributors', mins: '4 min', who: ['admin'],
+  ask: 'Duplicate contributors can be merged.',
+  needs: 'Demo records Dupone Merge and Duptwo Merge (both merge@demo.test).',
+  steps: [
+    { d: '[[Work queue]], find [[Dupone Merge]] and [[Duptwo Merge]].', s: ['Each has "Possible duplicate donor record" (B4), OPEN.'] },
+    { d: 'Open Duptwo Merge\'s $45.00 contribution. [[Correct]], Action [[Merge this donor into another contact]].', s: ['A "Merge Duptwo Merge into" search field and an "Evidence they are the same person" field.'] },
+    { d: 'Search {{Dupone Merge}} and pick it. Reason {{Same person, duplicate record}}, [[Preview cascade]].', s: ['Duptwo Merge, $45.00 becomes Dupone Merge, $45.00.'] },
+    { d: '[[Commit correction]].', s: ['"Correction committed", "1 contribution created".'] },
+    { d: '[[Contributors]], open Dupone Merge.', s: ['Both contributions ($45.00 and $30.00), ACTIVE. Searching "Duptwo" finds nothing.'] },
+    { d: '[[Work queue]], Duptwo Merge\'s B4 row.', s: ['RESOLVED, "closed by a correction: ... is now SUPERSEDED".'] },
+  ],
+  say: ['A merge can be reversed. Today that is an API call, not a button.'],
+},
+{ id: 'r36', sec: 'validation', rows: [36], title: 'Duplicate contributions are flagged', mins: '3 min', who: ['admin'],
+  ask: 'The system identifies possible duplicate contributions.',
+  steps: [
+    { d: '[[Work queue]], find [[Double Dana]].', s: ['Two rows, "Possible duplicate contribution" (A6), OPEN.'] },
+    { d: 'Open each [[Contribution]] link.', s: ['$50.00 Party on 5/1/2026 and $50.00 Party on 5/2/2026, from two different payments.'] },
+  ],
+},
+{ id: 'r37', sec: 'validation', rows: [37], title: 'Resolving a duplicate contribution', mins: '3 min', who: ['admin'],
+  ask: 'A duplicate contribution can be refunded, or marked as two genuine gifts.',
+  needs: 'Demo record Repeat Rowan: $50.00 on 3/10/2025 and again on 3/11/2025.',
+  steps: [
+    { d: '[[Work queue]], find [[Repeat Rowan]].', s: ['"Possible duplicate contribution" (A6), OPEN.'] },
+    { d: '[[Contributors]], open Repeat Rowan, open the 3/11/2025 contribution. [[Correct]], [[Refund]], Reason {{Duplicate gift refunded}}, [[Preview cascade]], [[Commit correction]].', s: ['"Correction committed". Banner: REFUNDED.'] },
+    { d: '[[Work queue]], Repeat Rowan.', s: ['The refunded contribution\'s A6 row is RESOLVED, "closed by a correction: ... is now REFUNDED".'] },
+    { d: 'Open the 3/10/2025 contribution.', s: ['Still ACTIVE. Only the duplicate was refunded.'] },
+    { opt: true, d: 'Alternative, for two genuine gifts: click [[Exception]] on an A6 row and type {{distinct gifts}}.', s: ['Status EXCEPTION; nothing refunded.'] },
+  ],
+},
+{ id: 'r38', sec: 'validation', rows: [38], title: 'Over-limit contributions are flagged', mins: '4 min', who: ['cfo'],
+  ask: 'The system identifies contributions over the limit, and stops receipts until resolved.',
+  steps: [
+    { d: '[[Work queue]], find [[Blocked Blake]].', s: ['"Donor is over a contribution limit" (B2), OPEN.'] },
+    { d: 'Open its [[Contribution]].', s: ['$3500.00 to the Constituency association, riding 121, 2026 Annual. CA limit is $3,425.00.'] },
+    { d: '[[Correct]], Action [[Reallocate to another entity (over-limit)]], [[Show over-limit proposal]]. Do not commit; press Escape.', s: ['"Over the CA limit by $75.00 ($3500.00 against $3425.00)." and an offer to move $75.00 to PARTY.'] },
+    { d: 'Open <</spaces/67/CA/issue?ridingNumber=121>>.', s: ['"open work item(s) block issuance for this space", listing Blocked Blake and other donors. [[Next: generate]] is disabled.'] },
+  ],
+},
+{ id: 'r39', sec: 'validation', rows: [39], title: 'Resolving an over-limit contribution', mins: '5 min', who: ['admin', 'cfo'],
+  ask: 'The excess can be reallocated to another entity or refunded.',
+  needs: 'Demo record Overlimit Olive: $6,000 to the party in 2026 (limit $5,000).',
+  steps: [
+    { d: 'As admin, [[Contributors]], open Overlimit Olive\'s contribution.', s: ['Work items: "Donor is over a contribution limit" (B2), OPEN.'] },
+    { d: 'Click [[Correct]], open the Action list. Close it.', s: ['No "Reallocate" option: only filers may reallocate.'] },
+    { d: 'Sign in as **cfo**, open the same contribution, [[Correct]], [[Reallocate to another entity (over-limit)]].', s: ['Part 1: $6000, "Parts total $6000.00 of $6000.00".'] },
+    { d: '[[Show over-limit proposal]].', s: ['"Over the PARTY limit by $1000.00", with options to move $1000.00 to a CA or a campaign.'] },
+    { d: '[[Use this]] on the CA option. In Part 2, Riding {{121}}. Reason {{Reallocate overage}}.', s: ['Part 1 $5000 Party, Part 2 $1000 CA riding 121.'] },
+    { d: '[[Preview cascade]], then [[Commit correction]].', s: ['"Correction committed", 2 contributions created.'] },
+    { d: '[[Work queue]], Overlimit Olive.', s: ['B2 RESOLVED, "closed by a correction: ... is now SUPERSEDED".'] },
+  ],
+  say: ['Refund is the other option: the same [[Correct]] dialog, Action [[Refund]].'],
+},
+{ id: 'r40', sec: 'validation', rows: [40], title: 'The action taken is recorded', mins: '4 min', who: ['admin'],
+  ask: 'How each problem was resolved is recorded.',
+  needs: 'A resolved item from row 33, 35, 37, or 39.',
+  steps: [
+    { d: '[[Work queue]], look at the resolved rows from earlier.', s: ['Resolution: "closed by a correction: ... is now REFUNDED" or the exception note typed in.'] },
+    { d: 'Open Ineligible Refund\'s contribution, copy its id from the address bar. [[Change log]], [[Subject id]] = that id.', s: ['The creation entry and the refund entry, each with its reason.'] },
+    { opt: true, d: 'New tab: <</api/change-log?subjectId=>> plus the id. Copy the refund entry\'s "correlationId", paste it into the [[Correlation id]] filter.', s: ['Everything that one correction changed: the Contribution, the Payment, and the WorkItem, all with the same reason.'] },
+  ],
+},
+
+/* ---------------- ISSUE TAX RECEIPT ---------------- */
+{ id: 'r41', sec: 'issue', rows: [41, 46, 47], title: 'Issue receipts from contributions', mins: '5 min', who: ['cfo'],
+  ask: 'Receipts are generated from the contribution records (41), one receipt can cover a donor\'s contributions (46), and numbers are sequential (47).',
+  needs: 'Demo records Iris Issue and Devon Issue, in the "Demo — issue live" space.',
+  steps: [
+    { d: 'Sign in as **cfo**. Open <</spaces/9601/PARTY/issue>> (home page, "Demo — issue live" row, [[Issue]]).', s: ['Steps Review, Generate, Deliver. No blocking work items.', 'Receipts 4, Total amount $205.00: three rows for Iris Issue, one for Devon Issue.'] },
+    { d: 'Turn on [[One receipt per donor]] (row 46).', s: ['Receipts 3. Iris\'s two cash gifts combine into one $80.00 receipt (2 contributions). Her goods-and-services gift stays separate at $80.00 ($100 less $20).'] },
+    { d: 'Click [[Next: generate]].', s: ['Received-by label prefilled "Green Party of Ontario". Leave Delivery override on "Use each donor\'s preference" (both chose email).'] },
+    { d: 'Reason {{EO demo issuance}}. Click [[Generate receipts]].', s: ['"3 issued, 0 failed." Each row has a GPO-00###### number and a View PDF link.'] },
+    { d: 'Read the three receipt numbers aloud (row 47).', s: ['Consecutive numbers.'] },
+    { d: 'Click [[View PDF]] on Iris\'s combined receipt.', s: ['"Received on: 2031-01-10 to 2031-01-20", "Eligible Amount: $80.00".'] },
+    { d: 'Leave the Deliver step for row 64. Open a contribution from a result row.', s: ['Allocations & receipts shows the receipt, ISSUED. The contribution\'s [[Edit]] is now disabled: receipted data is frozen.'] },
+  ],
+},
+{ id: 'r42', sec: 'issue', rows: [42], title: 'The receipt record is a snapshot', mins: '5 min', who: ['cfo', 'admin'],
+  ask: 'The receipt keeps what it was issued with, even if the contributor changes later.',
+  needs: 'Demo record Snapshot Sid (issued).',
+  notes: [['warn', 'The reissue printing the new name needs the "reissue prints the contributor\'s current name" fix (branch fix/reissue-current-name). Without it the replacement keeps the old name.']],
+  steps: [
+    { d: 'As cfo, [[Contributors]], open Snapshot Sid, open his $50.00 contribution.', s: ['Allocations & receipts: number, ISSUED, $50.00, View PDF. Address on file: 77 Maple Ave, Ottawa.'] },
+    { d: '[[View PDF]].', s: ['SNAPSHOT SID, 77 MAPLE AVE.'] },
+    { d: 'Sign in as **admin**. Snapshot Sid\'s record, [[Edit contributor]]: Last name {{Smith}}, Street {{Elm Court}}, Reason {{Donor moved and changed name}}, save.' },
+    { d: 'Open that receipt\'s [[View PDF]] again.', s: ['Unchanged: still SNAPSHOT SID, 77 MAPLE AVE. The stored PDF and its snapshot do not move.'] },
+    { d: 'Sign in as **cfo**. On the contribution, [[Correct]] beside the receipt, [[Reissue this receipt]], Reason {{Reissue with new address}}, [[Confirm]].', s: ['"Reissued as GPO-00######." The old row CANCELLED, the new row ISSUED.'] },
+    { d: '[[View PDF]] on the new receipt.', s: ['SNAPSHOT SMITH, 77 ELM COURT, and "This cancels and replaces receipt #...".'] },
+  ],
+},
+{ id: 'r43', sec: 'issue', rows: [43], title: 'One receipt for several contributions', mins: '4 min', who: ['cfo'],
+  ask: 'An aggregated receipt records each contribution it covers.',
+  steps: [
+    { d: '[[Contributors]], search {{Consolidating}}, open Consolidating Chris.', s: ['Two contributions in period 9504, $40.00 and $25.00, each "Left to receipt" $0.00.'] },
+    { d: 'Open each contribution.', s: ['Both list the same receipt number: one allocates $40.00, the other $25.00.'] },
+    { d: '[[View PDF]].', s: ['$65.00, "Received on: 2030-03-05 to 2030-03-10".'] },
+    { d: 'Live: [[Contributors]], open {{Oscar Combine}}.', s: ['"Tick two or more contributions to issue one receipt for all of them."'] },
+    { d: 'Tick both. Reason {{Combine for donor}}, [[Issue one receipt]].', s: ['"One receipt for 2 contributions, totalling $65.00." then "Issued GPO-... for $65.00." with View PDF.'] },
+  ],
+},
+{ id: 'r44', sec: 'issue', rows: [44], title: 'Who issued the receipt', mins: '3 min', who: ['cfo', 'sysadmin'],
+  ask: 'The user who generated each receipt is recorded.',
+  needs: 'Demo record Printed Paula (issued), or any receipt from row 41.',
+  steps: [
+    { d: 'Open Printed Paula\'s contribution. Right-click [[View PDF]], copy the link. The receipt id is between /receipts/ and /pdf.' },
+    { d: '[[Admin]] then [[Change log]]: Subject type [[Receipt]], Subject id = that id.', s: ['Subject "Receipt (<id>)", Actor Party CFO, the issuing reason, After with the number and amount.'] },
+    { d: 'Back on the contribution, [[Change history]], [[Show ... changes]].', s: ['The issuance is listed with its reason.'] },
+  ],
+},
+{ id: 'r45', sec: 'issue', rows: [45], title: 'When the receipt was generated', mins: '2 min', who: ['cfo', 'sysadmin'],
+  ask: 'The date and time each receipt was generated.',
+  steps: [
+    { d: 'Open Printed Paula\'s contribution and read the receipt row.', s: ['The date it was issued (the day the demo data was loaded).'] },
+    { d: '[[View PDF]].', s: ['"Issue Date:" the same day.'] },
+    { d: '[[Change log]] for that receipt (as in row 44).', s: ['The At column has the exact date and time.'] },
+  ],
+},
+{ id: 'r48', sec: 'issue', rows: [48, 49, 50, 51, 52, 53, 54, 55, 57, 58], title: 'What the receipt prints', mins: '5 min', who: ['cfo'],
+  ask: 'One walk through the receipt PDF covers ten rows.',
+  needs: 'Demo record Printed Paula, and the fixture Goods Gita.',
+  steps: [
+    { d: '[[Contributors]], open Printed Paula, open her contribution, [[View PDF]]. Point at each line:',
+      s: ['48: "This is your Official Receipt for income tax purposes."',
+          '49: "Received By: Green Party of Ontario" (a campaign receipt prints the campaign\'s name instead).',
+          '50: "Received on: 2032-01-15", the accepted date, not the 2032-01-12 payment date.',
+          '51: "Issue Date:" the day it was issued.',
+          '53: PRINTED PAULA, 20 BAY ST, TORONTO ON M5J2N8.',
+          '54: The signature and "Authorized Signature".',
+          '55: "Receipt No: GPO-00######".',
+          '57: "Contribution Type: Monetary".',
+          '58: "Green Party of Ontario".'] },
+    { d: 'Open [[Goods Gita]]\'s receipt.', s: ['52: "Eligible Amount: $80.00" for a $100 gift with $20 non-deductible.', '57: "Contribution Type: Goods and Services".'] },
+  ],
+},
+{ id: 'r56', sec: 'issue', rows: [56], title: 'Contributor type on the receipt', mins: '2 min', who: ['sysadmin'],
+  ask: 'The receipt shows the contributor type.',
+  steps: [
+    { d: 'Open Printed Paula\'s receipt PDF.', s: ['"Contributor Type: Individual".'] },
+    { d: 'As sysadmin, [[Admin]] then [[Receipt layout]].', s: ['"With contributor type" selected (the demo seed set it). Changing it needs a reason and applies to receipts rendered from then on.'] },
+    { d: '[[Change log]], Subject type [[ReceiptSettings]].', s: ['The switch, with its reason and Sys Admin as actor.'] },
+  ],
+  say: ['GPO can keep the original layout or the contributor-type layout; both are on file.'],
+},
+{ id: 'r59', sec: 'issue', rows: [59], title: 'Marking a receipt lost', mins: '3 min', who: ['cfo'],
+  ask: 'A receipt can be set to lost.',
+  steps: [
+    { d: 'Fixture: open [[Lost Lena]]\'s contribution.', s: ['Receipt ISSUED. A lost receipt stays valid.'] },
+    { d: 'Live: [[Contributors]], open {{Lost Liam}}, open his contribution. [[Correct receipt GPO-...]], [[Reprint as a lost-receipt copy]].', s: ['Explains it reprints unaltered, stamped COPY; the receipt stays valid. Confirm is disabled until a reason is typed.'] },
+    { d: 'Reason {{Donor lost the original}}, [[Confirm]].', s: ['"Copy generated; the original is flagged lost." Still ISSUED.'] },
+    { opt: true, d: '[[Change log]] for the receipt id.', s: ['Before {"lost":false}, After {"lost":true}.'] },
+  ],
+},
+{ id: 'r60', sec: 'issue', rows: [60], title: 'The lost copy is stamped COPY', mins: '3 min', who: ['cfo'],
+  ask: 'A reprinted lost receipt is marked as a copy.',
+  needs: 'Lost Liam after row 59, or the fixture Lost Lena.',
+  notes: [['info', 'The app has no link to the copy\'s PDF yet, so open it by address.']],
+  steps: [
+    { d: 'Copy the receipt id from the [[View PDF]] link (between /receipts/ and /pdf).' },
+    { d: 'New tab: <</api/receipts/>> + id + {{/reprints}}.', s: ['A list with kind LOST_COPY and its "id".'] },
+    { d: 'New tab: <</api/receipts/>> + receipt id + {{/reprints/}} + reprint id + {{/pdf}}.', s: ['The receipt with a COPY stamp and the same receipt number.'] },
+  ],
+},
+{ id: 'r61', sec: 'issue', rows: [61], title: 'Cancelling a receipt', mins: '3 min', who: ['cfo'],
+  ask: 'A receipt can be cancelled, and keeps its number.',
+  needs: 'Demo record Cancel Cara (issued).',
+  steps: [
+    { d: '[[Contributors]], open {{Cancel Cara}}, open her contribution.', s: ['Receipt ISSUED. [[Issue a receipt]] is disabled: nothing left to receipt.'] },
+    { d: '[[Correct receipt GPO-...]], [[Cancel this receipt]].', s: ['Explains the number is kept and a watermarked notice is stored.'] },
+    { d: 'Reason {{Issued in error}}, [[Confirm]].', s: ['Same number, now CANCELLED. [[Issue a receipt]] is enabled again.'] },
+    { opt: true, d: '[[Change log]] for the receipt id.', s: ['Before {"status":"ISSUED"}, After {"status":"CANCELLED"}.'] },
+  ],
+},
+{ id: 'r62', sec: 'issue', rows: [62], title: 'Cancellation notice', mins: '4 min', who: ['cfo', 'sysadmin'],
+  ask: 'A cancelled receipt produces a notice that can be sent to the donor.',
+  needs: 'Cancel Cara\'s receipt cancelled in row 61.',
+  steps: [
+    { d: 'On Cancel Cara\'s contribution, click [[Cancellation notice]].', s: ['The receipt watermarked CANCELLED.'] },
+    { d: 'Click [[Email to donor]].', s: ['Subject "Your tax receipt has been cancelled", a Letter field, and Reason.'] },
+    { d: 'Letter {{Your receipt was cancelled; the cancelled copy is attached.}}, Reason {{Notify donor}}, [[Queue email]].', s: ['"queued to cancel.cara@demo.test", then "sent ... (simulated)".'] },
+    { d: 'As sysadmin, [[Admin]] then [[Emails]], Kind [[Cancellation notice]].', s: ['Cara\'s email, SENT, SIMULATED. Open it: attached receipt PDF and the letter.'] },
+  ],
+  say: ['Email is simulated in this environment; nothing leaves the system.'],
+},
+{ id: 'r63', sec: 'issue', rows: [63], title: 'Reissuing a receipt', mins: '3 min', who: ['cfo'],
+  ask: 'A receipt can be reissued, and the new one says which receipt it replaces.',
+  steps: [
+    { d: 'Fixture: open [[Reissued Rory]]\'s contribution.', s: ['Two rows: older number CANCELLED, newer number ISSUED, both $60.00.'] },
+    { d: '[[View PDF]] on the newer one.', s: ['"This cancels and replaces receipt #" and the cancelled number.'] },
+    { d: 'Live: [[Contributors]], open {{Reissue Rhys}}, open his contribution. [[Correct]], [[Reissue this receipt]], Reason {{Reissue requested by donor}}, [[Confirm]].', s: ['"Reissued as GPO-00######." The original CANCELLED, the new one ISSUED.'] },
+    { d: '[[View PDF]] on the new receipt.', s: ['"This cancels and replaces receipt #" with the original number.'] },
+  ],
+},
+{ id: 'r64', sec: 'issue', rows: [64], title: 'Emailing receipts', mins: '4 min', who: ['cfo', 'sysadmin'],
+  ask: 'Receipts can be emailed to contributors.',
+  needs: 'The row 41 run (Iris and Devon chose email).',
+  steps: [
+    { d: 'As cfo open <</spaces/9601/PARTY/issue>>, click [[Go to delivery]].', s: ['Email "Ready to send" with the receipts from row 41.'] },
+    { d: 'Letter {{Thank you for your support.}}, Reason {{Send receipts}}, keep the subject. Click [[Send ... email(s)]].', s: ['Ready to send drops; Sent rises after a few seconds.'] },
+    { d: 'As sysadmin, [[Admin]] then [[Emails]], Kind [[Receipt]].', s: ['Iris and Devon\'s receipt emails, SENT, SIMULATED. Open one: "Attached receipt PDF" and the letter.'] },
+  ],
+},
+{ id: 'r65', sec: 'issue', rows: [65], title: 'Contributor email on file', mins: '2 min', who: ['admin'],
+  ask: 'The contributor\'s email is recorded and can be updated.',
+  steps: [
+    { d: '[[Contributors]], open [[Email Emma]].', s: ['Email: email.emma@g4.fixture.test.'] },
+    { d: 'Open Iris Issue, [[Edit contributor]], Email {{iris.new@demo.test}}, Reason {{Donor changed email}}, save.', s: ['The new email shows on the record and in the list; Change history has the entry.'] },
+  ],
+},
+
+/* ---------------- REPORTING ---------------- */
+{ id: 'r66', sec: 'reporting', rows: [66], title: 'Only privileged users get reports', mins: '4 min', who: ['sysadmin', 'readonly'],
+  ask: 'Report access is limited to privileged users.',
+  steps: [
+    { d: 'As sysadmin open <</spaces/9503/PARTY/entity-reports>>.', s: ['"Entity reports", "Period 9503 · Party (province-wide)". [[Generate]] disabled until a reason is typed.'] },
+    { d: 'Reason {{EO demo ALL}}, [[Generate]].', s: ['A new row: Kind ALL, Rows 9, with Download CSV and Mark sent.'] },
+    { d: 'Private window, sign in as **readonly**, same address.', s: ['"Only the party CFO, a designate, bookkeeper, or filer may generate reports." and "Your role cannot view generated reports." No list, no download.'] },
+  ],
+  say: ['The CSV link is refused by the server too (403) for roles without access, not just hidden.'],
+},
+{ id: 'r67', sec: 'reporting', rows: [67], title: 'Reports come from stored records', mins: '3 min', who: ['sysadmin'],
+  ask: 'EO reports are generated from the contribution records in the system.',
+  steps: [
+    { d: 'On <</spaces/9503/PARTY/entity-reports>> generate ALL (if not done in row 66).', s: ['Rows 9, Status Clean.'] },
+    { d: 'Report [[S2P2 (over-$200 contributor aggregate)]], Reason {{EO demo S2P2}}, [[Generate]].', s: ['Rows 2, Status Clean.'] },
+    { d: '[[Download CSV]] on the ALL row and open it.', s: ['9 rows, each with a GPO- receipt number. Threshold Theo appears 3 times (100.00, 75.00, 50.00).'] },
+  ],
+  say: ['If data changes after a report is generated, its status turns "Dirty", and "View changes" shows what moved.'],
+},
+{ id: 'r68', sec: 'reporting', rows: [68], title: 'The ALL report meets the EO spec', mins: '5 min', who: ['sysadmin'],
+  ask: 'The ALL contribution report matches the Elections Ontario file format.',
+  steps: [
+    { d: 'Open the ALL CSV for 9503 Party.',
+      s: ['21 columns, from Party_ID to Contributor_Postal_Code.',
+          'Receipt_Status: I issued, C cancelled (Reissued Rory\'s original), L lost (Lost Lena).',
+          'Contribution_Type: GS for Goods Gita, MO for the rest.',
+          'Acceptance_Date as MMDDYYYY (Split Sam: 03012029). Amounts with two decimals.'] },
+    { d: 'Open <</spaces/9503/CA/entity-reports?ridingNumber=121>>. Label {{Riding 121 CA}}, Reason {{EO demo CA}}, [[Generate]], download.', s: ['3 rows, Political_Entity_Type A. Agency_Contribution Y for Agency Alex and Split Sam, N for Direct Dee.'] },
+    { opt: true, d: '<</spaces/9504/PARTY/entity-reports>>: generate and download.', s: ['One row for Consolidating Chris, 65.00: the combined receipt as one line.'] },
+  ],
+},
+{ id: 'r69', sec: 'reporting', rows: [69], title: 'The S2P2 report meets the EO spec', mins: '3 min', who: ['sysadmin'],
+  ask: 'The over-$200 contributor report matches the Elections Ontario format.',
+  steps: [
+    { d: 'Download the S2P2 CSV from 9503 Party (row 67).', s: ['14 columns ending in Aggregate_Contribution_Amount.'] },
+    { d: 'Read the rows.', s: ['Split Sam 300.00.', 'Threshold Theo 225.00: three smaller gifts (100 + 75 + 50) added together.', 'No row for donors at $200 or less (Rory, Lena, Emma, Gita).'] },
+  ],
+},
+];
+
+/* ---------------- rendering ---------------- */
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+let done = store.get('eo-demo-done', {});
+let base = store.get('eo-demo-base', 'http://localhost:5173');
+
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function fmt(s) {
+  // tokenise before escaping so markup survives
+  const parts = [];
+  const re = /\[\[(.+?)\]\]|\{\{(.+?)\}\}|<<(.*?)>>|\*\*(.+?)\*\*/g;
+  let last = 0, m;
+  while ((m = re.exec(s))) {
+    parts.push(esc(s.slice(last, m.index)));
+    if (m[1] != null) parts.push(`<span class="ui">${esc(m[1])}</span>`);
+    else if (m[2] != null) parts.push(`<span class="val" role="button" tabindex="0" title="Tap to copy" data-copy="${esc(m[2])}">${esc(m[2])}</span>`);
+    else if (m[3] != null) parts.push(`<a class="path" href="${esc(base.replace(/\/$/, '') + m[3])}" target="_blank" rel="noopener">${esc(m[3])}</a>`);
+    else parts.push(`<b>${esc(m[4])}</b>`);
+    last = re.lastIndex;
+  }
+  parts.push(esc(s.slice(last)));
+  return parts.join('');
+}
+function rowLabel(c) {
+  if (!c.rows.length) return 'Setup';
+  const r = c.rows;
+  const contiguous = r.every((n, i) => i === 0 || n === r[i - 1] + 1);
+  if (r.length === 1) return 'Row ' + r[0];
+  if (contiguous) return 'Rows ' + r[0] + '–' + r[r.length - 1];
+  return 'Rows ' + r.join(', ');
+}
+function shortRows(c) {
+  if (!c.rows.length) return '—';
+  const r = c.rows;
+  const contiguous = r.every((n, i) => i === 0 || n === r[i - 1] + 1);
+  if (r.length === 1) return String(r[0]);
+  if (contiguous) return r[0] + '–' + r[r.length - 1];
+  return r[0] + '…' + r[r.length - 1];
+}
+function secName(id) { return (SECTIONS.find((s) => s[0] === id) || [, ''])[1]; }
+function allSteps(c) { return [...(c.prep || []), ...(c.steps || [])]; }
+function progress(c) {
+  const n = allSteps(c).length;
+  const d = (done[c.id] || []).filter(Boolean).length;
+  return { n, d };
+}
+
+function renderIndex() {
+  $('crumb').textContent = 'EO evaluation demo';
+  let h = `<div class="hero">
+    <h1>Elections Ontario evaluation demo</h1>
+    <p>One page per checklist use case for the Tax Receipts & Contributions tool. Keep this beside the app and follow the steps.</p>
+    <div class="legend">
+      <span><span class="ui">Button</span> in the app</span>
+      <span><span class="val">value</span> type this (tap to copy)</span>
+      <span><a class="path" href="#index">/path</a> opens the app</span>
+    </div>
+  </div>`;
+  for (const [sid, sname] of SECTIONS) {
+    const items = CASES.filter((c) => c.sec === sid);
+    const rows = items.flatMap((c) => c.rows);
+    const range = rows.length ? `rows ${Math.min(...rows)}–${Math.max(...rows)}` : '';
+    h += `<section class="sec"><h2><span>${esc(sname)}</span><small>${range}</small></h2><ul class="list">`;
+    for (const c of items) {
+      const p = progress(c);
+      const who = c.who ? c.who.join(', ') : (c.special === 'data' ? 'what pnpm db:seed:demo loads' : 'logins, app address, seed commands');
+      const status = p.n ? `<span class="prog${p.d === p.n ? ' done' : ''}">${p.d === p.n ? '✓ done' : p.d ? p.d + '/' + p.n : (c.mins || '')}</span>` : '<span class="prog"></span>';
+      h += `<li><a href="#${c.id}"><span class="rowtag">${esc(shortRows(c))}</span><span class="ltitle"><b>${esc(c.title)}</b><small>${esc(who)}</small></span>${status}</a></li>`;
+    }
+    h += `</ul></section>`;
+  }
+  h += `<p class="p" style="margin-top:20px;color:var(--muted);font-size:13px">Ticks are saved in this browser only. <button type="button" id="resetAll" class="jump" style="all:unset;text-decoration:underline;cursor:pointer">Clear all ticks</button></p>`;
+  $('view').innerHTML = h;
+  $('resetAll').onclick = () => { done = {}; store.set('eo-demo-done', done); renderIndex(); };
+  setPager(-1);
+}
+
+function loginBox(names) {
+  return names.map((n) => {
+    const l = LOGINS[n];
+    return `<div><b>${esc(n)}</b> <span class="val" role="button" tabindex="0" data-copy="${esc(l.email)}">${esc(l.email)}</span> <small style="color:var(--muted)">shows as ${esc(l.shows)}</small></div>`;
+  }).join('');
+}
+
+function renderSetup(c) {
+  let h = `<div class="eyebrow"><span>Start here</span></div>
+  <h1 class="case">${esc(c.title)}</h1>
+  <p class="ask">What to have ready so any of these pages can be demoed without surprises.</p>
+
+  <h3 class="part">App address</h3>
+  <div class="field">
+    <label for="baseInput">Where the app runs</label>
+    <input id="baseInput" value="${esc(base)}" inputmode="url" autocomplete="off">
+    <small>Every <span class="path" style="color:var(--see)">/path</span> link on these pages opens here. Saved in this browser.</small>
+  </div>
+
+  <h3 class="part">The environment</h3>
+  <ol class="steps" data-case="setup-env">
+    ${[
+      'Load the data. In apps/tax-receipts/api run {{pnpm db:seed}}, {{pnpm db:seed:fixtures}}, then {{pnpm db:seed:demo}}. The fixtures are the examples the demo only looks at (Split Sam, Lost Lena, Blocked Blake, and others). The demo seed adds the records the demo changes, turns on the contributor-type receipt layout, and sets every login\'s password to "gpo".',
+      'Qomon stays off ([[Admin]], [[Qomon]] not enabled), so new contributors are kept in the tool and can be edited.',
+      'Two browser windows side by side: a normal one and a private one. Security pages sign in a second user in the private window.',
+      'Rehearsing uses up the demo records (receipts get issued, cancelled, refunded). To start clean, reset and reseed the database (this wipes it): {{pnpm migrate:reset}}, then the three seed commands.',
+    ].map((t, i) => stepHtml('setup-env', i, { d: t })).join('')}
+  </ol>
+
+  <h3 class="part">Logins</h3>
+  <p class="p">Every login uses the same password: <span class="val" role="button" tabindex="0" data-copy="${PASSWORD}">${PASSWORD}</span></p>
+  <div class="tablewrap"><table class="logins">
+    <thead><tr><th>Login</th><th>Email</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td>sysadmin</td><td><span class="val" role="button" tabindex="0" data-copy="sysadmin@gpo.test">sysadmin@gpo.test</span></td><td>Users, roles, periods, change log, emails, reports</td></tr>
+      <tr><td>cfo</td><td><span class="val" role="button" tabindex="0" data-copy="cfo@gpo.test">cfo@gpo.test</span></td><td>Issuing, correcting, and delivering receipts; reallocation</td></tr>
+      <tr><td>admin</td><td><span class="val" role="button" tabindex="0" data-copy="admin@gpo.test">admin@gpo.test</span></td><td>Contributors, payments, work queue</td></tr>
+      <tr><td>readonly</td><td><span class="val" role="button" tabindex="0" data-copy="readonly@gpo.test">readonly@gpo.test</span></td><td>Showing what is refused</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 class="part">If something looks different</h3>
+  <div class="say">
+    <p>Every page here mirrors an automated Playwright test in apps/tax-receipts/e2e (tests/eo/), which runs every row against a freshly seeded database: {{pnpm --filter @gpo/tax-receipts-e2e e2e}}.</p>
+    <p>Counts can differ from these pages after a rehearsal. Look for the named donor, not the total.</p>
+  </div>`;
+  $('view').innerHTML = h;
+  $('baseInput').addEventListener('change', (e) => { base = e.target.value.trim() || base; store.set('eo-demo-base', base); });
+}
+
+function renderData(c) {
+  $('view').innerHTML = `<div class="eyebrow"><span>Start here</span></div>
+  <h1 class="case">${esc(c.title)}</h1>
+  <p class="ask">Loaded by <span class="val" role="button" tabindex="0" data-copy="pnpm db:seed:demo">pnpm db:seed:demo</span>. These are the records the demo changes, one set per page, so no page depends on another.</p>
+  <div class="tablewrap"><table class="logins">
+    <thead><tr><th>Contributor</th><th>Where</th><th>Rows</th></tr></thead>
+    <tbody>${DEMO_DATA.map(([who, where, rows, page]) =>
+      `<tr><td><a href="#${page}">${esc(who)}</a></td><td>${esc(where)}</td><td style="white-space:nowrap">${esc(rows)}</td></tr>`).join('')}</tbody>
+  </table></div>
+  <p class="note info" style="margin-top:14px">Each record can be used once. After a rehearsal, reset and reseed (see Before the meeting).</p>`;
+}
+
+function stepHtml(cid, i, st) {
+  const isDone = (done[cid] || [])[i];
+  const see = st.s ? `<ul class="see">${st.s.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul>` : '';
+  return `<li class="${st.opt ? 'opt' : ''}${isDone ? ' done' : ''}" data-i="${i}">
+    <button class="tick" type="button" aria-label="Mark step ${i + 1} done" aria-pressed="${isDone ? 'true' : 'false'}"></button>
+    <p class="do">${st.opt ? '<span class="optlabel">Optional</span>' : ''}${fmt(st.d)}</p>${see}</li>`;
+}
+
+function renderCase(c) {
+  $('crumb').textContent = `${rowLabel(c)} · ${secName(c.sec)}`;
+  if (c.special === 'setup') { renderSetup(c); return; }
+  if (c.special === 'data') { renderData(c); return; }
+  let h = `<div class="eyebrow"><span class="rowpill">${esc(rowLabel(c))}</span><span>${esc(secName(c.sec))}</span></div>
+  <h1 class="case">${esc(c.title)}</h1>
+  <p class="ask">${fmt(c.ask || '')}</p>
+  <dl class="facts">
+    <dt>Sign in as</dt><dd>${loginBox(c.who || [])}</dd>
+    ${c.mins ? `<dt>Time</dt><dd>${esc(c.mins)}</dd>` : ''}
+    ${c.needs ? `<dt>Needs</dt><dd>${fmt(c.needs)}</dd>` : ''}
+  </dl>`;
+  for (const [kind, text] of c.notes || []) h += `<p class="note ${kind}">${fmt(text)}</p>`;
+  const prepN = (c.prep || []).length;
+  if (prepN) {
+    h += `<h3 class="part"><span>Before the meeting</span></h3><ol class="steps" data-case="${c.id}">${c.prep.map((st, i) => stepHtml(c.id, i, st)).join('')}</ol>`;
+  }
+  h += `<h3 class="part"><span>${prepN ? 'In the meeting' : 'Demo steps'}</span><button type="button" id="resetCase">Clear ticks</button></h3>
+  <ol class="steps" data-case="${c.id}" style="counter-reset:s">${c.steps.map((st, i) => stepHtml(c.id, prepN + i, st)).join('')}</ol>`;
+  if (c.say) h += `<h3 class="part">Say</h3><div class="say">${c.say.map((x) => `<p>${fmt(x)}</p>`).join('')}</div>`;
+  $('view').innerHTML = h;
+  $('resetCase').onclick = () => { delete done[c.id]; store.set('eo-demo-done', done); renderCase(c); };
+}
+
+function setPager(idx) {
+  const prev = idx > 0 ? CASES[idx - 1] : null;
+  const next = idx < 0 ? CASES[0] : CASES[idx + 1];
+  const pl = $('prevLink'), nl = $('nextLink');
+  if (idx < 0) { pl.setAttribute('aria-disabled', 'true'); }
+  else {
+    pl.removeAttribute('aria-disabled');
+    pl.href = prev ? '#' + prev.id : '#index';
+    pl.querySelector('span').textContent = prev ? `${shortRows(prev) === '—' ? '' : shortRows(prev) + ' · '}${prev.title}` : 'Index';
+  }
+  if (next) {
+    nl.removeAttribute('aria-disabled');
+    nl.href = '#' + next.id;
+    nl.querySelector('span').textContent = `${shortRows(next) === '—' ? '' : shortRows(next) + ' · '}${next.title}`;
+  } else {
+    nl.href = '#index';
+    nl.querySelector('span').textContent = 'Back to index';
+  }
+}
+
+function route() {
+  const id = (location.hash || '').slice(1);
+  const idx = CASES.findIndex((c) => c.id === id);
+  $('jumpMsg').hidden = true;
+  if (idx < 0) renderIndex();
+  else { renderCase(CASES[idx]); setPager(idx); }
+  window.scrollTo(0, 0);
+}
+
+/* events */
+document.addEventListener('click', (e) => {
+  const tick = e.target.closest('.tick');
+  if (tick) {
+    const li = tick.closest('li'); const cid = tick.closest('ol').dataset.case; const i = +li.dataset.i;
+    const arr = done[cid] || []; arr[i] = !arr[i]; done[cid] = arr; store.set('eo-demo-done', done);
+    li.classList.toggle('done', !!arr[i]); tick.setAttribute('aria-pressed', arr[i] ? 'true' : 'false');
+    return;
+  }
+  const v = e.target.closest('.val[data-copy]');
+  if (v) copyVal(v);
+});
+document.addEventListener('keydown', (e) => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.val[data-copy]')) { e.preventDefault(); copyVal(e.target); }
+});
+function copyVal(el) {
+  const text = el.dataset.copy;
+  const flash = () => { el.classList.add('copied'); setTimeout(() => el.classList.remove('copied'), 700); };
+  const fallback = () => { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+  try {
+    navigator.clipboard.writeText(text).then(flash, fallback);
+  } catch { fallback(); }
+}
+$('homeBtn').onclick = () => { location.hash = 'index'; };
+$('jumpForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const n = parseInt($('jumpInput').value, 10);
+  const c = CASES.find((x) => x.rows.includes(n));
+  if (c) { $('jumpInput').value = ''; $('jumpInput').blur(); if (location.hash === '#' + c.id) route(); else location.hash = c.id; }
+  else { $('jumpMsg').textContent = 'No checklist row ' + (isNaN(n) ? 'with that number' : n) + '. Rows run 1 to 69.'; $('jumpMsg').hidden = false; }
+});
+window.addEventListener('hashchange', route);
+route();
+</script>
