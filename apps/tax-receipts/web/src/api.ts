@@ -1274,7 +1274,14 @@ export const api = {
       body: JSON.stringify({ holidays }),
     }),
   listUsers: () => request<{ data: AdminUserRow[] }>('/admin/users'),
-  createUser: (input: { name: string; email: string; password: string; role: string }) =>
+  createUser: (input: {
+    name: string;
+    email: string;
+    password: string;
+    role: string;
+    allRidings: boolean;
+    ridingGrants: number[];
+  }) =>
     request<{ id: string }>('/admin/users', { method: 'POST', body: JSON.stringify(input) }),
   updateUser: (
     id: string,

@@ -84,19 +84,26 @@ grant the contribution correction actions.
 
 ### Riding access
 
-A user can be limited to particular ridings. A riding-limited user sees
-party-level contributions plus contributions in their granted ridings, and
-nothing else; a contribution outside their ridings reads as "not found."
-Riding grants are currently set through the API, not the Users screen (see
-[Current limitations](limitations.md)).
+Riding access is set per user, separately from their role. A user either
+sees **all ridings** (central staff) or is limited to their **granted
+ridings**. A riding-limited user sees party-level contributions plus
+contributions in their granted ridings, and nothing else; a contribution
+outside their ridings reads as "not found." The Users table shows each
+user's access as All, the granted riding numbers, or Party only.
+
+New users have no riding access until it is given: with neither All ridings
+nor any grant, they see party-level contributions only, whatever their
+role. Tick **All ridings** for central staff such as the Filer or
+bookkeeper.
 
 ## Managing users (administrators)
 
 Under **Admin > Users** (needs *Manage users and roles*):
 
 - **Add a user** with the **New user** button, giving a name, email, role,
-  and a temporary password of at least 12 characters.
-- **Edit a user** to change their name, email, role, or active status.
+  riding access, and a temporary password of at least 12 characters.
+- **Edit a user** to change their name, email, role, riding access, or
+  active status.
   Every edit needs a reason. Deactivating stops a user signing in; accounts
   are never deleted, so the change log can always name who did something.
 - **Mark a user as a CFO designate.**

@@ -11,6 +11,7 @@ import {
   Group,
   Loader,
   Modal,
+  MultiSelect,
   NativeSelect,
   NumberInput,
   Stack,
@@ -689,6 +690,7 @@ function UsersSection() {
                 <Table.Th>Name</Table.Th>
                 <Table.Th>Email</Table.Th>
                 <Table.Th>Role</Table.Th>
+                <Table.Th>Ridings</Table.Th>
                 <Table.Th>CFO designate</Table.Th>
                 <Table.Th>Status</Table.Th>
                 <Table.Th />
@@ -700,6 +702,7 @@ function UsersSection() {
                   <Table.Td>{u.name}</Table.Td>
                   <Table.Td>{u.email}</Table.Td>
                   <Table.Td>{u.roleName}</Table.Td>
+                  <Table.Td>{ridingAccessLabel(u)}</Table.Td>
                   <Table.Td>{u.isCfoDesignate ? 'yes' : '—'}</Table.Td>
                   <Table.Td>
                     {u.active ? (
@@ -737,6 +740,63 @@ function UsersSection() {
 
 const MIN_PASSWORD_LENGTH = 12;
 
+type RidingAccess = Pick<AdminUserRow, 'allRidings' | 'ridingGrants'>;
+
+function ridingAccessLabel(access: RidingAccess): string {
+  if (access.allRidings) return 'All';
+  if (access.ridingGrants.length === 0) return 'Party only';
+  return [...access.ridingGrants].sort((a, b) => a - b).join(', ');
+}
+
+function sameRidingAccess(a: RidingAccess, b: RidingAccess): boolean {
+  if (a.allRidings !== b.allRidings) return false;
+  const sorted = (grants: number[]) => [...grants].sort((x, y) => x - y).join(',');
+  return sorted(a.ridingGrants) === sorted(b.ridingGrants);
+}
+
+/** Which riding-bearing records a user sees. Without all ridings or a grant
+ *  they see party-level records only, and every riding's contributions read
+ *  as "not found" (see `ridingScopeWhere` in the api). */
+function RidingAccessFields({ value, onChange }: { value: RidingAccess; onChange: (next: RidingAccess) => void }) {
+  const ridings = useQuery({ queryKey: ['admin-ridings'], queryFn: api.listRidings });
+  const known = ridings.data?.data ?? [];
+  const options = [
+    ...known.map((r) => ({
+      value: String(r.ridingNumber),
+      label: `${r.ridingNumber} ${r.name}${r.active ? '' : ' (inactive)'}`,
+    })),
+    // a grant for a riding no longer in the table stays visible and removable
+    ...value.ridingGrants
+      .filter((n) => !known.some((r) => r.ridingNumber === n))
+      .map((n) => ({ value: String(n), label: String(n) })),
+  ];
+
+  return (
+    <Stack gap="xs">
+      <Checkbox
+        label="All ridings"
+        description="Central staff. Sees every riding's contributions, reports, and receipts."
+        checked={value.allRidings}
+        onChange={(e) => onChange({ ...value, allRidings: e.currentTarget.checked })}
+      />
+      <MultiSelect
+        label="Granted ridings"
+        description={
+          value.allRidings
+            ? 'Not needed while All ridings is ticked.'
+            : 'Without any, the user sees party-level contributions only.'
+        }
+        placeholder={value.allRidings ? undefined : 'Party only'}
+        data={options}
+        searchable
+        disabled={value.allRidings}
+        value={value.ridingGrants.map(String)}
+        onChange={(picked) => onChange({ ...value, ridingGrants: picked.map(Number) })}
+      />
+    </Stack>
+  );
+}
+
 /** Create a user with a temporary password the admin passes on. */
 function CreateUserModal({
   roleOptions,
@@ -746,7 +806,14 @@ function CreateUserModal({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'readonly' });
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'readonly',
+    allRidings: false,
+    ridingGrants: [] as number[],
+  });
   const create = useMutation({
     mutationFn: () => api.createUser(form),
     onSuccess: async () => {
@@ -786,6 +853,7 @@ function CreateUserModal({
           value={form.role}
           onChange={(e) => setForm({ ...form, role: e.currentTarget.value })}
         />
+        <RidingAccessFields value={form} onChange={(access) => setForm({ ...form, ...access })} />
         {create.isError && <Alert color="red">{create.error.message}</Alert>}
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
@@ -804,8 +872,9 @@ function CreateUserModal({
   );
 }
 
-/** Edit a user's name, email, role, and active status (EO evaluation
- *  rows 5 and 9). Role and active are sent only when changed. */
+/** Edit a user's name, email, role, riding access, and active status (EO
+ *  evaluation rows 5 and 9). Role, riding access, and active are sent only
+ *  when changed. */
 function EditUserModal({
   user,
   roleOptions,
@@ -821,6 +890,8 @@ function EditUserModal({
     email: user.email,
     role: user.role,
     active: user.active,
+    allRidings: user.allRidings,
+    ridingGrants: user.ridingGrants,
     reason: '',
   });
   const save = useMutation({
@@ -830,6 +901,7 @@ function EditUserModal({
         email: form.email,
         ...(form.role !== user.role ? { role: form.role } : {}),
         ...(form.active !== user.active ? { active: form.active } : {}),
+        ...(sameRidingAccess(form, user) ? {} : { allRidings: form.allRidings, ridingGrants: form.ridingGrants }),
         reason: form.reason,
       }),
     onSuccess: async () => {
@@ -858,6 +930,7 @@ function EditUserModal({
           value={form.role}
           onChange={(e) => setForm({ ...form, role: e.currentTarget.value })}
         />
+        <RidingAccessFields value={form} onChange={(access) => setForm({ ...form, ...access })} />
         <Checkbox
           label="Active (inactive users cannot sign in)"
           checked={form.active}
