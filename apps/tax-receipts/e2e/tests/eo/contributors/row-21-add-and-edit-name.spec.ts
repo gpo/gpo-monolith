@@ -16,7 +16,6 @@ test.describe('Contributors', () => {
     await page.getByRole('button', { name: 'Add a contributor' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Add a contributor' })).toBeVisible();
-    await expect(dialog.getByText('Qomon is not connected, so this contributor will be kept in this tool only.')).toBeVisible();
     const addButton = dialog.getByRole('button', { name: 'Add contributor' });
     await expect(addButton).toBeDisabled();
 

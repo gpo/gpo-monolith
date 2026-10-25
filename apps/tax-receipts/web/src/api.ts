@@ -75,6 +75,12 @@ export interface Me {
     correctContributions: boolean;
     correctReceipts: boolean;
     administerUsers: boolean;
+    /** periods, limits, holidays, ridings, contestants, receipts, emails (settings.administer) */
+    administerSettings: boolean;
+    /** sysadmin-only functions: Qomon, dev tools (system.manage) */
+    manageSystem: boolean;
+    /** read every record, including the change log's who-did-what (records.readAll) */
+    readAllRecords: boolean;
   };
 }
 
@@ -241,6 +247,7 @@ export interface ContributionDetail {
     id: string;
     subjectType: string;
     actorUserId: string | null;
+    actorName: string | null;
     reason: string;
     before: unknown;
     after: unknown;
@@ -1277,7 +1284,7 @@ export const api = {
   ) =>
     request<AdminUserRow>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   resetUserPassword: (id: string, newPassword: string, reason: string) =>
-    request<{ ok: true }>(`/admin/users/${id}/password`, {
+    request<{ ok: true; sessionsSignedOut: number }>(`/admin/users/${id}/password`, {
       method: 'POST',
       body: JSON.stringify({ newPassword, reason }),
     }),

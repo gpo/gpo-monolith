@@ -100,7 +100,8 @@ Under **Admin > Users** (needs *Manage users and roles*):
   Every edit needs a reason. Deactivating stops a user signing in; accounts
   are never deleted, so the change log can always name who did something.
 - **Mark a user as a CFO designate.**
-- **Reset a user's password.** A reset does not sign that user out.
+- **Reset a user's password.** A reset signs that user out of every
+  browser, so anyone using the old password loses access straight away.
 
 Every user change is recorded in the change log (never the password
 itself).
@@ -111,3 +112,8 @@ Under **Admin > Roles** (needs *Manage users and roles*), create a role,
 name it, and tick the permissions it grants. Built-in roles can be edited
 but not deleted, and the System administrator role is locked. Role changes
 take effect on each affected user's next action; nobody needs to sign out.
+
+Only a user who holds *Full system access* can hand it out or take it away:
+create or edit a role so it gains or loses that permission, give a user a
+role that holds it, or move a user off such a role. *Manage users and roles*
+alone is refused, so it cannot be used to grant itself everything.

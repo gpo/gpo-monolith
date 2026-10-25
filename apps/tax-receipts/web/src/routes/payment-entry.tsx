@@ -2,7 +2,15 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Alert, Anchor, Button, Card, Group, Loader, NativeSelect, NumberInput, Stack, Text, TextInput } from '@mantine/core';
-import { api, ApiError, type ContactHit, type IntakeFlag, type PaymentMethodKey } from '../api.js';
+import {
+  api,
+  ApiError,
+  type ContactDetail,
+  type ContactHit,
+  type EntityKindKey,
+  type IntakeFlag,
+  type PaymentMethodKey,
+} from '../api.js';
 import { ContactFormModal } from '../components/contact-form-modal.js';
 import { DonorPicker } from '../components/donor-picker.js';
 import {
@@ -48,10 +56,50 @@ function FlagNotes({ flags }: { flags: IntakeFlag[] }) {
   );
 }
 
-export function NewPaymentPage() {
+/** What the form starts from when it is opened from a contributor's page. */
+interface PaymentPrefill {
+  donor: ContactHit;
+  /** the entity, riding, and contestant of the contributor's latest active contribution */
+  row: Partial<ContributionRow>;
+}
+
+function prefillFrom(c: ContactDetail): PaymentPrefill {
+  const latest = c.contributions.find((x) => x.status === 'ACTIVE');
+  return {
+    donor: { id: c.id, name: c.name, email: c.email, qomonContactId: c.qomonContactId },
+    row: latest?.entityKind
+      ? {
+          entityKind: latest.entityKind as EntityKindKey,
+          riding: latest.ridingNumber ?? '',
+          leadershipContestantId: latest.leadershipContestantId,
+        }
+      : {},
+  };
+}
+
+/**
+ * Add a payment. With a contactId (the contributor page's "Add a payment"), the
+ * donor and the contribution's entity are filled in from that contributor.
+ */
+export function NewPaymentPage({ contactId = null }: { contactId?: string | null }) {
+  const contact = useQuery({
+    queryKey: ['contact', contactId],
+    queryFn: () => api.getContact(contactId!),
+    enabled: contactId !== null,
+  });
+  if (contactId === null) return <PaymentEntryForm prefill={null} />;
+  if (contact.isLoading) return <Loader />;
+  if (contact.isError || !contact.data) return <Text c="red">Contributor not found.</Text>;
+  return <PaymentEntryForm prefill={prefillFrom(contact.data)} />;
+}
+
+function PaymentEntryForm({ prefill }: { prefill: PaymentPrefill | null }) {
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const [donor, setDonor] = useState<ContactHit | null>(null);
+  const backTo = prefill ? `/contributors/${prefill.donor.id}` : '/contributions';
+  const backLabel = prefill ? 'Back to the contributor' : 'Back to contributions';
+  const startRow = (key: number): ContributionRow => ({ ...emptyRow(key), ...prefill?.row });
+  const [donor, setDonor] = useState<ContactHit | null>(prefill?.donor ?? null);
   const [addingDonor, setAddingDonor] = useState(false);
   const [amount, setAmount] = useState<number | ''>('');
   const [receivedOn, setReceivedOn] = useState(todayIso());
@@ -60,7 +108,7 @@ export function NewPaymentPage() {
   const [payerName, setPayerName] = useState('');
   const [note, setNote] = useState('');
   const [reason, setReason] = useState('');
-  const [rows, setRows] = useState<ContributionRow[]>([emptyRow(1)]);
+  const [rows, setRows] = useState<ContributionRow[]>([startRow(1)]);
   const [nextKey, setNextKey] = useState(2);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,13 +152,13 @@ export function NewPaymentPage() {
 
   function reset() {
     save.reset();
-    setDonor(null);
+    setDonor(prefill?.donor ?? null);
     setAmount('');
     setExternalRef('');
     setPayerName('');
     setNote('');
     setReason('');
-    setRows([emptyRow(nextKey)]);
+    setRows([startRow(nextKey)]);
     setNextKey(nextKey + 1);
   }
 
@@ -118,7 +166,7 @@ export function NewPaymentPage() {
     const flags = save.data.contributions.flatMap((c) => c.flags);
     return (
       <Stack gap="lg">
-        <PageHeader title="Payment recorded" backTo="/contributions" backLabel="Back to contributions" />
+        <PageHeader title="Payment recorded" backTo={backTo} backLabel={backLabel} />
         <Card withBorder>
           <Stack gap="sm">
             <Alert color="green" title="Saved">
@@ -145,7 +193,7 @@ export function NewPaymentPage() {
 
   return (
     <Stack gap="lg" maw={FORM_WIDTH} mx="auto">
-      <PageHeader title="Add a payment" backTo="/contributions" backLabel="Back to contributions" />
+      <PageHeader title="Add a payment" backTo={backTo} backLabel={backLabel} />
 
       {addingDonor && (
         <ContactFormModal
@@ -266,7 +314,7 @@ export function NewPaymentPage() {
             <Button onClick={() => save.mutate()} loading={save.isPending}>
               Save payment
             </Button>
-            <Button variant="subtle" component={Link} to="/contributions">
+            <Button variant="subtle" component={Link} to={backTo}>
               Cancel
             </Button>
           </Group>

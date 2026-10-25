@@ -53,7 +53,10 @@ schedule (see [Current limitations](limitations.md)).
 For cheques, cash, e-transfers, and anything else that arrives outside
 Qomon. Needs the *Enter payments* permission.
 
-1. Go to **Contributions** and choose **Add payment**.
+1. Go to **Contributions** and choose **Add payment**. Or open the
+   contributor and choose **Add a payment** there: the donor is filled in,
+   and so are the entity, riding, and leadership contestant of their latest
+   active contribution. Check those before saving.
 2. Pick the **donor who paid**. If they are not in the tool yet, add them
    from the picker (see [Contributors](contributors.md)).
 3. Enter the **amount**, the date it was **received on**, and the
@@ -143,7 +146,8 @@ Click a contribution to see everything about it. The **Payment** and
   [Issuing one receipt](issuing-receipts.md#issuing-one-receipt)).
 - **Change history**: every change to it and to its payment, from the
   change log. It starts collapsed, showing when the contribution last
-  changed; select **Show** to see the entries.
+  changed; select **Show** to see the entries, and select an entry to see
+  what changed, field by field.
 
 To change the donor's name or address, open the donor (their name is a
 link) and edit the contributor there.

@@ -23,7 +23,6 @@ Covers EO checklist rows 20-23 (unique contributor id, name, address, and Indivi
   2. Go to /contributors and click the link 'Email Emma' (Kept in 'This tool'). Do not edit.
     - expect: 'Contributor id: ' followed by T and digits (currently T40; assert regex /Contributor id: T\d+/)
     - expect: 'Qomon contact: none (kept in this tool)'
-    - expect: 'This contributor is kept in this tool only.'
 
 #### 1.2. Row 20: Contributor id is system-assigned, differs between two contributors added back to back, and cannot be edited
 
@@ -55,7 +54,7 @@ Covers EO checklist rows 20-23 (unique contributor id, name, address, and Indivi
 
 **Steps:**
   1. Mutates: creates contributor 'Ada Lovelace-<sfx>' and renames the first name to 'Augusta'. Sign in as admin, go to /contributors, click 'Add a contributor'.
-    - expect: Dialog 'Add a contributor' opens; alert 'Qomon is not connected, so this contributor will be kept in this tool only.' is visible
+    - expect: Dialog 'Add a contributor' opens
     - expect: Add contributor button is [disabled]
   2. Negative: fill only First name 'Ada' and Reason 'New donor added at event'. Snapshot the dialog.
     - expect: Add contributor stays [disabled] (Last name is required)

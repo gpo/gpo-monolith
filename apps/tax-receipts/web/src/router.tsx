@@ -6,7 +6,6 @@ import {
   createRouter,
   Link,
   Outlet,
-  redirect,
   useNavigate,
   useParams,
   useRouterState,
@@ -31,7 +30,7 @@ import gpoLogo from './assets/gpo-logo-EN-horizontal-green.svg';
 import { api } from './api.js';
 import { ChangePasswordModal } from './components/change-password-modal.js';
 import { ProfileModal } from './components/profile-modal.js';
-import { ADMIN_SECTIONS, AdminLayout, visibleAdminSections } from './routes/admin.js';
+import { AdminLayout, adminSectionsFor, visibleAdminSections } from './routes/admin.js';
 import { AttributePaymentPage, NewPaymentPage } from './routes/payment-entry.js';
 import { ContributionDetailPage } from './routes/contribution-detail.js';
 import { ContributionsListPage } from './routes/contributions.js';
@@ -180,7 +179,7 @@ function RootLayout() {
             <HeaderLink to="/contributors">Contributors</HeaderLink>
             <HeaderLink to="/work-queue">Work queue</HeaderLink>
             <HeaderLink to="/rtd-filings">RTD filings</HeaderLink>
-            <HeaderLink to="/admin">Admin</HeaderLink>
+            {adminSectionsFor(me.data.can).length > 0 && <HeaderLink to="/admin">Admin</HeaderLink>}
             <AccountMenu name={me.data.name} email={me.data.email} onSignOut={signOut} />
           </Group>
         </Group>
@@ -246,7 +245,10 @@ const contributorDetailRoute = createRoute({
 const newPaymentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/payments/new',
-  component: NewPaymentPage,
+  component: () => {
+    const search = useSearch({ strict: false }) as { contactId?: string };
+    return <NewPaymentPage contactId={search.contactId ?? null} />;
+  },
 });
 
 const attributePaymentRoute = createRoute({
@@ -308,14 +310,12 @@ const adminRoute = createRoute({
   component: AdminLayout,
 });
 
-// Bare /admin has no section of its own — send it to the first one so the
-// nav and Outlet always have a matching child route to render.
+// Bare /admin has no section of its own; AdminLayout sends it to the user's
+// first permitted section (which one depends on their role, so it can't be a
+// static beforeLoad redirect).
 const adminIndexRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/',
-  beforeLoad: () => {
-    throw redirect({ to: `/admin/${ADMIN_SECTIONS[0].slug}` });
-  },
 });
 
 const adminSectionRoutes = visibleAdminSections.map((section) =>

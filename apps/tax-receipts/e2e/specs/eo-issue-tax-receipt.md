@@ -387,7 +387,7 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
 
 **Steps:**
   1. Read-only: sign in as admin, open /contributors and find Email Emma (Email column 'email.emma@g4.fixture.test', Kept in 'This tool'). Open her record.
-    - expect: 'Email: email.emma@g4.fixture.test', 'Qomon contact: none (kept in this tool)', 'This contributor is kept in this tool only.'
+    - expect: 'Email: email.emma@g4.fixture.test', 'Qomon contact: none (kept in this tool)'
   2. Click 'Edit contributor', read the Email field, then click Cancel. Do NOT save.
     - expect: The Email textbox is prefilled with email.emma@g4.fixture.test and is editable (not disabled); 'Save changes' is disabled while the reason is empty.
   3. Own data. Recipe R2 (contributor with email iris.<S>@e2e.test), open 'Edit contributor', change Email to 'iris.<S>.new@e2e.test', Reason 'E2E email change', click 'Save changes'.

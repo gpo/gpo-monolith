@@ -24,6 +24,31 @@ const PAYMENT = {
   contributions: [{ id: 'c1', contactName: 'Dana Donor', amountCents: 6_000, status: 'ACTIVE' }],
 };
 
+const DANA_DETAIL = {
+  ...DANA,
+  firstName: 'Dana',
+  lastName: 'Donor',
+  source: 'tool',
+  editable: true,
+  mergedIntoId: null,
+  contributions: [
+    {
+      id: 'c5',
+      amountCents: 5_000,
+      acceptedAt: '2026-03-01T17:00:00.000Z',
+      status: 'ACTIVE',
+      periodId: 67,
+      entityKind: 'CA',
+      ridingNumber: 12,
+      goodsServices: false,
+      receivedBy: 'GPO',
+      leadershipContestantId: null,
+      remainingCents: 5_000,
+    },
+  ],
+  changeLog: [],
+};
+
 let calls: Array<{ url: string; method?: string; body?: string }> = [];
 let me = ME;
 let paymentResponse: { status: number; body: unknown } = { status: 201, body: {} };
@@ -54,6 +79,7 @@ beforeEach(() => {
         return jsonResponse({ contributionId: 'c2', remainingCents: 0, flags: [] }, 201);
       }
       if (u.endsWith('/payments/p1')) return jsonResponse(PAYMENT);
+      if (u.endsWith('/contacts/ct1')) return jsonResponse(DANA_DETAIL);
       return jsonResponse({ data: [] });
     }),
   );
@@ -100,6 +126,20 @@ test('the Add payment button is hidden from someone who cannot enter payments', 
   await screen.findByRole('heading', { name: 'Contributions' });
   await waitFor(() => expect(calls.some((c) => c.url.includes('/auth/me'))).toBe(true));
   expect(screen.queryByRole('link', { name: 'Add payment' })).not.toBeInTheDocument();
+});
+
+test("a contributor's Add a payment fills in the donor and the entity of their latest contribution", async () => {
+  renderAt('/payments/new?contactId=ct1');
+  expect(await screen.findByRole('link', { name: /Back to the contributor/ })).toHaveAttribute('href', '/contributors/ct1');
+  fireEvent.change(screen.getByLabelText('Amount ($)', { selector: 'input:not(:disabled)' }), { target: { value: '25' } });
+  fireEvent.change(screen.getByLabelText('Received on'), { target: { value: '2026-04-10' } });
+  fireEvent.change(screen.getByLabelText('Reason (required)'), { target: { value: 'cheque at the office' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save payment' }));
+
+  expect(await screen.findByText('Payment recorded')).toBeInTheDocument();
+  const sent = body((c) => c.url.endsWith('/payments') && c.method === 'POST');
+  expect(sent.contactId).toBe('ct1');
+  expect(sent.contributions[0].descriptive).toMatchObject({ entity_kind: 'CA', riding_number: 12 });
 });
 
 test('names the reference field for the method, and hides it where there is nothing to enter', async () => {

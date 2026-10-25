@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Button, Card, Group, Stack, Text } from '@mantine/core';
+import { Button, Card, Group, Stack, Table, Text } from '@mantine/core';
+import { ChangeEntryModal, changeSummary, type ChangeEntry } from './change-entry-modal.js';
 
 type ChangeHistoryCardProps = {
   /** the record's change-log entries; only `at` is read here */
@@ -33,5 +34,60 @@ export function ChangeHistoryCard({ entries, children }: ChangeHistoryCardProps)
         {open && children}
       </Stack>
     </Card>
+  );
+}
+
+type ChangeHistoryTableProps = {
+  entries: Array<ChangeEntry & { id: string }>;
+  /** shown in the modal title for entries that carry no subject type */
+  subjectType?: string;
+};
+
+/** A record's change-log entries, one row each with a summary of what
+ * changed; clicking a row opens the entry in full. Pass as the children of
+ * ChangeHistoryCard. */
+export function ChangeHistoryTable({ entries, subjectType }: ChangeHistoryTableProps) {
+  const [viewing, setViewing] = useState<ChangeEntry | null>(null);
+  return (
+    <>
+      <Table highlightOnHover>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>At</Table.Th>
+            <Table.Th>By</Table.Th>
+            <Table.Th>Reason</Table.Th>
+            <Table.Th>Changes</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {entries.map((e) => (
+            <Table.Tr
+              key={e.id}
+              onClick={() => setViewing(e)}
+              onKeyDown={(ev) => {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                  ev.preventDefault();
+                  setViewing(e);
+                }
+              }}
+              tabIndex={0}
+              style={{ cursor: 'pointer' }}
+            >
+              <Table.Td>{new Date(e.at).toLocaleString()}</Table.Td>
+              <Table.Td>{e.actorName ?? 'System'}</Table.Td>
+              <Table.Td>{e.reason}</Table.Td>
+              <Table.Td>
+                <Text size="xs" ff="monospace">
+                  {changeSummary(e)}
+                </Text>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      {viewing && (
+        <ChangeEntryModal entry={{ subjectType, ...viewing }} onClose={() => setViewing(null)} />
+      )}
+    </>
   );
 }

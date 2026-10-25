@@ -6,6 +6,7 @@ import type { AppAbility } from '../auth/abilities.js';
 import { hashPassword } from '../auth/password.js';
 import { LOCKED_ROLE_KEYS, PERMISSION_KEYS, PERMISSIONS } from '../auth/permissions.js';
 import { roleKeyFromName } from '../auth/roles.js';
+import { sessionsOfUser } from '../auth/session-store.js';
 import { withChangeLog } from '../changelog/write.js';
 import { listOutstandingDonorPrechecks } from '../donors/precheck.js';
 import {
@@ -61,6 +62,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     return { ok: true as const, user };
   }
+
+  /** Only a holder of full system access (`system.manage`) may hand it out:
+   *  otherwise `users.administer` could escalate itself to everything. */
+  const FULL_ACCESS_REFUSED = 'only a user with full system access can grant or revoke full system access';
 
   // ---- Periods -------------------------------------------------------
 
@@ -498,6 +503,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return (await app.prisma.role.count({ where: { key } })) > 0;
   }
 
+  async function roleHasFullAccess(key: string): Promise<boolean> {
+    return (await app.prisma.rolePermission.count({ where: { roleKey: key, permission: 'system.manage' } })) > 0;
+  }
+
   r.get('/admin/users', async (request, reply) => {
     if (!request.user) return reply.code(401).send({ error: 'authentication required' });
     const users = await app.prisma.user.findMany({
@@ -535,6 +544,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
       const { password, role, ...rest } = request.body;
       if (!(await roleExists(role))) return reply.code(400).send({ error: `unknown role: ${role}` });
+      if (!request.ability.can('manage', 'all') && (await roleHasFullAccess(role))) {
+        return reply.code(403).send({ error: FULL_ACCESS_REFUSED });
+      }
       if (await emailTaken(rest.email)) {
         return reply.code(409).send({ error: `another user already has the email ${rest.email}` });
       }
@@ -588,6 +600,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         include: { role: { select: { name: true } } },
       });
       if (!before) return reply.code(404).send({ error: 'user not found' });
+      if (
+        role !== undefined &&
+        role !== before.roleKey &&
+        !request.ability.can('manage', 'all') &&
+        ((await roleHasFullAccess(role)) || (await roleHasFullAccess(before.roleKey)))
+      ) {
+        return reply.code(403).send({ error: FULL_ACCESS_REFUSED });
+      }
       if (rest.email !== undefined && (await emailTaken(rest.email, id))) {
         return reply.code(409).send({ error: `another user already has the email ${rest.email}` });
       }
@@ -609,8 +629,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Admin password reset (EO evaluation row 12): for a user who has
-  // forgotten theirs. Leaves the user's sessions alone, and is
-  // change-logged with the admin as actor and their reason.
+  // forgotten theirs, or whose account may be compromised. Signs out every
+  // session of that user (except the admin's own, when resetting their own
+  // password), and is change-logged with the admin as actor and their reason.
   r.route({
     method: 'POST',
     url: '/admin/users/:id/password',
@@ -629,11 +650,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: 'user not found' });
       }
       const passwordHash = await hashPassword(request.body.newPassword);
-      await withChangeLog(app.prisma, { userId: auth.user.id, reason: request.body.reason }, async (ctx) => {
-        await ctx.tx.user.update({ where: { id }, data: { passwordHash } });
-        await ctx.log({ subjectType: 'User', subjectId: id, after: { passwordReset: true } });
-      });
-      return reply.send({ ok: true });
+      const signedOut = await withChangeLog(
+        app.prisma,
+        { userId: auth.user.id, reason: request.body.reason },
+        async (ctx) => {
+          await ctx.tx.user.update({ where: { id }, data: { passwordHash } });
+          const { count } = await ctx.tx.session.deleteMany({
+            where: { ...sessionsOfUser(id), sid: { not: request.session.sessionId } },
+          });
+          await ctx.log({ subjectType: 'User', subjectId: id, after: { passwordReset: true, sessionsSignedOut: count } });
+          return count;
+        },
+      );
+      return reply.send({ ok: true, sessionsSignedOut: signedOut });
     },
   });
 
@@ -710,6 +739,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const { name, description, permissions, reason } = request.body;
       const key = roleKeyFromName(name);
       if (!key) return reply.code(400).send({ error: 'the role name needs at least one letter or digit' });
+      if (permissions.includes('system.manage') && !request.ability.can('manage', 'all')) {
+        return reply.code(403).send({ error: FULL_ACCESS_REFUSED });
+      }
       if (await roleExists(key)) {
         return reply.code(409).send({ error: `a role with the key "${key}" already exists; choose another name` });
       }
@@ -746,6 +778,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       }
       const before = await app.prisma.role.findUnique({ where: { key }, include: roleInclude });
       if (!before) return reply.code(404).send({ error: 'role not found' });
+      const hadFullAccess = before.permissions.some((p) => p.permission === 'system.manage');
+      if (
+        permissions &&
+        permissions.includes('system.manage') !== hadFullAccess &&
+        !request.ability.can('manage', 'all')
+      ) {
+        return reply.code(403).send({ error: FULL_ACCESS_REFUSED });
+      }
       const role = await withChangeLog(app.prisma, { userId: auth.user.id, reason }, async (ctx) => {
         if (permissions) {
           await ctx.tx.rolePermission.deleteMany({ where: { roleKey: key } });

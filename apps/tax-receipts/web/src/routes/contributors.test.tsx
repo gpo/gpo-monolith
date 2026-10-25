@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
@@ -96,10 +96,11 @@ test('lists contributors with where each is kept', async () => {
   expect(screen.getByText('12 Queen St, Guelph ON N1H 1A1')).toBeTruthy();
 });
 
-test('adds a tool-owned contributor with a reason, saying it stays in this tool', async () => {
+test('adds a tool-owned contributor with a reason, with no ownership note', async () => {
   const router = renderAt('/contributors');
   fireEvent.click(await screen.findByRole('button', { name: 'Add a contributor' }));
-  expect(await screen.findByText(/Qomon is not connected, so this contributor will be kept in this tool only/)).toBeTruthy();
+  await screen.findByRole('dialog');
+  expect(screen.queryByText(/kept in this tool only/)).toBeNull();
 
   type(/First name/, 'Ada');
   type(/Last name/, 'Lovelace');
@@ -186,6 +187,12 @@ test('shows a contributor with type, change history, and an edit form', async ()
   fireEvent.click(screen.getByRole('button', { name: 'Show 1 change' }));
   expect(screen.getByText('walk-in cheque')).toBeTruthy();
   expect(screen.getByText('Terry Tester')).toBeTruthy();
+  // a row opens the entry field by field
+  fireEvent.click(screen.getByText('walk-in cheque'));
+  const entry = await screen.findByRole('dialog', { name: 'Created Contact' });
+  expect(within(entry).getByText('Ada Lovelace')).toBeTruthy();
+  fireEvent.click(within(entry).getByRole('button', { name: 'Close' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Created Contact' })).toBeNull());
 
   fireEvent.click(screen.getByRole('button', { name: 'Edit contributor' }));
   expect(((await screen.findByLabelText(/First name/)) as HTMLInputElement).value).toBe('Ada');
@@ -201,6 +208,18 @@ test('offers no edit for a Qomon contact while Qomon is not connected', async ()
   renderAt('/contributors/ct1');
   expect(await screen.findByText(/Qomon is not connected here, so it cannot be edited/)).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Edit contributor' })).toBeNull();
+});
+
+test('offers Add a payment for the contributor to someone who can enter payments', async () => {
+  renderAt('/contributors/ct1');
+  expect(await screen.findByRole('link', { name: 'Add a payment' })).toHaveAttribute('href', '/payments/new?contactId=ct1');
+});
+
+test('hides Add a payment from someone who cannot enter payments', async () => {
+  me = { ...ME, can: { ...ME.can, enterPayments: false } };
+  renderAt('/contributors/ct1');
+  expect(await screen.findByText('Contributor type: Individual')).toBeTruthy();
+  expect(screen.queryByRole('link', { name: 'Add a payment' })).toBeNull();
 });
 
 test('hides add and edit from a user without contact.manage', async () => {
