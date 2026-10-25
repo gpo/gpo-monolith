@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { expect, test } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntryWithField, signIn } from '../../helpers.js';
 import { addContributor, addPayment, createPeriod, issueSpace, newSuffix, signOut } from './recipe.js';
 
 test.describe('Issue Tax Receipt: corrections', () => {
@@ -63,11 +63,14 @@ test.describe('Issue Tax Receipt: corrections', () => {
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject type').selectOption('Receipt');
     await page.getByRole('textbox', { name: 'Subject id' }).fill(receiptId);
-    const cancelEntry = page
-      .getByRole('row')
-      .filter({ hasText: `E2E cancel ${sfx}` })
-      .filter({ hasText: '{"status":"ISSUED"}' });
-    await expect(cancelEntry).toHaveCount(1);
-    await expect(cancelEntry).toContainText('{"status":"CANCELLED"}');
+    // The cancel logs more than one Receipt entry with this reason (the cancellation notice
+    // among them); the one that changes `status` is the cancellation itself.
+    const cancelEntries = page.getByRole('row').filter({ hasText: `E2E cancel ${sfx}` });
+    await expect(cancelEntries.first()).toBeVisible();
+    await expect(cancelEntries.filter({ has: page.getByRole('cell', { name: /\bstatus\b/ }) })).toHaveCount(1);
+    const entryDialog = await openChangeEntryWithField(page, cancelEntries, 'status');
+    const statusField = changeField(entryDialog, 'status');
+    await expect(statusField.getByRole('cell').nth(2)).toHaveText('ISSUED');
+    await expect(statusField.getByRole('cell').nth(3)).toHaveText('CANCELLED');
   });
 });

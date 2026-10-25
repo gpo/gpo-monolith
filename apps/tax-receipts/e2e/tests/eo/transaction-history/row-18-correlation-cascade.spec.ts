@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { signIn, switchUser } from '../../helpers.js';
 
 type LogEntry = {
   subjectType: string;
@@ -57,7 +57,7 @@ test.describe('Transaction History', () => {
     await expect(page).toHaveURL(/\/contributions\/[^/]+$/);
     const contributionId = page.url().split('/').pop()!;
     await page.getByRole('button', { name: 'Show 2 changes' }).click();
-    // The history here is a list of paragraphs, not a table as the plan implied.
+    // Each entry is a row of the Change history table (the contribution's own and its payment's).
     await expect(page.getByText(paymentReason, { exact: true })).toHaveCount(2);
 
     // 3. Read the change log API and compare correlation ids.
@@ -87,7 +87,9 @@ test.describe('Transaction History', () => {
     expect(createEntry!.correlationId).toBeTruthy();
     expect(createEntry!.correlationId).not.toBe(correlationId);
 
-    // 4. Go to /admin/change-log and type the correlation id into 'Correlation id'.
+    // 4. Sign in as sysadmin (admin@ cannot see the Change log), go to /admin/change-log,
+    //    and type the correlation id into 'Correlation id'.
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByLabel('Correlation id').fill(correlationId);
     const rows = page.getByRole('table').getByRole('row');

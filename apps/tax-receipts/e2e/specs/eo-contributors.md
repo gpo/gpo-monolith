@@ -46,7 +46,7 @@ Covers EO checklist rows 20-23 (unique contributor id, name, address, and Indivi
     - expect: Name in heading becomes 'Idabel Unique<sfx>B'
     - expect: 'Contributor id' is unchanged and still equals idB (id survives the edit)
   6. Click the button 'Show 2 changes' in Change history.
-    - expect: Both history entries show the same contributorId in their before/after JSON
+    - expect: The create entry's dialog (click its row) shows the contributorId as added, with After equal to idB; the rename entry lists only the changed field, so its contributorId is behind "Show N unchanged fields" and shows idB as both Before and After
 
 #### 1.3. Row 21: Add a contributor from the Contributors page with first and last name recorded separately, then edit the name with a reason
 
@@ -70,8 +70,8 @@ Covers EO checklist rows 20-23 (unique contributor id, name, address, and Indivi
     - expect: Save changes is [disabled] until a reason is entered
   7. Enter Reason 'Corrected first name spelling', confirm Save changes is enabled, click it. Then click 'Show 2 changes' (button text becomes 'Hide' after expanding).
     - expect: Heading 'Augusta Lovelace-<sfx>'; 'First name: Augusta'
-    - expect: Change history table (columns At, By, Reason, Before, After) has a row with By 'Receipt Administrator', Reason 'Corrected first name spelling', Before JSON containing "firstName":"Ada" and After JSON containing "firstName":"Augusta"
-    - expect: A second row with Reason 'New donor added at event' and Before '—'
+    - expect: Change history table (columns At, By, Reason, Changes) has a row with By 'Receipt Administrator', Reason 'Corrected first name spelling', and Changes listing 'firstName'; clicking the row opens a dialog whose 'firstName' row has Before 'Ada' and After 'Augusta'
+    - expect: A second row with Reason 'New donor added at event' and Changes 'Created'
   8. Go to /contributors and type '<sfx>' in the Search box (needs two or more letters).
     - expect: Table shows one row 'Augusta Lovelace-<sfx>' with Kept in 'This tool'
 

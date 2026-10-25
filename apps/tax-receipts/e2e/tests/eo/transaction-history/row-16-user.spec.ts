@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { signIn, switchUser } from '../../helpers.js';
 
 test.describe('Transaction History', () => {
   test('Row 16: The user who made the change is captured as the admin@ user', async ({ page }) => {
@@ -36,7 +36,9 @@ test.describe('Transaction History', () => {
     await editDialog.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByText('Address: 10 Elm St, Toronto ON M4M 1A1, CA')).toBeVisible();
 
-    // 2. Go to /admin/change-log, filter by the contributor id
+    // 2. Sign in as sysadmin (admin@ cannot see the Change log), go to /admin/change-log,
+    //    filter by the contributor id
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject id').fill(id);
     const createRow = page.getByRole('row').filter({ hasText: `Row16 create ${sfx}` });
@@ -64,9 +66,8 @@ test.describe('Transaction History', () => {
     await expect(actorCells.first()).toHaveText('Receipt Administrator');
     await expect(actorCells.filter({ hasNotText: 'Receipt Administrator' })).toHaveCount(0);
 
-    // 4. Sign in as sysadmin and look up the same admin user id
-    await page.context().clearCookies();
-    await signIn(page, 'sysadmin');
+    // 4. Reload the explorer as sysadmin and look up the same admin user id: the entry is still
+    //    attributed to the admin user, not to the sysadmin who is reading the log
     await page.goto('/admin/change-log');
     await page.getByLabel('Actor user id').fill(actorUserId);
     const sysEditRow = page.getByRole('row').filter({ hasText: reason });

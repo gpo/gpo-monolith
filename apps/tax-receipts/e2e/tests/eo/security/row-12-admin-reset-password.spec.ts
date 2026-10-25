@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect, type Page } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn } from '../../helpers.js';
 
 async function signInAs(page: Page, email: string, password: string) {
   await page.goto('/login');
@@ -13,7 +13,7 @@ async function signInAs(page: Page, email: string, password: string) {
 }
 
 test.describe('Security', () => {
-  test("Row 12: Admin resets a user's password; open sessions stay signed in", async ({
+  test("Row 12: Admin resets a user's password and signs them out everywhere", async ({
     page,
     browser,
     baseURL,
@@ -60,17 +60,18 @@ test.describe('Security', () => {
     await dialog.getByLabel('Reason (required)').fill(reason);
     await expect(submit).toBeEnabled();
     await submit.click();
-    // The dialog switches to a success state; close it with Done.
-    await expect(dialog.getByText(/^Password reset\./)).toBeVisible();
+    // The dialog switches to a success state that says the user is signed out everywhere;
+    // close it with Done.
+    await expect(dialog.getByText(/^Password reset, and .+ is signed out everywhere\./)).toBeVisible();
     await dialog.getByRole('button', { name: 'Done' }).click();
     await expect(dialog).toBeHidden();
 
-    // 5. Reload B and C. By design an admin reset leaves the user's open
-    // sessions signed in (architecture.md, Auth); only the password changes.
+    // 5. Reload B and C. An admin reset signs the user out of every open session
+    // (user guide, accounts and access); the sysadmin's own session is unaffected.
     await pageB.reload();
-    await expect(pageB.getByRole('button', { name: 'Account menu' })).toBeVisible();
+    await expect(pageB.getByRole('heading', { name: 'Sign in' })).toBeVisible();
     await pageC.reload();
-    await expect(pageC.getByRole('button', { name: 'Account menu' })).toBeVisible();
+    await expect(pageC.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 
     // 6. A fresh sign-in (context D) refuses the old password and accepts the temporary one.
     const ctxD = await browser.newContext({ baseURL });
@@ -93,10 +94,15 @@ test.describe('Security', () => {
     const entry = page.getByRole('row').filter({ hasText: reason });
     await expect(entry).toBeVisible();
     await expect(entry).toContainText('Sys Admin');
-    await expect(entry).toContainText('passwordReset');
     await expect(entry).not.toContainText(initial);
     await expect(entry).not.toContainText(temp);
     await expect(entry).not.toContainText(/\$2[aby]\$/);
+    // The entry itself records the reset flag and the sessions closed, never a password or hash.
+    const entryDialog = await openChangeEntry(page, entry);
+    await expect(changeField(entryDialog, 'passwordReset')).toContainText('true');
+    await expect(entryDialog).not.toContainText(initial);
+    await expect(entryDialog).not.toContainText(temp);
+    await expect(entryDialog).not.toContainText(/\$2[aby]\$/);
 
     await ctxB.close();
     await ctxC.close();

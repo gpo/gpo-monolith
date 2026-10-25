@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { expect, test } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { signIn, switchUser } from '../../helpers.js';
 
 test.describe('Transaction History', () => {
   test('Row 17: Date and time of the change are captured', async ({ page }) => {
@@ -42,7 +42,9 @@ test.describe('Transaction History', () => {
     const t1 = new Date();
     await expect(page.getByText('Address: 22 Elm St, Toronto ON M5V 2T6, CA')).toBeVisible();
 
-    // 2. Go to /admin/change-log, filter 'Subject id' = <id>
+    // 2. Sign in as sysadmin (admin@ cannot see the Change log), go to /admin/change-log,
+    //    filter 'Subject id' = <id>
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject id').fill(id);
     const editRow = page.getByRole('row').filter({ hasText: editReason });

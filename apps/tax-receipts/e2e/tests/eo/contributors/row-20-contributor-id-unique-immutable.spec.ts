@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect, type Page } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn } from '../../helpers.js';
 
 async function addContributor(page: Page, lastName: string, reason: string) {
   await page.goto('/contributors');
@@ -93,7 +93,17 @@ test.describe('Contributors', () => {
     await page.getByRole('button', { name: 'Show 2 changes' }).click();
     const renameRow = page.getByRole('row').filter({ hasText: `E2E row 20 rename ${sfx}` });
     const createRow = page.getByRole('row').filter({ hasText: `E2E row 20 second contributor ${sfx}` });
-    await expect(renameRow).toContainText(`"contributorId":"${idB}"`);
-    await expect(createRow).toContainText(`"contributorId":"${idB}"`);
+    // The create entry adds the id; the rename entry lists only the changed field, so its
+    // unchanged contributorId sits behind "Show N unchanged fields", same before and after.
+    const createDialog = await openChangeEntry(page, createRow);
+    await expect(changeField(createDialog, 'contributorId').getByRole('cell').nth(3)).toHaveText(idB);
+    await createDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(createDialog).toBeHidden();
+    await expect(renameRow.getByRole('cell').last()).not.toContainText('contributorId');
+    const renameDialog = await openChangeEntry(page, renameRow);
+    await renameDialog.getByRole('button', { name: /^Show \d+ unchanged fields$/ }).click();
+    const renamedId = changeField(renameDialog, 'contributorId');
+    await expect(renamedId.getByRole('cell').nth(2)).toHaveText(idB);
+    await expect(renamedId.getByRole('cell').nth(3)).toHaveText(idB);
   });
 });

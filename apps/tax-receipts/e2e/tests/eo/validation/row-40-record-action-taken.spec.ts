@@ -1,8 +1,8 @@
 // spec: specs/eo-validation.md
 // seed: tests/seed.spec.ts
 
-import { test, expect } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { test, expect, type Locator } from '@playwright/test';
+import { changeField, openChangeEntry, signIn, switchUser } from '../../helpers.js';
 
 test.describe('Validation and Controls', () => {
   test('Row 40: A resolved work item shows its resolution note and the correction\'s change-log entries share a correlation id', async ({ page }) => {
@@ -93,24 +93,32 @@ test.describe('Validation and Controls', () => {
     expect(creation!.correlationId).not.toBe(refund!.correlationId);
     const correlationId = refund!.correlationId;
 
-    // 7. Open /admin/change-log and filter by that correlation id.
+    // 7. Sign in as sysadmin (admin@ cannot see the Change log), open /admin/change-log, and filter
+    //    by that correlation id. Each row summarizes the changed field; its dialog shows old and new.
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByRole('textbox', { name: 'Correlation id' }).fill(correlationId);
+    const expectFieldChange = async (row: Locator, field: string, before: string, after: string) => {
+      await expect(row.getByRole('cell').last()).toContainText(field);
+      const entryDialog = await openChangeEntry(page, row);
+      const fieldRow = changeField(entryDialog, field);
+      await expect(fieldRow.getByRole('cell').nth(2)).toHaveText(before);
+      await expect(fieldRow.getByRole('cell').nth(3)).toHaveText(after);
+      await entryDialog.getByRole('button', { name: 'Close' }).click();
+      await expect(entryDialog).toBeHidden();
+    };
     const contributionRow = page.getByRole('row').filter({ hasText: `Contribution (${contributionId})` });
     await expect(contributionRow).toHaveCount(1);
     await expect(contributionRow).toContainText(refundReason);
-    await expect(contributionRow).toContainText('"status":"ACTIVE"');
-    await expect(contributionRow).toContainText('"status":"REFUNDED"');
+    await expectFieldChange(contributionRow, 'status', 'ACTIVE', 'REFUNDED');
     const paymentRow = page.getByRole('row').filter({ hasText: /Payment \(/ });
     await expect(paymentRow).toHaveCount(1);
     await expect(paymentRow).toContainText(refundReason);
-    await expect(paymentRow).toContainText('"state":"RECEIVED"');
-    await expect(paymentRow).toContainText('"state":"REFUNDED"');
+    await expectFieldChange(paymentRow, 'state', 'RECEIVED', 'REFUNDED');
     const workItemRow = page.getByRole('row').filter({ hasText: /WorkItem \(/ });
     await expect(workItemRow).toHaveCount(1);
     await expect(workItemRow).toContainText(refundReason);
-    await expect(workItemRow).toContainText('"status":"OPEN"');
-    await expect(workItemRow).toContainText('"status":"RESOLVED"');
+    await expectFieldChange(workItemRow, 'status', 'OPEN', 'RESOLVED');
 
     // 8. Clear the Correlation id box and filter by the contribution's Subject id instead.
     await page.getByRole('textbox', { name: 'Correlation id' }).fill('');

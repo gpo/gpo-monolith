@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { expect, test } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntryWithField, signIn } from '../../helpers.js';
 import { addContributor, addPayment, createPeriod, issueSpace, newSuffix, signOut } from './recipe.js';
 
 test.describe('Issue Tax Receipt: receipt records and audit', () => {
@@ -52,16 +52,18 @@ test.describe('Issue Tax Receipt: receipt records and audit', () => {
     await page.getByLabel('Subject type').selectOption('Receipt');
     await page.getByRole('textbox', { name: 'Subject id' }).fill(receiptId!);
     // Issuance writes two Receipt entries with the same reason (the receipt, then its PDF artifact);
-    // the one carrying the number and amount is the receipt-creation entry.
-    const entryRow = page
+    // both are summarized as "Created"; the one with a receiptNumber field carries the number
+    // and amount: the receipt-creation entry.
+    const entryRows = page
       .getByRole('row')
       .filter({ hasText: reason })
-      .filter({ hasText: 'amountCents' });
-    await expect(entryRow).toHaveCount(1);
-    await expect(entryRow).toContainText(`Receipt (${receiptId})`);
-    await expect(entryRow).toContainText('Party CFO');
-    await expect(entryRow).toContainText(receiptNumber);
-    await expect(entryRow).toContainText('"amountCents":5000');
+      .filter({ has: page.getByRole('cell', { name: 'Created', exact: true }) });
+    await expect(entryRows).toHaveCount(2);
+    await expect(entryRows.filter({ hasText: `Receipt (${receiptId})` })).toHaveCount(2);
+    await expect(entryRows.filter({ hasText: 'Party CFO' })).toHaveCount(2);
+    const entryDialog = await openChangeEntryWithField(page, entryRows, 'receiptNumber');
+    await expect(changeField(entryDialog, 'receiptNumber')).toContainText(receiptNumber);
+    await expect(changeField(entryDialog, 'amountCents')).toContainText('5000');
 
     // Same facts from the API, which returns untruncated entries.
     const res = await page.request.get(`/api/change-log?subjectType=Receipt&subjectId=${receiptId}`);

@@ -2,13 +2,13 @@
 
 ## Application Overview
 
-Elections Ontario evaluation rows 13-19 (audit record id, new value, old value, user, date and time, task description, audit on new records). Demo surface: Admin -> Change log (/admin/change-log, heading "Change-log explorer") plus the "Change history" panel on the contributor and contribution pages. Seeded change-log rows have no actor (shown as `system`), so every scenario starts signed out, signs in with signIn(page, '<user>'), creates its own contributor and/or payment with a unique suffix (for example Date.now()) in the last name and in every reason, makes a live edit, then asserts on the entry that edit produced. Never edit seeded contributors or contributions (such as Baseline Donor). Qomon is off in e2e, so contributors stay in the tool and address text is asserted exactly.
+Elections Ontario evaluation rows 13-19 (audit record id, new value, old value, user, date and time, task description, audit on new records). Demo surface: Admin -> Change log (/admin/change-log, heading "Change-log explorer") plus the "Change history" panel on the contributor and contribution pages. The Admin Change log is shown only to roles that read everything or administer settings or users, so `admin@` has no Admin -> Change log: a scenario that works as admin switches to sysadmin with `switchUser(page, 'sysadmin')` (tests/helpers.ts) before opening /admin/change-log. Seeded change-log rows have no actor (shown as `system`), so every scenario starts signed out, signs in with signIn(page, '<user>'), creates its own contributor and/or payment with a unique suffix (for example Date.now()) in the last name and in every reason, makes a live edit, then asserts on the entry that edit produced. Never edit seeded contributors or contributions (such as Baseline Donor). Qomon is off in e2e, so contributors stay in the tool and address text is asserted exactly.
 
 UI facts verified while exploring (use these exact labels):
 - Contributors (/contributors): button "Add a contributor" opens dialog "Add a contributor" with First name *, Last name *, Email, Contributor type (Individual), Street number, Street, City, Province (ON default), Postal code, Country (CA default), and "Reason (required)". "Add contributor" is [disabled] until required fields and a reason are filled. A full address means street number, street, city, province, postal code, and country all filled (all-or-nothing). After saving, the browser lands on /contributors/<id> and the page shows "Address: 10 Elm St, Toronto ON M5V 2T6, CA" and "Contributor id: T<n>".
-- Contributor page: button "Edit contributor" opens dialog "Edit <name>" (same fields plus "Reason (required)"). "Save changes" is [disabled] until a field is changed AND a reason is typed. Bottom panel "Change history" has a "Show N change(s)" button (becomes "Hide") revealing a table with columns At, By, Reason, Before, After. Before/After show the full JSON (not truncated) there; an absent before renders as an em dash. By shows the actor display name ("Receipt Administrator" for admin@gpo.test, "Sys Admin" for sysadmin@gpo.test).
+- Contributor page: button "Edit contributor" opens dialog "Edit <name>" (same fields plus "Reason (required)"). "Save changes" is [disabled] until a field is changed AND a reason is typed. Bottom panel "Change history" has a "Show N change(s)" button (becomes "Hide") revealing a table with columns At, By, Reason, Changes (plus Record where entries carry a subject type, as on a contribution). Changes is a one-line summary: "Created", "Removed", or the changed field names (for example "addresses.0.city, updatedAt"). Clicking a row opens the entry dialog (role dialog) with the actor, correlation id, reason, and a table of Field, kind badge, Before, and After cells; fields are dotted paths (for example `addresses.0.city`), an absent value renders as an em dash, and unchanged fields stay hidden behind a "Show N unchanged fields" button. The helpers `openChangeEntry`, `changeField`, and `openChangeEntryWithField` in tests/helpers.ts open the dialog and find one field's row. By shows the actor display name ("Receipt Administrator" for admin@gpo.test, "Sys Admin" for sysadmin@gpo.test).
 - Payments: Contributions (/contributions) -> link "Add payment" goes to /payments/new, heading "Add a payment". Fields: "Donor who paid" (type the last name, then pick the option "Plan Probe19x"-style from the dropdown), "Amount ($)" (the first Amount field; the Contribution block has its own), Received on, Method, and in the Contribution block Recipient and Period (default "Derived from the date: 2026 Annual"; choose "2025 General Election", which is period id 64), then "Reason (required)". Button "Save payment". Result: heading "Payment recorded" with link "Open the contribution", which goes to /contributions/<id>. The contribution page lists a work item "Acceptance date is outside its period's window (A1)" for period 64 with today's date; ignore it. Its "Change history" panel shows "Show 2 changes" (Payment entry and Contribution entry, same reason).
-- Admin -> Change log: filters Subject type (select; options include Contact, Contribution, Period, but not Payment), Subject id, Actor user id (a user id, not an email), Correlation id, From, To; filtering is live on typing (no Apply button); button "Export CSV (for EO)" downloads `change-log-export.csv` using the active filters. Table columns: At, Subject (rendered "Contact (<id>)", "Contribution (<id>)", "Period (64)"), Actor, Reason, Before, After. Before/After JSON is truncated with an ellipsis; an absent before renders as an em dash. Entry id and correlation id are not shown in the table; both are in the JSON from GET /api/change-log (fields id, subjectType, subjectId, actorUserId, actorName, reason, before, after, at, correlationId; response shape { data, nextCursor }). Read them with page.request.get('/api/change-log?subjectId=<id>') after signing in (the session cookie is shared). Each contributor create and each edit has its own correlationId; a payment's Payment and Contribution entries share one.
+- Admin -> Change log: filters Subject type (select; options include Contact, Contribution, Period, but not Payment), Subject id, Actor user id (a user id, not an email), Correlation id, From, To; filtering is live on typing (no Apply button); button "Export CSV (for EO)" downloads `change-log-export.csv` using the active filters. Table columns: At, Subject (rendered "Contact (<id>)", "Contribution (<id>)", "Period (64)"), Actor, Reason, Changes (the same one-line summary as the record pages; click a row for the Before/After dialog). Entry id and correlation id are not shown in the table; both are in the JSON from GET /api/change-log (fields id, subjectType, subjectId, actorUserId, actorName, reason, before, after, at, correlationId; response shape { data, nextCursor }). Read them with page.request.get('/api/change-log?subjectId=<id>') after signing in (the session cookie is shared). Each contributor create and each edit has its own correlationId; a payment's Payment and Contribution entries share one.
 - Admin -> Periods (/admin/periods): saving is sysadmin only (admin@ gets no change-log entry). Form "Create or edit a period": Id (EO period id), Name, Kind (select ANNUAL / GENERAL_ELECTION / BY_ELECTION), Starts at (UTC), Ends at (UTC) (datetime-local; fill like 2025-05-29T00:00), "Reason (required, recorded in the change log)", button "Save period". Saving an existing id shows "Saved. Validation re-run against every mirrored contribution." Period 64 "2025 General Election" (GENERAL_ELECTION, starts 1/27/2025, ends 5/28/2025) is used by no fixture. The stored endsAt carries the browser time zone offset (for example 2025-05-28T04:00:00.000Z), so assert the date, not the exact time of day.
 
 General guidance for generated tests: before any click on a Save/Add button, assert toBeEnabled (or toBeDisabled where the scenario says so) and never click a disabled button. Wait for the dialog to close or the success state rather than sleeping.
@@ -51,11 +51,11 @@ General guidance for generated tests: before any click on a Save/Add button, ass
 **Steps:**
   1. Mutates: creates contributor 'Nina Newval<suffix>' and edits its city. Sign in as admin. Add the contributor (First name 'Nina', Last name 'Newval<suffix>', Street number '10', Street 'Elm St', City 'Toronto', Postal code 'M5V 2T6', Reason 'Row14 create <suffix>'). On the new record click 'Edit contributor', change City to 'Ottawa', Reason 'Row14 new value <suffix>', assert 'Save changes' is enabled, click it.
     - expect: The contributor page shows 'Address: 10 Elm St, Ottawa ON M5V 2T6, CA'.
-  2. Go to /admin/change-log and type the contributor id into 'Subject id'. Find the row whose Reason is 'Row14 new value <suffix>'.
-    - expect: The row's After cell is non-empty JSON beginning with the contact (the cell is truncated with an ellipsis in the UI).
+  2. Sign in as sysadmin (switchUser), go to /admin/change-log and type the contributor id into 'Subject id'. Find the row whose Reason is 'Row14 new value <suffix>' and click it.
+    - expect: The row's Changes cell lists 'addresses.0.city'; the dialog's 'addresses.0.city' row has After 'Ottawa'.
     - expect: Reading GET /api/change-log?subjectId=<id>, the entry with that reason has after.addresses[0].city === 'Ottawa'.
   3. Open /contributors/<id> and click 'Show 2 changes' in Change history.
-    - expect: The newest row has Reason 'Row14 new value <suffix>' and its After cell text contains "city":"Ottawa".
+    - expect: The newest row has Reason 'Row14 new value <suffix>', its Changes cell lists 'addresses.0.city', and its dialog shows After 'Ottawa'.
 
 #### 1.4. Row 15: Old value is captured in 'before' on the same entry
 
@@ -64,11 +64,11 @@ General guidance for generated tests: before any click on a Save/Add button, ass
 **Steps:**
   1. Mutates: creates contributor 'Olga Oldval<suffix>' with city 'Toronto' and edits the city to 'Hamilton'. Sign in as admin, add the contributor (Street number '10', Street 'Elm St', City 'Toronto', Postal code 'M5V 2T6', Reason 'Row15 create <suffix>'), then edit City to 'Hamilton' with Reason 'Row15 old value <suffix>' (assert 'Save changes' is enabled before clicking).
     - expect: The contributor page shows 'Address: 10 Elm St, Hamilton ON M5V 2T6, CA'.
-  2. Go to /admin/change-log, filter 'Subject id' = <id>, locate the row with Reason 'Row15 old value <suffix>'.
-    - expect: Its Before cell is non-empty JSON (not the em dash).
+  2. Sign in as sysadmin (switchUser), go to /admin/change-log, filter 'Subject id' = <id>, locate the row with Reason 'Row15 old value <suffix>' and click it.
+    - expect: The dialog's 'addresses.0.city' row has Before 'Toronto' and After 'Hamilton'.
     - expect: Via GET /api/change-log?subjectId=<id>, that entry has before.addresses[0].city === 'Toronto' and after.addresses[0].city === 'Hamilton'.
   3. Open /contributors/<id> and click 'Show 2 changes' in Change history.
-    - expect: The edit row's Before cell contains "city":"Toronto" and its After cell contains "city":"Hamilton"; the create row's Before cell is an em dash.
+    - expect: The edit row's dialog shows the same Before 'Toronto' and After 'Hamilton'; the create row's Changes cell reads 'Created' and its dialog shows an em dash as Before for 'addresses.0.city'.
 
 #### 1.5. Row 16: The user who made the change is captured as the admin@ user
 
@@ -77,11 +77,11 @@ General guidance for generated tests: before any click on a Save/Add button, ass
 **Steps:**
   1. Mutates: creates contributor 'Uma User<suffix>' and edits its postal code. Sign in as admin, add the contributor (Street number '10', Street 'Elm St', City 'Toronto', Postal code 'M5V 2T6', Reason 'Row16 create <suffix>'), then edit Postal code to 'M4M 1A1' with Reason 'Row16 user <suffix>' (assert 'Save changes' is enabled first).
     - expect: The page shows 'Address: 10 Elm St, Toronto ON M4M 1A1, CA'.
-  2. Go to /admin/change-log, filter 'Subject id' = <id>.
+  2. Sign in as sysadmin (switchUser), go to /admin/change-log, filter 'Subject id' = <id>.
     - expect: Both rows (create and edit) show Actor 'Receipt Administrator'; neither shows 'system'.
   3. Read GET /api/change-log?subjectId=<id>, take actorUserId from the edit entry. Clear 'Subject id' and type that id into 'Actor user id'.
     - expect: The list contains the row with Reason 'Row16 user <suffix>' and every visible row has Actor 'Receipt Administrator' (no rows by other users, no 'system' rows).
-  4. Clear cookies (or sign out), sign in as sysadmin with signIn(page, 'sysadmin'), go to /admin/change-log, put the same admin user id in 'Actor user id'.
+  4. Still signed in as sysadmin, reload /admin/change-log and put the same admin user id in 'Actor user id'.
     - expect: The 'Row16 user <suffix>' entry is still attributed to 'Receipt Administrator', not 'Sys Admin'.
 
 #### 1.6. Row 17: Date and time of the change are captured
@@ -91,7 +91,7 @@ General guidance for generated tests: before any click on a Save/Add button, ass
 **Steps:**
   1. Mutates: creates contributor 'Tim Stamp<suffix>' and edits its street number. Sign in as admin, add the contributor (Street number '10', Street 'Elm St', City 'Toronto', Postal code 'M5V 2T6', Reason 'Row17 create <suffix>'). Record t0 = new Date() immediately before saving the edit (Street number '22', Reason 'Row17 time <suffix>', 'Save changes' enabled), and t1 right after the dialog closes.
     - expect: The page shows 'Address: 22 Elm St, Toronto ON M5V 2T6, CA'.
-  2. Go to /admin/change-log, filter 'Subject id' = <id>.
+  2. Sign in as sysadmin (switchUser), go to /admin/change-log, filter 'Subject id' = <id>.
     - expect: The edit row's At cell is a non-empty localized date and time (for example '10/18/2026, 1:53:05 PM') on today's date.
   3. Read GET /api/change-log?subjectId=<id> and parse entry.at for each entry.
     - expect: The edit entry's at is an ISO timestamp with t0 - 5s <= at <= t1 + 5s.
@@ -110,7 +110,7 @@ General guidance for generated tests: before any click on a Save/Add button, ass
     - expect: 'Save changes' is [disabled] (assert toBeDisabled; do not click it).
   3. Type Reason 'Row18 task <suffix>'.
     - expect: 'Save changes' becomes enabled. Click it; the dialog closes.
-  4. Go to /admin/change-log, filter 'Subject id' = <id>.
+  4. Sign in as sysadmin (switchUser), go to /admin/change-log, filter 'Subject id' = <id>.
     - expect: The edit row's Reason cell reads exactly 'Row18 task <suffix>'; the create row's Reason reads 'Row18 create <suffix>'.
 
 #### 1.8. Row 18: A payment cascade shares one correlation id
@@ -124,7 +124,7 @@ General guidance for generated tests: before any click on a Save/Add button, ass
     - expect: Two history rows, both with Reason 'Row18c payment <suffix>' (one Payment, one Contribution).
   3. Read GET /api/change-log?subjectId=<contribution id from the URL> and GET /api/change-log (filtered by actorUserId of the admin) and pick the entries with reason 'Row18c payment <suffix>'.
     - expect: The Payment entry and the Contribution entry have the same non-empty correlationId; it differs from the contributor-creation entry's correlationId.
-  4. Go to /admin/change-log and type that correlationId into 'Correlation id'.
+  4. Sign in as sysadmin (switchUser), go to /admin/change-log and type that correlationId into 'Correlation id'.
     - expect: The listed rows all have Reason 'Row18c payment <suffix>' (the Contribution row at least; the Subject type select does not offer Payment); no row with Reason 'Row18c create <suffix>' is listed.
   5. With the correlation filter active, click 'Export CSV (for EO)' inside page.waitForEvent('download').
     - expect: A download named 'change-log-export.csv' starts; its text contains the correlationId and the reason 'Row18c payment <suffix>' and does not contain 'Row18c create <suffix>'.
@@ -137,11 +137,11 @@ General guidance for generated tests: before any click on a Save/Add button, ass
   1. Mutates: creates contributor 'Carla Create<suffix>' and edits its address. Sign in as admin, go to /contributors, click 'Add a contributor', fill First name 'Carla', Last name 'Create<suffix>', Street number '10', Street 'Elm St', City 'Toronto', Postal code 'M5V 2T6', Reason 'Row19 create <suffix>', assert 'Add contributor' is enabled, click it.
     - expect: Lands on /contributors/<id> with 'Address: 10 Elm St, Toronto ON M5V 2T6, CA'.
   2. In the Change history panel click 'Show 1 change'.
-    - expect: One row: By 'Receipt Administrator', Reason 'Row19 create <suffix>', Before shows an em dash (empty), After shows the new contact JSON including "name":"Carla Create<suffix>" and "street":"Elm St".
+    - expect: One row: By 'Receipt Administrator', Reason 'Row19 create <suffix>', Changes 'Created'. Its dialog shows an em dash as Before and the new values as After: 'name' is "Carla Create<suffix>" and 'addresses.0.street' is "Elm St".
   3. Click 'Edit contributor', change Street number to '55' and Street to 'Birch Rd', Reason 'Row19 address <suffix>', assert 'Save changes' is enabled, click it. Then click 'Show 2 changes'.
     - expect: The page shows 'Address: 55 Birch Rd, Toronto ON M5V 2T6, CA'.
-    - expect: Two rows. The newest has Reason 'Row19 address <suffix>', By 'Receipt Administrator', Before containing "street":"Elm St" and "housenumber":"10", After containing "street":"Birch Rd" and "housenumber":"55".
-  4. Go to /admin/change-log and filter 'Subject id' = <id>.
+    - expect: Two rows. The newest has Reason 'Row19 address <suffix>', By 'Receipt Administrator', Changes listing 'addresses.0.street' and 'addresses.0.housenumber'; its dialog shows Before "Elm St" and "10", After "Birch Rd" and "55".
+  4. Sign in as sysadmin (switchUser), go to /admin/change-log and filter 'Subject id' = <id>.
     - expect: The same two Contact (<id>) entries are listed, newest first, with Actor 'Receipt Administrator'.
 
 #### 1.10. Row 19: Audit on new records - a live payment creates a Contribution entry with before null
@@ -152,9 +152,9 @@ General guidance for generated tests: before any click on a Save/Add button, ass
   1. Mutates: creates contributor 'Pablo Pay<suffix>' and a $40 payment in period 64 (no fixture uses it). Sign in as admin, add the contributor (Street number '10', Street 'Elm St', City 'Toronto', Postal code 'M5V 2T6', Reason 'Row19p create <suffix>'). Go to Contributions then click 'Add payment' (/payments/new), pick the donor, first 'Amount ($)' 40, Period '2025 General Election', Reason 'Row19 payment <suffix>', assert 'Save payment' is enabled, click it.
     - expect: Heading 'Payment recorded'.
   2. Click 'Open the contribution' and click 'Show 2 changes' in Change history. Capture the contribution id from the URL.
-    - expect: Two rows with Reason 'Row19 payment <suffix>' and By 'Receipt Administrator'; the Before column of each is an em dash.
-  3. Go to /admin/change-log, choose Subject type 'Contribution', and type the contribution id into 'Subject id'.
-    - expect: One row: Subject 'Contribution (<id>)', Actor 'Receipt Administrator', Reason 'Row19 payment <suffix>', Before an em dash, After non-empty JSON.
+    - expect: Two rows with Reason 'Row19 payment <suffix>' and By 'Receipt Administrator'.
+  3. Sign in as sysadmin (switchUser), go to /admin/change-log, choose Subject type 'Contribution', and type the contribution id into 'Subject id'.
+    - expect: One row: Subject 'Contribution (<id>)', Actor 'Receipt Administrator', Reason 'Row19 payment <suffix>', Changes 'Created'. Its dialog is titled "Created Contribution (<id>)" and shows an em dash as Before and 4000 as After for 'amountCents'.
     - expect: GET /api/change-log?subjectId=<id> returns an entry with before === null.
 
 #### 1.11. Row 19: Audit on new records - a period edit is logged as a Period entry
@@ -179,7 +179,7 @@ General guidance for generated tests: before any click on a Save/Add button, ass
 **Steps:**
   1. Mutates: creates contributor 'Eve Export<suffix>' and edits its city. Sign in as admin, add the contributor (Street number '10', Street 'Elm St', City 'Toronto', Postal code 'M5V 2T6', Reason 'Row19x create <suffix>') and edit City to 'Barrie' with Reason 'Row19x edit <suffix>' (assert 'Save changes' enabled).
     - expect: The page shows 'Address: 10 Elm St, Barrie ON M5V 2T6, CA'.
-  2. Go to /admin/change-log, type the contributor id into 'Subject id', then click 'Export CSV (for EO)' inside page.waitForEvent('download').
+  2. Sign in as sysadmin (switchUser), go to /admin/change-log, type the contributor id into 'Subject id', then click 'Export CSV (for EO)' inside page.waitForEvent('download').
     - expect: A download starts with suggested filename 'change-log-export.csv'.
   3. Read the downloaded text.
     - expect: The header row has columns at, subjectType, subjectId, actor, reason, correlationId, before, after (quoted or unquoted).

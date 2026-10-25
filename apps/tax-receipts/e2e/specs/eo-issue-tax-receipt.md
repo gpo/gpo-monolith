@@ -259,7 +259,7 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
   1. Recipe R1 to R4 with one payment and the run reason 'E2E issue <S>'. From the result row, take the receipt id from the 'View PDF' href (/api/receipts/<id>/pdf).
     - expect: Receipt id captured.
   2. Sign in as sysadmin, open /admin/change-log (Change-log explorer). Set Subject type to Receipt and Subject id to the receipt id.
-    - expect: An entry with Subject 'Receipt (<id>)', Reason 'E2E issue <S>', and Actor 'Party CFO' (the cfo user's display name), After containing the receipt number and the amount (for example amountCents 5000).
+    - expect: An entry with Subject 'Receipt (<id>)', Reason 'E2E issue <S>', and Actor 'Party CFO' (the cfo user's display name), Changes 'Created'. Issuing writes two such entries with the same reason (the receipt, then its PDF artifact); click the one whose dialog has a 'receiptNumber' field: it shows the receipt number and the amount (for example amountCents 5000) as After.
   3. Also open the contribution page as cfo and expand 'Show N changes' under 'Change history'.
     - expect: The issuance reason 'E2E issue <S>' is listed.
 
@@ -272,7 +272,7 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
     - expect: '1 issued, 0 failed.'
   2. On the contribution page read the receipt row's issue date; as sysadmin open /admin/change-log filtered by Subject type Receipt and the receipt id.
     - expect: The row's issue date equals today's local date (locale formatted) and the PDF prints 'Issue Date: <today UTC>'.
-    - expect: The change-log 'At' timestamp for the issuance entry (rendered with toLocaleString) parses to a time between t0 and t1 (allow a minute of slack).
+    - expect: The 'At' timestamp in the dialog of the issuance entry (the one with a 'receiptNumber' field; rendered with toLocaleString) parses to a time between t0 and t1 (allow a minute of slack).
 
 ### 3. Corrections: lost, cancel, reissue
 
@@ -286,14 +286,14 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
   1. Read-only fixture. As cfo open the contributor 'Lost Lena' (9503 PARTY, $45.00) and her contribution; take the receipt id from the 'View PDF' href.
     - expect: One receipt row, status ISSUED (a lost receipt stays valid; this screen shows no separate 'lost' column).
   2. As sysadmin open /admin/change-log, Subject type Receipt, Subject id <receipt id>.
-    - expect: An entry with Before {"lost":false} and After {"lost":true} and a reprint entry with kind LOST_COPY.
+    - expect: An entry whose Changes cell reads 'lost' and whose dialog shows Before 'false' and After 'true', and a reprint entry (Changes 'Created') whose dialog shows a 'kind' of LOST_COPY.
   3. Live. Recipe R1 to R4 with one $50 payment (own data). On the contribution page open the receipt's 'Correct' button (its accessible name is 'Correct receipt GPO-...') and choose the menu item 'Reprint as a lost-receipt copy'.
     - expect: A modal titled 'Reprint as a lost-receipt copy: GPO-...' explaining it reprints unaltered, stamped COPY, and that the receipt stays valid; Received-by label prefilled 'Green Party of Ontario'; Confirm disabled until a reason of 3 or more characters is filled.
   4. Fill reason 'E2E lost' and click Confirm.
     - expect: The modal shows 'Copy generated; the original is flagged lost.'
     - expect: After closing, the receipt row is still ISSUED and the 'Cancel' and 'Reissue' options remain available.
   5. As sysadmin check the change log for the receipt id.
-    - expect: An entry reason 'E2E lost' with Before {"lost":false} After {"lost":true}.
+    - expect: An entry reason 'E2E lost' whose Changes cell reads 'lost' and whose dialog shows Before 'false' and After 'true'.
 
 #### 3.2. Row 60: The lost-receipt reprint is stamped COPY
 
@@ -322,7 +322,7 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
     - expect: The 'Correct' button is gone for this row.
     - expect: The 'Issue a receipt' button is enabled again (the amount can be receipted again).
   4. As sysadmin check /admin/change-log for the receipt id.
-    - expect: An entry with reason 'E2E cancel', Before {"status":"ISSUED"} and After {"status":"CANCELLED"}.
+    - expect: Entries with reason 'E2E cancel' (the cancel logs more than one); the one whose Changes cell lists 'status' has a dialog showing Before 'ISSUED' and After 'CANCELLED'.
 
 #### 3.4. Row 62: Cancellation notice opens the CANCELLED copy and Email to donor queues it
 

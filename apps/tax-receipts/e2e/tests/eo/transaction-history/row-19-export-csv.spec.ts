@@ -3,7 +3,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { signIn, switchUser } from '../../helpers.js';
 
 test.describe('Transaction History', () => {
   test('Row 19: The change log export downloads as a CSV', async ({ page }) => {
@@ -36,7 +36,9 @@ test.describe('Transaction History', () => {
     await saveButton.click();
     await expect(page.getByText('Address: 10 Elm St, Barrie ON M5V 2T6, CA')).toBeVisible();
 
-    // 2. Go to /admin/change-log, filter by the contributor id, and export the CSV
+    // 2. Sign in as sysadmin (admin@ cannot see the Change log), go to /admin/change-log,
+    //    filter by the contributor id, and export the CSV
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject id').fill(id);
     const downloadPromise = page.waitForEvent('download');

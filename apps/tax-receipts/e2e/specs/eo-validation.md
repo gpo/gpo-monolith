@@ -282,7 +282,7 @@ Every scenario starts signed out and signs in with signIn(page, '<user>') from t
 **File:** `tests/eo/validation/row-40-record-action-taken.spec.ts`
 
 **Steps:**
-  1. Sign in as admin. Mutates: creates contributor 'Audit Trail<suffix>' (BC address) and one $50.00 payment in period 64 dated 2025-03-15, refunds it, and excepts a second item. Asserts only on items this scenario resolved.
+  1. Sign in as admin (switch to sysadmin for step 7). Mutates: creates contributor 'Audit Trail<suffix>' (BC address) and one $50.00 payment in period 64 dated 2025-03-15, refunds it, and excepts a second item. Asserts only on items this scenario resolved.
     - expect: Signed in.
   2. Create the contributor with the full BC address (456 Robson St, Vancouver, BC, V6B 1A1) and the payment as in row 33; open the contribution and record its id (the URL segment).
     - expect: B1 and C3 are OPEN.
@@ -294,7 +294,7 @@ Every scenario starts signed out and signs in with signIn(page, '<user>') from t
     - expect: Status RESOLVED and Resolution 'closed by a correction: <contribution id> is now REFUNDED' (the recorded action taken).
   6. Read the correlation id: GET /api/change-log?subjectId=<contribution id> in the signed-in session and take the correlationId of the entry whose reason is 'e2e audit trail refund' (its after is {"status":"REFUNDED"}).
     - expect: The response lists the creation entry (reason of the payment) and the refund entry with different correlation ids.
-  7. Open /admin/change-log, type that correlation id into the 'Correlation id' textbox, and wait for the table to update.
-    - expect: The table lists several entries, all with reason 'e2e audit trail refund' and the same actor: a 'Contribution (<id>)' row (ACTIVE to REFUNDED), a 'Payment (<id>)' row (RECEIVED to REFUNDED), and a 'WorkItem (<id>)' row for the B1 item (OPEN to RESOLVED). Do not assert an exact count beyond at least these three types. The correlation id itself is not a visible column.
+  7. Sign in as sysadmin (switchUser in tests/helpers.ts; admin@ has no Admin -> Change log), open /admin/change-log, type that correlation id into the 'Correlation id' textbox, and wait for the table to update.
+    - expect: The table lists several entries, all with reason 'e2e audit trail refund' and the same actor: a 'Contribution (<id>)' row, a 'Payment (<id>)' row, and a 'WorkItem (<id>)' row for the B1 item. Do not assert an exact count beyond at least these three types. The correlation id itself is not a visible column. Each row's Changes cell lists the changed field, and clicking the row opens a dialog showing Before and After: 'status' ACTIVE to REFUNDED on the contribution, 'state' RECEIVED to REFUNDED on the payment, and 'status' OPEN to RESOLVED on the work item.
   8. Clear the Correlation id box and type the subject id of the contribution into 'Subject id' instead.
     - expect: Only the Contribution rows for that id appear: the creation entry (reason 'e2e b1'-style text from the payment) and the refund entry, which carry different correlation ids, showing one correction shares one id.

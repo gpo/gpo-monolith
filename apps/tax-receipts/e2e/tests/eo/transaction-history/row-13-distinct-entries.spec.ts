@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { signIn, switchUser } from '../../helpers.js';
 
 test.describe('Transaction History', () => {
   test('Row 13: Two edits produce two distinct audit entries and a correlation id narrows to one cascade', async ({ page }) => {
@@ -45,7 +45,8 @@ test.describe('Transaction History', () => {
     await expect(page.getByRole('dialog')).toBeHidden();
     await expect(page.getByText('Address: 10 Oak Ave, Toronto ON M5V 2T6, CA')).toBeVisible();
 
-    // 3. Go to /admin/change-log and filter by the contributor id
+    // 3. Sign in as sysadmin (admin@ cannot see the Change log), go to /admin/change-log, and filter by the contributor id
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject id').fill(id);
     const rows = page.locator('tbody tr');
