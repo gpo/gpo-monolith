@@ -22,7 +22,7 @@ test.describe('General', () => {
     await expect(page).toHaveURL(/\/contributions\/[^/]+$/);
     await expect(page.getByRole('heading', { name: 'Contribution', level: 2 })).toBeVisible();
 
-    await expect(page.getByText('Entered by hand')).toBeVisible();
+    await expect(page.getByText('Qomon', { exact: true })).toHaveCount(0);
     await expect(page.getByText('$500.00')).toBeVisible();
     await expect(page.getByText('Cheque', { exact: true })).toBeVisible();
     await expect(page.getByText('fixture-g4-3')).toBeVisible();

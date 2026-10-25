@@ -63,3 +63,41 @@ export async function resolveWorkItem(
     return after;
   });
 }
+
+export class WorkItemNotExceptionError extends Error {
+  readonly statusCode = 409;
+  constructor(workItemId: string, status: string) {
+    super(`work item ${workItemId} is ${status}; only an exception's reason can be edited`);
+    this.name = 'WorkItemNotExceptionError';
+  }
+}
+
+export interface EditExceptionInput {
+  workItemId: string;
+  actorUserId: string;
+  /** the new justification, replacing `resolutionNote`. */
+  exceptionReason: string;
+  /** why it changed, for the change log (the edit is a change in itself). */
+  reason: string;
+}
+
+/** Rewrite an exception's justification. `closedAt` is left alone on
+ *  purpose: it dates the exception, and validation/run.ts expires it at the
+ *  end of that calendar year, so an edit must not extend it. */
+export async function editException(prisma: PrismaClient, input: EditExceptionInput): Promise<WorkItem> {
+  const current = await prisma.workItem.findUnique({ where: { id: input.workItemId } });
+  if (!current) throw new WorkItemNotFoundError(input.workItemId);
+  if (current.status !== 'EXCEPTION') {
+    throw new WorkItemNotExceptionError(input.workItemId, current.status);
+  }
+
+  return withChangeLog(prisma, { userId: input.actorUserId, reason: input.reason }, async (ctx) => {
+    const before = current;
+    const after = await ctx.tx.workItem.update({
+      where: { id: current.id },
+      data: { resolutionNote: input.exceptionReason },
+    });
+    await ctx.log({ subjectType: 'WorkItem', subjectId: current.id, before, after });
+    return after;
+  });
+}

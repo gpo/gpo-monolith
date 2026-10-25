@@ -3,10 +3,11 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { SessionUser } from '../plugins/auth.js';
 import { listWorkItems } from '../work-items/list.js';
-import { resolveWorkItem } from '../work-items/resolve.js';
+import { editException, resolveWorkItem } from '../work-items/resolve.js';
 
 /**
- * Work queue (ticket 1.8, screens.md 5): list + resolve/except. `WorkItem`
+ * Work queue (ticket 1.8, screens.md 5): list + resolve/except, and editing
+ * an exception's reason after the fact. `WorkItem`
  * is one table for five queues (VALIDATION, DIFF, OWED_TO_EO, SYNC_INCIDENT,
  * DELIVERY);
  * the `kind` filter is what the screen's tabs key off.
@@ -69,6 +70,32 @@ export async function workItemRoutes(app: FastifyInstance): Promise<void> {
         actorUserId: user.id,
         reason: request.body.reason,
         outcome: request.body.outcome,
+      });
+      return reply.send(updated);
+    },
+  });
+
+  r.route({
+    method: 'PATCH',
+    url: '/work-items/:id/exception',
+    schema: {
+      params: z.object({ id: z.string() }),
+      body: z.object({
+        exceptionReason: z.string().trim().min(3),
+        reason: z.string().min(3),
+      }),
+    },
+    handler: async (request, reply) => {
+      const user = request.user as SessionUser | undefined;
+      if (!user) return reply.code(401).send({ error: 'authentication required' });
+      if (!request.ability.can('update', 'WorkItem')) {
+        return reply.code(403).send({ error: 'not permitted to edit work items' });
+      }
+      const updated = await editException(app.prisma, {
+        workItemId: request.params.id,
+        actorUserId: user.id,
+        exceptionReason: request.body.exceptionReason,
+        reason: request.body.reason,
       });
       return reply.send(updated);
     },

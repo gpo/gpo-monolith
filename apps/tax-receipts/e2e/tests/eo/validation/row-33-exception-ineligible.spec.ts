@@ -49,23 +49,41 @@ test.describe('Validation and Controls', () => {
     const exceptionButton = b1Row.getByRole('button', { name: 'Exception' });
     await expect(exceptionButton).toBeEnabled();
     await exceptionButton.click();
-    const reasonBox = b1Row.getByRole('textbox', { name: 'Exception reason' });
-    const confirm = b1Row.getByRole('button', { name: 'Confirm' });
+    const modal = page.getByRole('dialog', { name: 'Record an exception' });
+    const reasonBox = modal.getByRole('textbox', { name: 'Exception reason' });
+    const record = modal.getByRole('button', { name: 'Record exception' });
     await expect(reasonBox).toBeVisible();
-    await expect(confirm).toBeDisabled();
-    await expect(b1Row.getByRole('button', { name: 'Cancel' })).toBeVisible();
+    await expect(record).toBeDisabled();
+    await expect(modal.getByRole('button', { name: 'Cancel' })).toBeVisible();
 
     // 4. Type 'ab' into 'Exception reason'.
     await reasonBox.fill('ab');
-    await expect(confirm).toBeDisabled();
+    await expect(record).toBeDisabled();
 
-    // 5. Replace with a full reason and confirm.
-    const reason = 'Donor is a BC resident accepted by head office';
+    // 5. Replace with a full reason and record it.
+    const reason = 'Ontario resident studying at UBC';
     await reasonBox.fill(reason);
-    await expect(confirm).toBeEnabled();
-    await confirm.click();
+    await expect(record).toBeEnabled();
+    await record.click();
+    await expect(modal).toBeHidden();
     await expect(b1Row.getByRole('cell', { name: 'EXCEPTION' })).toBeVisible();
     await expect(b1Row.getByText(reason)).toBeVisible();
     await expect(c3Row.getByRole('cell', { name: 'OPEN' })).toBeVisible();
+
+    // 6. Edit the exception to explain how residency was confirmed.
+    await b1Row.getByRole('button', { name: 'Edit' }).click();
+    const edit = page.getByRole('dialog', { name: 'Edit exception' });
+    const editBox = edit.getByRole('textbox', { name: 'Exception reason' });
+    await expect(editBox).toHaveValue(reason);
+    const longer = 'Ontario resident studying at UBC; home address in Ottawa confirmed with the donor by phone';
+    await editBox.fill(longer);
+    const save = edit.getByRole('button', { name: 'Save exception' });
+    await expect(save).toBeDisabled();
+    await edit.getByRole('textbox', { name: 'Reason for the edit (required)' }).fill('added how residency was confirmed');
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(edit).toBeHidden();
+    await expect(b1Row.getByRole('cell', { name: 'EXCEPTION' })).toBeVisible();
+    await expect(b1Row.getByText(longer)).toBeVisible();
   });
 });

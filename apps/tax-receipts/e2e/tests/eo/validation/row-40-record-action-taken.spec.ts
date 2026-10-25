@@ -50,10 +50,12 @@ test.describe('Validation and Controls', () => {
     const queueRow = (code: string) =>
       page.getByRole('row').filter({ hasText: donor }).filter({ hasText: code });
     await queueRow('(C3)').getByRole('button', { name: 'Exception' }).click();
-    await queueRow('(C3)').getByRole('textbox', { name: 'Exception reason' }).fill('e2e postal code reviewed');
-    const confirm = queueRow('(C3)').getByRole('button', { name: 'Confirm' });
-    await expect(confirm).toBeEnabled();
-    await confirm.click();
+    const modal = page.getByRole('dialog', { name: 'Record an exception' });
+    await modal.getByRole('textbox', { name: 'Exception reason' }).fill('e2e postal code reviewed');
+    const record = modal.getByRole('button', { name: 'Record exception' });
+    await expect(record).toBeEnabled();
+    await record.click();
+    await expect(modal).toBeHidden();
     await expect(queueRow('(C3)')).toContainText('EXCEPTION');
     await expect(queueRow('(C3)')).toContainText('e2e postal code reviewed');
 
