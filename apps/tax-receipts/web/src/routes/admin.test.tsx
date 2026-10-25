@@ -3,16 +3,33 @@ import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import type { Me } from '../api.js';
+import type { AdminUserRow, Me } from '../api.js';
 import { makeRouter } from '../router.js';
 import { ME, jsonResponse } from '../test/fixtures.js';
 
 let calls: Array<{ url: string; method?: string; body?: string }> = [];
 let me: Me = ME;
+let users: AdminUserRow[] = [];
+
+function userRow(overrides: Partial<AdminUserRow>): AdminUserRow {
+  return {
+    id: 'u2',
+    name: 'Fran Filer',
+    email: 'fran@example.org',
+    role: 'filer',
+    roleName: 'Filer',
+    active: true,
+    isCfoDesignate: false,
+    allRidings: false,
+    ridingGrants: [],
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   calls = [];
   me = ME;
+  users = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -21,7 +38,15 @@ beforeEach(() => {
       if (String(url).includes('/admin/periods')) return jsonResponse({ data: [] });
       if (String(url).includes('/admin/contribution-limits')) return jsonResponse({ data: [] });
       if (String(url).includes('/admin/business-day-calendars')) return jsonResponse({ data: [] });
-      if (String(url).includes('/admin/users')) return jsonResponse({ data: [] });
+      if (String(url).includes('/admin/users/') && init?.method === 'PATCH') return jsonResponse(users[0]);
+      if (String(url).includes('/admin/users')) return jsonResponse({ data: users });
+      if (String(url).includes('/admin/ridings')) {
+        return jsonResponse({
+          data: [
+            { ridingNumber: 121, name: 'Guelph', qomonApiBase: null, active: true, qomonApiKeySet: false, updatedAt: '2029-01-01T00:00:00Z' },
+          ],
+        });
+      }
       if (String(url).includes('/admin/roles')) return jsonResponse({ data: [] });
       if (String(url).includes('/admin/kill-switch')) {
         if (init?.method === 'POST') return jsonResponse({ engaged: true, reason: 'CEO request' });
@@ -158,4 +183,52 @@ test('leaving the admin area from a section goes where it was asked', async () =
 
   fireEvent.click(screen.getByRole('link', { name: 'Contributions' }));
   await waitFor(() => expect(router.state.resolvedLocation?.pathname).toBe('/contributions'));
+});
+
+test('the users table shows each user\'s riding access', async () => {
+  users = [
+    userRow({ id: 'a', name: 'Central Cass', allRidings: true }),
+    userRow({ id: 'b', name: 'Riding Ray', ridingGrants: [122, 121] }),
+    userRow({ id: 'c', name: 'Party Pat' }),
+  ];
+  renderPage('/admin/users');
+
+  expect(await screen.findByText('Central Cass')).toBeInTheDocument();
+  expect(screen.getByRole('row', { name: /Central Cass/ })).toHaveTextContent('All');
+  expect(screen.getByRole('row', { name: /Riding Ray/ })).toHaveTextContent('121, 122');
+  expect(screen.getByRole('row', { name: /Party Pat/ })).toHaveTextContent('Party only');
+});
+
+test('editing a user can give them all ridings, and sends riding access only when it changed', async () => {
+  users = [userRow({})];
+  renderPage('/admin/users');
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+  expect(screen.getByRole('textbox', { name: 'Granted ridings' })).not.toBeDisabled();
+  fireEvent.click(screen.getByLabelText(/All ridings/));
+  expect(screen.getByRole('textbox', { name: 'Granted ridings' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Reason (required)'), { target: { value: 'central staff' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+  expect(JSON.parse(calls.find((c) => c.method === 'PATCH')!.body!)).toMatchObject({
+    allRidings: true,
+    ridingGrants: [],
+    reason: 'central staff',
+  });
+});
+
+test('editing only a user\'s name leaves their riding access out of the request', async () => {
+  users = [userRow({ ridingGrants: [121] })];
+  renderPage('/admin/users');
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+  fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Frances Filer' } });
+  fireEvent.change(screen.getByLabelText('Reason (required)'), { target: { value: 'name fix' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+  const body = JSON.parse(calls.find((c) => c.method === 'PATCH')!.body!);
+  expect(body).not.toHaveProperty('allRidings');
+  expect(body).not.toHaveProperty('ridingGrants');
 });
