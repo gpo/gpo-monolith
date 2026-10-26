@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { expect, test } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { signIn, switchUser } from '../../helpers.js';
 
 test.describe('Contributions', () => {
   test('Row 25: Entity column identifies party, association, campaign, and leadership contestant', async ({ page }) => {
@@ -101,7 +101,10 @@ test.describe('Contributions', () => {
     await expect(dialog).toBeHidden();
     await expect(page.getByText('Leadership contestant: Jordan Rivers')).toBeVisible();
 
-    // 11. Navigate to Admin and click 'Leadership contestants' in the side navigation.
+    // 11. Sign in as sysadmin (admin@ lacks settings access, so its Admin menu has no
+    //     'Leadership contestants'), navigate to Admin, and click 'Leadership contestants'
+    //     in the side navigation.
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin');
     await page.getByRole('link', { name: 'Leadership contestants' }).click();
     await expect(page).toHaveURL(/\/admin\/leadership-contestants$/);

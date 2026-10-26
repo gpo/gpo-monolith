@@ -235,7 +235,7 @@ describe('contribution correction engine (corrections.md actions 4, 5, 6, 8, 9, 
       }).toEqual(before);
     });
 
-    it('lists "Qomon still shows" as a non-blocking follow-up', async () => {
+    it('adds no Qomon follow-up for a Qomon-linked contribution', async () => {
       const dana = await seedContact();
       const { contribution } = await seedContribution(dana.id, { amountCents: 10_000 });
       const input = await correctAmount(prisma, {
@@ -245,8 +245,7 @@ describe('contribution correction engine (corrections.md actions 4, 5, 6, 8, 9, 
         paymentAmountCents: 9_000,
       });
       const plan = await previewCorrection(prisma, input);
-      expect(plan.followUps).toHaveLength(1);
-      expect(plan.followUps[0]).toContain('Qomon still shows');
+      expect(plan.followUps).toEqual([]);
       expect(plan.blockers).toEqual([]);
     });
   });

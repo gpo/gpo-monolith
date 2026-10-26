@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { expect, test, type Page } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn } from '../../helpers.js';
 
 async function signInAs(page: Page, email: string, password: string) {
   await page.goto('/login');
@@ -75,19 +75,28 @@ test.describe('Security', () => {
     await signIn(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject type').selectOption('User');
+    // The Actor cell shows the user's current name, so B's edit is found by the edited name.
     const editEntry = page
       .getByRole('row')
       .filter({ hasText: 'updated own profile' })
       .filter({ hasText: editedName });
     await expect(editEntry).toHaveCount(1);
     await expect(editEntry.getByRole('cell', { name: editedName, exact: true })).toBeVisible();
-    // The Before cell holds B's email (the JSON is short enough here), not A's.
-    await expect(editEntry.getByRole('cell').nth(4)).toContainText(emailB);
-    await expect(editEntry.getByRole('cell').nth(4)).not.toContainText(emailA);
-    // The subject id matches one "user account created" entry, and that id is not shared
-    // with the other twin's creation entry (the Before/After cells truncate before the email).
+    // The row lists the one changed field; the dialog shows old and new, and with the
+    // unchanged fields revealed, B's email (not A's).
+    await expect(editEntry.getByRole('cell').last()).toContainText('name');
     const subject = (await editEntry.getByRole('cell').nth(1).innerText()).trim();
     expect(subject).toMatch(/^User \(\w+\)$/);
+    const editDialog = await openChangeEntry(page, editEntry);
+    await expect(changeField(editDialog, 'name').getByRole('cell').nth(2)).toHaveText(twinName);
+    await expect(changeField(editDialog, 'name').getByRole('cell').nth(3)).toHaveText(editedName);
+    await editDialog.getByRole('button', { name: /^Show \d+ unchanged fields$/ }).click();
+    await expect(changeField(editDialog, 'email').getByRole('cell').nth(3)).toHaveText(emailB);
+    await expect(editDialog).not.toContainText(emailA);
+    await editDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(editDialog).toBeHidden();
+    // The subject id matches one "user account created" entry, and that id is not shared
+    // with the other twin's creation entry.
     await expect(
       page.getByRole('row').filter({ hasText: 'user account created' }).filter({ hasText: subject }),
     ).toHaveCount(1);

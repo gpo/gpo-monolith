@@ -53,7 +53,7 @@ Rows 24-31 of the Elections Ontario evaluation checklist for the GPO Tax Receipt
     - expect: The options include 'Jordan Rivers (Fixture leadership contest (not real))' and 'Sam Okafor (Fixture leadership contest (not real))'.
   10. Click Cancel in the modal. Do not save.
     - expect: The modal closes and the Recipient still reads 'Leadership contestant: Jordan Rivers'.
-  11. Navigate to Admin (/admin) and click 'Leadership contestants' in the side navigation (/admin/leadership-contestants).
+  11. Sign in as sysadmin with switchUser (admin@ lacks settings access, so its Admin menu has no 'Leadership contestants'), navigate to Admin (/admin) and click 'Leadership contestants' in the side navigation (/admin/leadership-contestants).
     - expect: The registry table with columns Contestant, Contest, Status lists 'Jordan Rivers' and 'Sam Okafor', both with contest 'Fixture leadership contest (not real)' and status ACTIVE. Do not click 'Make inactive'.
 
 #### 1.3. Row 25: Live: payment directed to a leadership contestant

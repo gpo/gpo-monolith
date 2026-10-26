@@ -48,14 +48,16 @@ test.describe('Validation and Controls', () => {
     await expect(a6Row.getByRole('cell', { name: 'OPEN' })).toBeVisible();
     await expect(a6Row.getByRole('button', { name: 'Exception' })).toBeEnabled();
     await a6Row.getByRole('button', { name: 'Exception' }).click();
-    await expect(a6Row.getByRole('textbox', { name: 'Exception reason' })).toBeVisible();
-    await expect(a6Row.getByRole('button', { name: 'Confirm' })).toBeDisabled();
-    await expect(a6Row.getByRole('button', { name: 'Cancel' })).toBeVisible();
+    const modal = page.getByRole('dialog', { name: 'Record an exception' });
+    await expect(modal.getByRole('textbox', { name: 'Exception reason' })).toBeVisible();
+    await expect(modal.getByRole('button', { name: 'Record exception' })).toBeDisabled();
+    await expect(modal.getByRole('button', { name: 'Cancel' })).toBeVisible();
 
-    // 4. Type 'distinct gifts' and confirm.
-    await a6Row.getByRole('textbox', { name: 'Exception reason' }).fill('distinct gifts');
-    await expect(a6Row.getByRole('button', { name: 'Confirm' })).toBeEnabled();
-    await a6Row.getByRole('button', { name: 'Confirm' }).click();
+    // 4. Type 'distinct gifts' and record it.
+    await modal.getByRole('textbox', { name: 'Exception reason' }).fill('distinct gifts');
+    await expect(modal.getByRole('button', { name: 'Record exception' })).toBeEnabled();
+    await modal.getByRole('button', { name: 'Record exception' }).click();
+    await expect(modal).toBeHidden();
     await expect(a6Row.getByRole('cell', { name: 'EXCEPTION' })).toBeVisible();
     await expect(a6Row.getByRole('cell', { name: 'distinct gifts' })).toBeVisible();
 

@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { expect, test } from '@playwright/test';
-import { pdfTextFromBuffer, signIn } from '../../helpers.js';
+import { changeField, openChangeEntryWithField, pdfTextFromBuffer, signIn } from '../../helpers.js';
 import { addContributor, addPayment, createPeriod, issueSpace, newSuffix, signOut } from './recipe.js';
 
 test.describe('Issue Tax Receipt: receipt records and audit', () => {
@@ -66,14 +66,19 @@ test.describe('Issue Tax Receipt: receipt records and audit', () => {
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject type').selectOption('Receipt');
     await page.getByRole('textbox', { name: 'Subject id' }).fill(receiptId!);
-    // Issuance writes two Receipt entries with the same reason; the one with amountCents is the creation entry.
-    const entryRow = page.getByRole('row').filter({ hasText: reason }).filter({ hasText: 'amountCents' });
-    await expect(entryRow).toHaveCount(1);
-    await expect(entryRow).toContainText(receiptNumber);
+    // Issuance writes two Receipt entries with the same reason, both summarized as "Created";
+    // the one with a receiptNumber field is the receipt-creation entry.
+    const entryRows = page
+      .getByRole('row')
+      .filter({ hasText: reason })
+      .filter({ has: page.getByRole('cell', { name: 'Created', exact: true }) });
+    await expect(entryRows).toHaveCount(2);
+    const entryDialog = await openChangeEntryWithField(page, entryRows, 'receiptNumber');
+    await expect(changeField(entryDialog, 'receiptNumber')).toContainText(receiptNumber);
 
-    // The 'At' cell is rendered with toLocaleString: it must be a parseable time inside [t0, t1].
-    const cells = await entryRow.getByRole('cell').allTextContents();
-    const atText = cells.find((c) => !Number.isNaN(Date.parse(c)) && /\d{4}/.test(c));
+    // The dialog's 'At' is rendered with toLocaleString: it must be a parseable time inside [t0, t1].
+    const dialogText = await entryDialog.innerText();
+    const atText = /\d{1,2}\/\d{1,2}\/\d{4}, \d{1,2}:\d{2}:\d{2}\s?[AP]M/.exec(dialogText)?.[0];
     expect(atText).toBeDefined();
     const shown = Date.parse(atText!);
     // The UI string has one-second resolution, so allow a few seconds of slack either side.

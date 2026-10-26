@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { expect, test } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn } from '../../helpers.js';
 
 test.describe('Contributors', () => {
   test('Row 21: Add a contributor from the Contributors page with first and last name recorded separately, then edit the name with a reason', async ({ page }) => {
@@ -64,12 +64,19 @@ test.describe('Contributors', () => {
 
     const editRow = page.getByRole('row', { name: /Corrected first name spelling/ });
     await expect(editRow).toContainText('Receipt Administrator');
-    await expect(editRow.getByRole('cell').nth(3)).toContainText('"firstName":"Ada"');
-    await expect(editRow.getByRole('cell').nth(4)).toContainText('"firstName":"Augusta"');
+    // Cells: At, By, Reason, Changes. The dialog shows the old and new first name.
+    await expect(editRow.getByRole('cell').nth(3)).toContainText('firstName');
+    const entryDialog = await openChangeEntry(page, editRow);
+    const firstName = changeField(entryDialog, 'firstName');
+    await expect(firstName.getByRole('cell').nth(2)).toHaveText('Ada');
+    await expect(firstName.getByRole('cell').nth(3)).toHaveText('Augusta');
+    await entryDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(entryDialog).toBeHidden();
 
+    // A creation has no before, so it is summarized as "Created".
     const createRow = page.getByRole('row', { name: /New donor added at event/ });
     await expect(createRow).toContainText('Receipt Administrator');
-    await expect(createRow.getByRole('cell').nth(3)).toHaveText('—');
+    await expect(createRow.getByRole('cell').nth(3)).toHaveText('Created');
 
     // 8. Go to /contributors and search by the suffix (live filter, no submit needed).
     await page.goto('/contributors');

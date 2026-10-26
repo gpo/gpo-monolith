@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { expect, test } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn } from '../../helpers.js';
 import { addContributor, addPayment, createPeriod, issueSpace, newSuffix, signOut } from './recipe.js';
 
 test.describe('Issue Tax Receipt: corrections', () => {
@@ -36,9 +36,24 @@ test.describe('Issue Tax Receipt: corrections', () => {
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject type').selectOption('Receipt');
     await page.getByRole('textbox', { name: 'Subject id' }).fill(lenaReceiptId);
-    await expect(page.getByRole('row').filter({ hasText: '{"lost":false}' })).toContainText('{"lost":true}');
-    // the reprint entry (kind LOST_COPY) is in the After column
-    await expect(page.getByRole('row').filter({ hasText: '"kind":"LOST_COPY"' })).toHaveCount(1);
+    // the lost flag entry is summarized by its changed field; its dialog shows false then true
+    const lenaLostRow = page.getByRole('row').filter({ has: page.getByRole('cell', { name: 'lost', exact: true }) });
+    await expect(lenaLostRow).toHaveCount(1);
+    const lenaLostDialog = await openChangeEntry(page, lenaLostRow);
+    await expect(changeField(lenaLostDialog, 'lost').getByRole('cell').nth(2)).toHaveText('false');
+    await expect(changeField(lenaLostDialog, 'lost').getByRole('cell').nth(3)).toHaveText('true');
+    await lenaLostDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(lenaLostDialog).toBeHidden();
+    // the reprint entry (kind LOST_COPY) is a creation; the kind is in its After column
+    const lenaReprintRow = page
+      .getByRole('row')
+      .filter({ hasText: 'donor reported the receipt lost' })
+      .filter({ has: page.getByRole('cell', { name: 'Created', exact: true }) });
+    await expect(lenaReprintRow).toHaveCount(1);
+    const lenaReprintDialog = await openChangeEntry(page, lenaReprintRow);
+    await expect(changeField(lenaReprintDialog, 'kind').getByRole('cell').nth(3)).toHaveText('LOST_COPY');
+    await lenaReprintDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(lenaReprintDialog).toBeHidden();
     await signOut(page);
 
     // 3. Live. Recipe R1 to R4 with one $50 payment (own data). On the contribution page open the
@@ -97,8 +112,13 @@ test.describe('Issue Tax Receipt: corrections', () => {
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject type').selectOption('Receipt');
     await page.getByRole('textbox', { name: 'Subject id' }).fill(ownReceiptId);
-    const lostEntry = page.getByRole('row').filter({ hasText: `E2E lost ${sfx}` }).filter({ hasText: '{"lost":false}' });
+    const lostEntry = page
+      .getByRole('row')
+      .filter({ hasText: `E2E lost ${sfx}` })
+      .filter({ has: page.getByRole('cell', { name: 'lost', exact: true }) });
     await expect(lostEntry).toHaveCount(1);
-    await expect(lostEntry).toContainText('{"lost":true}');
+    const lostDialog = await openChangeEntry(page, lostEntry);
+    await expect(changeField(lostDialog, 'lost').getByRole('cell').nth(2)).toHaveText('false');
+    await expect(changeField(lostDialog, 'lost').getByRole('cell').nth(3)).toHaveText('true');
   });
 });

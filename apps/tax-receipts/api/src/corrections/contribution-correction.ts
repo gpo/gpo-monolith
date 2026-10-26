@@ -244,7 +244,7 @@ export interface CorrectionPlan {
   dirtyReports: { entityReportId: string; kind: string; periodId: number; filed: boolean }[];
   /** entities the caller must supply a "received by" label for */
   labelsNeeded: { entityKind: EntityKind; ridingNumber: number | null; key: string }[];
-  /** non-blocking, e.g. "Qomon still shows ..." (corrections.md, "Qomon after a correction") */
+  /** non-blocking notes, e.g. a contact merge's "merge them in Qomon too" */
   followUps: string[];
   blockers: string[];
 }
@@ -746,23 +746,7 @@ async function prepare(prisma: PrismaClient, input: CorrectionInput): Promise<Pr
   owedToEo.push(...effects.owedToEo);
   blockers.push(...effects.blockers);
 
-  const followUps: string[] = [];
-  for (const change of plannedChanges) {
-    const old = loaded.get(change.contributionId)!;
-    const link = old.payment.qomonLink;
-    if (!link) continue;
-    const differs =
-      change.kind === 'refund' ||
-      change.replacements.some((r) => r.contactId !== old.contactId || r.amountCents !== old.amountCents);
-    if (differs) {
-      followUps.push(
-        `Qomon still shows transaction ${link.qomonTransactionId} as ${old.contact.name}, ` +
-          `${(old.amountCents / 100).toFixed(2)}; fix it by hand if Fundraising needs it (the tool never writes to Qomon transactions)`,
-      );
-    }
-  }
-
-  followUps.push(...(input.extraFollowUps ?? []));
+  const followUps = [...(input.extraFollowUps ?? [])];
 
   const plan: CorrectionPlan = {
     action: input.action,

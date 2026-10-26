@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { signIn, switchUser } from '../../helpers.js';
 
 test.describe('Transaction History', () => {
   test('Row 18: A reason is mandatory and recorded as the task description', async ({ page }) => {
@@ -44,7 +44,9 @@ test.describe('Transaction History', () => {
     await editDialog.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByRole('dialog')).toBeHidden();
 
-    // 4. Go to /admin/change-log, filter 'Subject id' = <id>.
+    // 4. Sign in as sysadmin (admin@ cannot see the Change log), go to /admin/change-log,
+    //    filter 'Subject id' = <id>.
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject id').fill(id);
     const editRow = page.getByRole('row').filter({ hasText: taskReason });

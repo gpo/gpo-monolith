@@ -44,10 +44,13 @@ type ChangeHistoryTableProps = {
 };
 
 /** A record's change-log entries, one row each with a summary of what
- * changed; clicking a row opens the entry in full. Pass as the children of
- * ChangeHistoryCard. */
+ * changed; clicking a row opens the entry in full. Entries that carry their
+ * subject type get a Record column, since a page can merge more than one
+ * record's history (a contribution shows its payment's too). Pass as the
+ * children of ChangeHistoryCard. */
 export function ChangeHistoryTable({ entries, subjectType }: ChangeHistoryTableProps) {
   const [viewing, setViewing] = useState<ChangeEntry | null>(null);
+  const showRecord = entries.some((e) => e.subjectType);
   return (
     <>
       <Table highlightOnHover>
@@ -55,6 +58,7 @@ export function ChangeHistoryTable({ entries, subjectType }: ChangeHistoryTableP
           <Table.Tr>
             <Table.Th>At</Table.Th>
             <Table.Th>By</Table.Th>
+            {showRecord && <Table.Th>Record</Table.Th>}
             <Table.Th>Reason</Table.Th>
             <Table.Th>Changes</Table.Th>
           </Table.Tr>
@@ -75,6 +79,7 @@ export function ChangeHistoryTable({ entries, subjectType }: ChangeHistoryTableP
             >
               <Table.Td>{new Date(e.at).toLocaleString()}</Table.Td>
               <Table.Td>{e.actorName ?? 'System'}</Table.Td>
+              {showRecord && <Table.Td>{e.subjectType}</Table.Td>}
               <Table.Td>{e.reason}</Table.Td>
               <Table.Td>
                 <Text size="xs" ff="monospace">

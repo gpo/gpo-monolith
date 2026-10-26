@@ -2,13 +2,13 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn } from '../../helpers.js';
 
 test.describe('Security', () => {
   test('Row 7: Admin creates a new role and it appears in the change log', async ({ page }) => {
     const sfx = Date.now().toString(36);
     const roleName = `Riding Auditor ${sfx}`;
-    const reason = 'Create auditor role for EO demo';
+    const reason = `Create auditor role for EO demo ${sfx}`;
 
     // 1. Sign in as sysadmin and open Admin then Roles (/admin/roles).
     await signIn(page, 'sysadmin');
@@ -55,13 +55,18 @@ test.describe('Security', () => {
     // 4. Open Admin then Change log, choose Subject type 'Role'.
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject type').selectOption('Role');
-    const logRow = page.getByRole('row').filter({ hasText: reason }).filter({ hasText: roleName });
+    // The row names no role, so find it by the unique-enough reason; the role is in its dialog.
+    const logRow = page.getByRole('row').filter({ hasText: reason });
     await expect(logRow.first()).toBeVisible();
     await expect(logRow.first()).toContainText('Sys Admin');
-    await expect(logRow.first()).toContainText('—'); // empty Before
-    // The After cell truncates JSON at about 80 characters, so only the key and name are
-    // visible; the permission key is cut off (the plan expected it to be shown).
-    await expect(logRow.first()).toContainText(`"name":"${roleName}"`);
+    await expect(logRow.first().getByRole('cell').last()).toHaveText('Created'); // empty Before
+    const entryDialog = await openChangeEntry(page, logRow.first());
+    const nameField = changeField(entryDialog, 'name');
+    await expect(nameField.getByRole('cell').nth(2)).toHaveText('—');
+    await expect(nameField.getByRole('cell').nth(3)).toHaveText(roleName);
+    await expect(entryDialog.getByRole('cell', { name: /records\.readAll/ }).first()).toBeVisible();
+    await entryDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(entryDialog).toBeHidden();
 
     // 5. Try to create another role with the same name.
     await page.goto('/admin/roles');

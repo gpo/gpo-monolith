@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { expect, test, type Page } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn } from '../../helpers.js';
 
 async function signInAs(page: Page, email: string, password: string) {
   await page.goto('/login');
@@ -65,14 +65,23 @@ test.describe('Security', () => {
     // 4. Change log, Subject type 'User': newest row for that user.
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject type').selectOption('User');
-    const editEntry = page.getByRole('row').filter({ hasText: reason }).filter({ hasText: newName });
+    const editEntry = page.getByRole('row').filter({ hasText: reason });
     await expect(editEntry).toHaveCount(1);
     await expect(editEntry.getByRole('cell', { name: 'Sys Admin', exact: true })).toBeVisible();
     await expect(editEntry.getByRole('cell', { name: reason, exact: true })).toBeVisible();
-    // The plan expected old and new email in Before/After; the table truncates the JSON
-    // after about 80 characters (id, name, role), so only the names are visible there.
-    await expect(editEntry.getByRole('cell').nth(4)).toContainText(oldName);
-    await expect(editEntry.getByRole('cell').nth(5)).toContainText(newName);
+    // The row lists the changed fields; the entry dialog shows old and new for each.
+    await expect(editEntry.getByRole('cell').last()).toContainText('name');
+    await expect(editEntry.getByRole('cell').last()).toContainText('email');
+    const subject = (await editEntry.getByRole('cell').nth(1).innerText()).trim();
+    const userId = /^User \((\w+)\)$/.exec(subject)?.[1];
+    expect(userId).toBeTruthy();
+    const editDialog = await openChangeEntry(page, editEntry);
+    await expect(changeField(editDialog, 'name').getByRole('cell').nth(2)).toHaveText(oldName);
+    await expect(changeField(editDialog, 'name').getByRole('cell').nth(3)).toHaveText(newName);
+    await expect(changeField(editDialog, 'email').getByRole('cell').nth(2)).toHaveText(oldEmail);
+    await expect(changeField(editDialog, 'email').getByRole('cell').nth(3)).toHaveText(newEmail);
+    await editDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(editDialog).toBeHidden();
 
     // 5. Sign out, sign in as the renamed user, Edit profile: change Name only.
     await signOut(page);
@@ -107,11 +116,19 @@ test.describe('Security', () => {
     await signIn(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject type').selectOption('User');
-    const selfEntries = page
-      .getByRole('row')
-      .filter({ hasText: 'updated own profile' })
-      .filter({ hasText: selfName });
+    // The rows show the subject id rather than the user's name, so narrow to this user by id.
+    await page.getByLabel('Subject id').fill(userId!);
+    const selfEntries = page.getByRole('row').filter({ hasText: 'updated own profile' });
     await expect(selfEntries).toHaveCount(2);
-    await expect(selfEntries.filter({ hasText: selfEmail })).toHaveCount(1);
+    const nameEntry = selfEntries.filter({ has: page.getByRole('cell', { name: /\bname\b/ }) });
+    await expect(nameEntry).toHaveCount(1);
+    const nameDialog = await openChangeEntry(page, nameEntry);
+    await expect(changeField(nameDialog, 'name').getByRole('cell').nth(3)).toHaveText(selfName);
+    await nameDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(nameDialog).toBeHidden();
+    const emailEntry = selfEntries.filter({ has: page.getByRole('cell', { name: /\bemail\b/ }) });
+    await expect(emailEntry).toHaveCount(1);
+    const emailDialog = await openChangeEntry(page, emailEntry);
+    await expect(changeField(emailDialog, 'email').getByRole('cell').nth(3)).toHaveText(selfEmail);
   });
 });

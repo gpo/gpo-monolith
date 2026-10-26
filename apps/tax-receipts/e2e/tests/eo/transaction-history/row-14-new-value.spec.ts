@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn, switchUser } from '../../helpers.js';
 
 test.describe('Transaction History', () => {
   test("Row 14: New value is captured in 'after' on a live edit", async ({ page }) => {
@@ -36,13 +36,18 @@ test.describe('Transaction History', () => {
     await editDialog.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByText('Address: 10 Elm St, Ottawa ON M5V 2T6, CA')).toBeVisible();
 
-    // 2. Go to /admin/change-log and filter by the contributor id
+    // 2. Sign in as sysadmin (admin@ cannot see the Change log), go to /admin/change-log, and filter by the contributor id
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject id').fill(id);
     const row = page.getByRole('row').filter({ hasText: reason });
     await expect(row).toHaveCount(1);
-    // After cell (last) is non-empty JSON beginning with the contact, truncated with an ellipsis
-    await expect(row.getByRole('cell').last()).toContainText(`{"id":"${id}"`);
+    // The row summarizes the change by field name; the entry dialog shows the new value
+    await expect(row.getByRole('cell').last()).toContainText('addresses.0.city');
+    const entryDialog = await openChangeEntry(page, row);
+    await expect(changeField(entryDialog, 'addresses.0.city')).toContainText('Ottawa');
+    await entryDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(entryDialog).toBeHidden();
 
     const response = await page.request.get(`/api/change-log?subjectId=${id}`);
     const { data } = await response.json();
@@ -54,8 +59,10 @@ test.describe('Transaction History', () => {
     await page.getByRole('button', { name: 'Show 2 changes' }).click();
     const historyRow = page.getByRole('row').filter({ hasText: reason });
     await expect(historyRow).toHaveCount(1);
-    await expect(historyRow.getByRole('cell').last()).toContainText('"city":"Ottawa"');
+    await expect(historyRow.getByRole('cell').last()).toContainText('addresses.0.city');
     // The newest row is first in the body
     await expect(page.getByRole('row').nth(1)).toContainText(reason);
+    const historyDialog = await openChangeEntry(page, historyRow);
+    await expect(changeField(historyDialog, 'addresses.0.city')).toContainText('Ottawa');
   });
 });

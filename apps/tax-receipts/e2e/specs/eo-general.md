@@ -54,7 +54,7 @@ Elections Ontario evaluation checklist, section General (rows 1-2). Row 1 shows 
     - expect: The contributions table lists a row with Donor 'Split Sam', amount $300.00, Period 9503, Entity PARTY, Receipt ISSUED
   2. Click the 'Split Sam' donor link in that row.
     - expect: URL matches /contributions/<id>, heading 'Contribution' is visible
-    - expect: The 'Payment' panel shows 'Entered by hand', Amount $500.00, Method 'Cheque', Note 'fixture-g4-3', and a 'Donor who paid' link 'Split Sam'
+    - expect: The 'Payment' panel shows no 'Qomon' badge (manual entry), Amount $500.00, Method 'Cheque', Note 'fixture-g4-3', and a 'Donor who paid' link 'Split Sam'
     - expect: The panel text 'Split across 2 contributions:' is shown with a table: 'this contribution' $300.00 'Party (province-wide)', and a linked row $200.00 'Constituency association, riding 121' marked 'agency'. The two amounts sum to the payment's $500.00
     - expect: The 'Contribution' panel shows Donor link 'Split Sam' with 'Individual, contributor id T33', Amount $300.00, Recipient 'Party (province-wide)'
     - expect: The 'Allocations & receipts' table lists a receipt number starting 'GPO-' with status ISSUED and $300.00

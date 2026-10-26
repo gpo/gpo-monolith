@@ -38,8 +38,8 @@ import { CancellationNoticeActions, ReceiptActions } from '../components/receipt
  * (amount, donor, split, refund) is a modal from the Contribution card.
  */
 
-/** Same cap as the payment entry pages, so the two read alike. */
-const PAGE_WIDTH = 640;
+/** Wider than the payment entry forms, so the change history table has room. */
+const PAGE_WIDTH = 880;
 
 export function money(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -86,9 +86,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-  MANUAL: 'Entered by hand',
-  QOMON_IMPORT: 'Imported from Qomon',
+/** Manual entry is the default and gets no badge; only imports are called out. */
+const SOURCE_LABELS: Record<string, string | undefined> = {
+  QOMON_IMPORT: 'Qomon',
   LEGACY_IMPORT: 'Legacy import',
 };
 
@@ -232,9 +232,11 @@ export function ContributionDetailPage({ id }: { id: string }) {
           <Group justify="space-between">
             <Group gap="xs">
               <Text fw={600}>Payment</Text>
-              <Badge variant="light" color="gray">
-                {SOURCE_LABELS[detail.payment.source] ?? detail.payment.source}
-              </Badge>
+              {SOURCE_LABELS[detail.payment.source] && (
+                <Badge variant="light" color="gray">
+                  {SOURCE_LABELS[detail.payment.source]}
+                </Badge>
+              )}
               {detail.payment.state !== 'RECEIVED' && (
                 <Badge variant="light" color="orange">
                   {detail.payment.state}
@@ -252,12 +254,6 @@ export function ContributionDetailPage({ id }: { id: string }) {
               </Tooltip>
             )}
           </Group>
-          {detail.qomon?.deletedInQomonAt && (
-            <Alert color="red">
-              Sync incident: absent from Qomon as of {new Date(detail.qomon.deletedInQomonAt).toLocaleString()}. The
-              payment and this contribution are unchanged.
-            </Alert>
-          )}
           {detail.payment.unattributedCents > 0 && can?.enterPayments && (
             <Alert color="blue" variant="light">
               {money(detail.payment.unattributedCents)} of this {money(detail.payment.amountCents)} payment is not

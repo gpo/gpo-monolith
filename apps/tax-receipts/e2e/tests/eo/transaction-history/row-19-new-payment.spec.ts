@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { expect, test } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn, switchUser } from '../../helpers.js';
 
 test.describe('Transaction History', () => {
   test('Row 19: Audit on new records - a live payment creates a Contribution entry with before null', async ({
@@ -49,11 +49,13 @@ test.describe('Transaction History', () => {
     await expect(page).toHaveURL(/\/contributions\/[^/]+$/);
     const contributionId = new URL(page.url()).pathname.split('/').pop()!;
     await page.getByRole('button', { name: 'Show 2 changes' }).click();
-    // The plan expected By and Before columns; the live contribution page lists
-    // only the reason and time for each entry (By and Before are checked in step 3).
+    // Each entry is a row (the contribution's own and its payment's); By and the old and new
+    // values are checked in step 3.
     await expect(page.getByText(paymentReason)).toHaveCount(2);
 
-    // 3. Go to /admin/change-log, choose Subject type 'Contribution', type the contribution id
+    // 3. Sign in as sysadmin (admin@ cannot see the Change log), go to /admin/change-log,
+    //    choose Subject type 'Contribution', type the contribution id
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByLabel('Subject type').selectOption('Contribution');
     await page.getByLabel('Subject id').fill(contributionId);
@@ -63,8 +65,13 @@ test.describe('Transaction History', () => {
     await expect(row.getByRole('cell', { name: `Contribution (${contributionId})` })).toBeVisible();
     await expect(row.getByRole('cell', { name: 'Receipt Administrator' })).toBeVisible();
     await expect(row.getByRole('cell', { name: paymentReason })).toBeVisible();
-    await expect(row.getByRole('cell', { name: '—' })).toBeVisible();
-    await expect(row.getByRole('cell').last()).toContainText('{');
+    // A creation has no before, so the Changes cell reads "Created" and the dialog shows
+    // the new record's fields as added, with an empty Before.
+    await expect(row.getByRole('cell').last()).toHaveText('Created');
+    const entryDialog = await openChangeEntry(page, row);
+    await expect(entryDialog.getByRole('heading', { name: new RegExp(`^Created Contribution \\(${contributionId}\\)`) })).toBeVisible();
+    await expect(changeField(entryDialog, 'amountCents').getByRole('cell').nth(2)).toHaveText('—');
+    await expect(changeField(entryDialog, 'amountCents').getByRole('cell').nth(3)).toHaveText('4000');
 
     const response = await page.request.get(`/api/change-log?subjectId=${contributionId}`);
     expect(response.ok()).toBeTruthy();

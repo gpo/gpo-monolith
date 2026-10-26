@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn, switchUser } from '../../helpers.js';
 
 test.describe('Transaction History', () => {
   test('Row 19: Audit on new records - contributor creation then address edit', async ({ page }) => {
@@ -40,9 +40,14 @@ test.describe('Transaction History', () => {
     const createRow = historyRows.filter({ hasText: createReason });
     await expect(createRow.getByRole('cell').nth(1)).toHaveText('Receipt Administrator');
     await expect(createRow.getByRole('cell').nth(2)).toHaveText(createReason);
-    await expect(createRow.getByRole('cell').nth(3)).toHaveText('—');
-    await expect(createRow.getByRole('cell').nth(4)).toContainText(`"name":"Carla ${lastName}"`);
-    await expect(createRow.getByRole('cell').nth(4)).toContainText('"street":"Elm St"');
+    // Cells: At, By, Reason, Changes. A creation has no before, so it is summarized as "Created".
+    await expect(createRow.getByRole('cell').nth(3)).toHaveText('Created');
+    const createDialog = await openChangeEntry(page, createRow);
+    await expect(changeField(createDialog, 'name').getByRole('cell').nth(2)).toHaveText('—');
+    await expect(changeField(createDialog, 'name').getByRole('cell').nth(3)).toHaveText(`Carla ${lastName}`);
+    await expect(changeField(createDialog, 'addresses.0.street').getByRole('cell').nth(3)).toHaveText('Elm St');
+    await createDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(createDialog).toBeHidden();
 
     // 3. Click 'Edit contributor', change Street number to '55' and Street to 'Birch Rd', Reason, save.
     await page.getByRole('button', { name: 'Edit contributor' }).click();
@@ -61,12 +66,21 @@ test.describe('Transaction History', () => {
     const newest = historyRows.first();
     await expect(newest.getByRole('cell').nth(1)).toHaveText('Receipt Administrator');
     await expect(newest.getByRole('cell').nth(2)).toHaveText(addressReason);
-    await expect(newest.getByRole('cell').nth(3)).toContainText('"street":"Elm St"');
-    await expect(newest.getByRole('cell').nth(3)).toContainText('"housenumber":"10"');
-    await expect(newest.getByRole('cell').nth(4)).toContainText('"street":"Birch Rd"');
-    await expect(newest.getByRole('cell').nth(4)).toContainText('"housenumber":"55"');
+    await expect(newest.getByRole('cell').nth(3)).toContainText('addresses.0.street');
+    await expect(newest.getByRole('cell').nth(3)).toContainText('addresses.0.housenumber');
+    const editDialogEntry = await openChangeEntry(page, newest);
+    const street = changeField(editDialogEntry, 'addresses.0.street');
+    await expect(street.getByRole('cell').nth(2)).toHaveText('Elm St');
+    await expect(street.getByRole('cell').nth(3)).toHaveText('Birch Rd');
+    const houseNumber = changeField(editDialogEntry, 'addresses.0.housenumber');
+    await expect(houseNumber.getByRole('cell').nth(2)).toHaveText('10');
+    await expect(houseNumber.getByRole('cell').nth(3)).toHaveText('55');
+    await editDialogEntry.getByRole('button', { name: 'Close' }).click();
+    await expect(editDialogEntry).toBeHidden();
 
-    // 4. Go to /admin/change-log and filter 'Subject id' = <id>.
+    // 4. Sign in as sysadmin (admin@ cannot see the Change log), go to /admin/change-log,
+    //    and filter 'Subject id' = <id>.
+    await switchUser(page, 'sysadmin');
     await page.goto('/admin/change-log');
     await page.getByRole('textbox', { name: 'Subject id' }).fill(contributorId);
     const logRows = page.locator('tbody tr');

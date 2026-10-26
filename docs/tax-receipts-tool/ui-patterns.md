@@ -94,8 +94,6 @@ focus of the table:
 - Keep a semantic colour only where it carries meaning: `color="red"` for
   destructive actions (Remove), `color="yellow"` for exceptions. These stay
   `variant="subtle"` too.
-- An inline step that commits typed input (the work-queue Confirm) may stay
-  a filled button, since it is the end of a form rather than a row action.
 
 ## Alignment
 
@@ -132,8 +130,11 @@ history** card. Build it with `ChangeHistoryCard` in
 - **Entries render only while open.** Pass `ChangeHistoryTable` (same
   file) as `children`; the card mounts it on expand. The table shows At,
   By, Reason, and a one-line summary of the changed fields, and a row click
-  opens the entry in `ChangeEntryModal`. Give it `subjectType` when the
-  entries carry none (a contributor's history is all `Contact`).
+  opens the entry in `ChangeEntryModal`. When the entries carry their own
+  subject type, it adds a Record column, because a page can merge
+  histories (a contribution's history includes its payment's entries, and
+  one action can log near-identical rows for both). Give it `subjectType`
+  when the entries carry none (a contributor's history is all `Contact`).
 - Title it "Change history" everywhere, never "Change-log"; the Admin
   **Change log** screen is the cross-record view.
 

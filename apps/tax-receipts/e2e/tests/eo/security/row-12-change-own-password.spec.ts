@@ -2,7 +2,7 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect, type Page } from '@playwright/test';
-import { signIn } from '../../helpers.js';
+import { changeField, openChangeEntry, signIn } from '../../helpers.js';
 
 async function signInAs(page: Page, email: string, password: string) {
   await page.goto('/login');
@@ -111,10 +111,15 @@ test.describe('Security', () => {
       .filter({ hasText: 'changed own password' });
     await expect(entry).toBeVisible();
     // Actor is the user themselves; no password or hash is displayed.
-    await expect(entry).toContainText('passwordChanged');
     await expect(entry).not.toContainText(initial);
     await expect(entry).not.toContainText(changed);
     await expect(entry).not.toContainText(/\$2[aby]\$/);
+    // The row only summarizes the entry; its dialog records the change as a flag, not a value.
+    const entryDialog = await openChangeEntry(page, entry);
+    await expect(changeField(entryDialog, 'passwordChanged')).toContainText('true');
+    await expect(entryDialog).not.toContainText(initial);
+    await expect(entryDialog).not.toContainText(changed);
+    await expect(entryDialog).not.toContainText(/\$2[aby]\$/);
 
     await ctxA.close();
     await ctxB.close();

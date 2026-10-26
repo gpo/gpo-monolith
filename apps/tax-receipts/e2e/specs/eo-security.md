@@ -49,16 +49,16 @@ Elections Ontario evaluation checklist, Security section (rows 3 to 12): sign-in
     - expect: The new user row appears in the Users table
   2. Click 'Edit' on that row. Observe that 'Save' is disabled. Change Name to 'E2E Renamed <suffix>' and Email to 'e2e-renamed-<suffix>@gpo.test' but leave 'Reason (required)' empty.
     - expect: 'Save' stays disabled until a reason is entered
-  3. Enter Reason 'Fix name and email for audit demo' and click 'Save'.
+  3. Enter Reason 'Fix name and email for audit demo <suffix>' and click 'Save'.
     - expect: The dialog closes and the row shows the new name and email
   4. Open Admin then Change log (/admin/change-log), choose Subject type 'User' and look at the newest row for that user.
-    - expect: The row shows actor 'Sys Admin', reason 'Fix name and email for audit demo', a Before value containing the old name and email, and an After value containing the new name and email
+    - expect: The row shows actor 'Sys Admin' and reason 'Fix name and email for audit demo <suffix>', and its Changes cell lists 'name' and 'email'. Click the row: the dialog shows the old name and email as Before and the new name and email as After.
   5. Sign out, then sign in as the renamed user using the new email. Open Account menu then 'Edit profile'; change Name to 'E2E Self Edited <suffix>' only and save.
     - expect: The name saves without asking for a current password; the Account menu shows the new name
   6. Open Account menu then 'Edit profile' again, change Email to 'e2e-self-<suffix>@gpo.test'.
     - expect: A 'Current password' field is required; saving with a wrong current password is refused with an error
   7. Enter the correct current password 'editable-pass-12345' and save. Sign out and sign in with the new email.
-    - expect: The email change saves and sign-in works with the new email; as sysadmin the Change log (subject 'User') shows entries for both self edits with the user as actor
+    - expect: The email change saves and sign-in works with the new email; as sysadmin the Change log (subject 'User') shows entries for both self edits (filter 'Subject id' by the user's id), one listing 'name' and one listing 'email', with the new name and email as After in their dialogs
 
 #### 1.4. Row 6: Users are listed distinctly and duplicates are kept apart
 
@@ -72,7 +72,7 @@ Elections Ontario evaluation checklist, Security section (rows 3 to 12): sign-in
   3. Sign out; sign in as e2e-twin-b-<suffix>@gpo.test, open Account menu, then 'Edit profile', change the name to 'E2E Twin B Edited <suffix>' and save.
     - expect: The save succeeds
   4. Sign out and sign in as sysadmin. Open Admin then Change log, Subject type 'User', and find the entry for that edit.
-    - expect: The Actor column shows 'E2E Twin B Edited <suffix>' (not the other twin), and the subject id matches user B; user A's row in Admin, Users still shows the name 'E2E Twin <suffix>'
+    - expect: The Actor column shows 'E2E Twin B Edited <suffix>' (not the other twin), and the subject id matches user B. The entry lists only 'name'; its dialog shows the old twin name as Before and the edited name as After, and with "Show N unchanged fields" revealed, B's email (not A's). User A's row in Admin, Users still shows the name 'E2E Twin <suffix>'
 
 #### 1.5. Row 6: Unique user ids are covered by the API tests
 
@@ -91,10 +91,10 @@ Elections Ontario evaluation checklist, Security section (rows 3 to 12): sign-in
     - expect: The table lists ten roles: Bookkeeper, Filer, Organizer, Party CFO, Process owner, Read only, Receipt administrator, Riding or campaign CFO, Rules authority (each marked 'Built-in'), and System administrator (marked 'Locked')
   2. Click 'New role'. Enter Name 'Riding Auditor <suffix>', Description 'Reads records for audit', tick 'Read all records'. Observe 'Create role' while Reason is empty.
     - expect: 'Create role' is disabled until 'Reason for this change (required)' has text
-  3. Enter Reason 'Create auditor role for EO demo' and click 'Create role'.
+  3. Enter Reason 'Create auditor role for EO demo <suffix>' and click 'Create role'.
     - expect: The dialog closes; the roles table lists the new role with its description and 'Read all records', with 0 users, alongside the ten built-in roles
   4. Open Admin then Change log, choose Subject type 'Role'.
-    - expect: The newest row shows actor 'Sys Admin', reason 'Create auditor role for EO demo', an empty or null Before, and an After value containing the role name and the permission key for 'Read all records'
+    - expect: The newest row shows actor 'Sys Admin', reason 'Create auditor role for EO demo <suffix>', and Changes 'Created'. Its dialog shows an em dash as Before for 'name' and the role name as After, plus the permission key for 'Read all records'
   5. Try to create another role with the same name 'Riding Auditor <suffix>'.
     - expect: Creation is refused with an error and no duplicate row appears
 
@@ -192,7 +192,7 @@ Elections Ontario evaluation checklist, Security section (rows 3 to 12): sign-in
   9. In a fresh context sign in with the old password 'pwd-initial-12345', then with 'pwd-changed-67890'.
     - expect: The old password is refused; the new password works
   10. As sysadmin open Admin, Change log, Subject type 'User'.
-    - expect: An entry exists for that user with the user as actor recording the password change (no password or hash value is displayed in Before/After)
+    - expect: An entry exists for that user with the user as actor recording the password change (a 'passwordChanged' field of true in its dialog; no password or hash value is displayed)
 
 #### 1.12. Row 12: Admin resets a user's password and signs them out everywhere
 
@@ -212,4 +212,4 @@ Elections Ontario evaluation checklist, Security section (rows 3 to 12): sign-in
   6. In B sign in with the old password, then with 'reset-temp-67890-ab'.
     - expect: The old password is refused; the temporary password works
   7. In A open Admin, Change log, Subject type 'User'.
-    - expect: An entry for the user shows actor 'Sys Admin' and reason 'Forgot password', with no password or hash value displayed
+    - expect: An entry for the user shows actor 'Sys Admin' and reason 'Forgot password', with no password or hash value displayed; its dialog shows a 'passwordReset' field of true

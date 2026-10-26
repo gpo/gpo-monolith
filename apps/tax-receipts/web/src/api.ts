@@ -1169,6 +1169,8 @@ export const api = {
   },
   resolveWorkItem: (id: string, input: { reason: string; outcome: 'RESOLVED' | 'EXCEPTION' }) =>
     request<WorkItemRow>(`/work-items/${id}/resolve`, { method: 'POST', body: JSON.stringify(input) }),
+  editWorkItemException: (id: string, input: { exceptionReason: string; reason: string }) =>
+    request<WorkItemRow>(`/work-items/${id}/exception`, { method: 'PATCH', body: JSON.stringify(input) }),
   listSpaces: () => request<{ data: SpaceDashboardRow[] }>('/spaces'),
   previewSpaceIssuance: (periodId: number, entityKind: string, ridingNumber: number | null, combinePerDonor = false) => {
     const params = new URLSearchParams();
