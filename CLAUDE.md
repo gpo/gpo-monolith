@@ -74,8 +74,12 @@ pointer; ask the tech team for access.
 
 ## Conventions & hard rules
 
-- **No CiviCRM integration.** CiviCRM is being decommissioned; the receipts tool
-  reads from **Qomon + the BigQuery warehouse only**. (See `decisions.md` D2.)
+- **The tool is the system of record** for contacts, memberships,
+  contributions, and receipts. Data enters through the website forms, CFO
+  uploads, and staff edits; Qomon gets a **one-way, read-only copy**, and
+  nothing syncs back. (See `decisions.md` D10.)
+- **No CiviCRM integration.** CiviCRM is being decommissioned. (See
+  `decisions.md` D2.)
 - **Never hard-delete receipt data.** Corrections are cancel/void + an append-only
   change-log entry. This is a regulatory requirement (`compliance.md`).
 - **Reporting reads hit the warehouse (BigQuery), not Qomon directly.**
