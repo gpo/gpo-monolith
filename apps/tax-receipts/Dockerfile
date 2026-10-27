@@ -7,6 +7,10 @@
 #   docker build -f apps/tax-receipts/Dockerfile --target api-tools -t tax-receipts-api-tools .
 #   docker build -f apps/tax-receipts/Dockerfile --target web       -t tax-receipts-web .
 #
+# Pass --build-arg GIT_SHA=$(git rev-parse --short HEAD) to each: it becomes
+# the image's org.opencontainers.image.revision label, the api's GET /version,
+# and the web's /version.json.
+#
 # Targets:
 #   api        Fastify API (node dist/server.js) on :3000. Production deps only.
 #   api-tools  Full workspace with dev deps: runs `prisma migrate deploy`
@@ -60,6 +64,8 @@ RUN pnpm turbo run build --filter=@gpo/tax-receipts-api --filter=@gpo/tax-receip
 FROM build AS api-tools
 WORKDIR /repo/apps/tax-receipts/api
 ENV NODE_ENV=production
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision=${GIT_SHA}
 # DATABASE_URL must be set at run time. Seed (evaluation data, NOT for
 # production): docker run ... tax-receipts-api-tools pnpm exec tsx prisma/seed.ts
 CMD ["pnpm", "exec", "prisma", "migrate", "deploy"]
@@ -88,6 +94,11 @@ ENV ARTIFACT_STORAGE_DIR=/data/artifacts \
 RUN mkdir -p /data/artifacts && chown -R node:node /data
 VOLUME ["/data"]
 
+# last, so a new commit does not invalidate the layers above
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision=${GIT_SHA}
+ENV GIT_SHA=${GIT_SHA}
+
 USER node
 WORKDIR /repo/apps/tax-receipts/api
 EXPOSE 3000
@@ -105,6 +116,9 @@ ENV API_UPSTREAM=http://api:3000
 RUN rm /etc/nginx/conf.d/default.conf
 COPY apps/tax-receipts/web/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /repo/apps/tax-receipts/web/dist /usr/share/nginx/html
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision=${GIT_SHA}
+RUN printf '{"gitSha":"%s"}\n' "${GIT_SHA}" > /usr/share/nginx/html/version.json
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1

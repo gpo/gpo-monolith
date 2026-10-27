@@ -110,7 +110,10 @@ evaluation seed on request), and `web` (nginx serving the SPA and proxying
 environment variables, rollout order, and the single-instance constraint
 (PDFs on local disk, in-process email dispatcher). The api's `build` copies
 the generated Prisma client into `dist/`, so `node dist/server.js` runs on
-its own.
+its own. Every image takes a `GIT_SHA` build arg: it becomes the
+`org.opencontainers.image.revision` label, the api's `GET /api/version`, and
+the web's `/version.json`, so a deployment shows which commit each container
+runs.
 
 ## Data model and invariants
 

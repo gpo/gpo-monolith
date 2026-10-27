@@ -15,6 +15,11 @@ describe('loadEnv', () => {
     const env = loadEnv(base);
     expect(env.PUBLIC_WEB_URL).toBe('http://localhost:5173');
     expect(env.EMAIL_FROM).toBe('GPO Tax Receipts <receipts@localhost>');
+    expect(env.GIT_SHA).toBe('unknown');
+  });
+
+  it('passes the build commit through', () => {
+    expect(loadEnv({ ...base, GIT_SHA: 'abc1234' }).GIT_SHA).toBe('abc1234');
   });
 
   it('requires PUBLIC_WEB_URL in production', () => {
