@@ -1,9 +1,9 @@
-import { QomonClient, QomonPollChangeFeed, type QomonApi } from '@gpo/qomon-client';
+import type { QomonApi } from '@gpo/qomon-client';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { partyQomonApiBase, type QomonSource } from '../qomon/settings.js';
-import { runPagedMirrorSweep } from '../sync/mirror-sweep.js';
+import type { BuildQomon, QomonSource } from '../qomon/settings.js';
+import { executeSweepTarget, SweepTargetError } from '../sync/execute-target.js';
 
 /**
  * Manual mirror-sweep trigger (ticket 1.1). A real cron/k8s schedule is
@@ -26,8 +26,9 @@ import { runPagedMirrorSweep } from '../sync/mirror-sweep.js';
 export async function syncRoutes(
   app: FastifyInstance,
   opts: {
-    /** the party-level space; resolves to undefined while Qomon is off */
-    qomon: QomonSource;
+    /** Optional party client override; otherwise resolve current database settings. */
+    qomon?: QomonSource;
+    buildQomon?: BuildQomon;
     /** builds the QomonApi for a riding's own space; defaults to a real
      *  QomonClient. Overridable so tests can inject a fake instead of
      *  hitting the network. */
@@ -35,14 +36,6 @@ export async function syncRoutes(
   },
 ): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
-  const buildRidingQomon =
-    opts.buildRidingQomon ??
-    (async (riding: { qomonApiKey: string; qomonApiBase: string | null }) =>
-      new QomonClient({
-        apiKey: riding.qomonApiKey,
-        baseUrl: riding.qomonApiBase ?? (await partyQomonApiBase(app.prisma)),
-      }));
-
   r.route({
     method: 'POST',
     url: '/internal/sync/sweep',
@@ -61,36 +54,25 @@ export async function syncRoutes(
         return reply.code(403).send({ error: 'sysadmin only' });
       }
 
-      const ridingNumber = request.body?.ridingNumber;
-      let qomon: QomonApi;
-      let feedKind: string | undefined;
-
-      if (ridingNumber != null) {
-        const riding = await app.prisma.riding.findUnique({ where: { ridingNumber } });
-        if (!riding) {
-          return reply.code(404).send({ error: `no riding ${ridingNumber} on file` });
+      try {
+        const result = await executeSweepTarget(
+          { prisma: app.prisma, ...opts },
+          {
+            target: request.body?.ridingNumber == null
+              ? { kind: 'party' }
+              : { kind: 'riding', ridingNumber: request.body.ridingNumber },
+            mode: request.body?.mode ?? 'incremental',
+          },
+        );
+        return reply.send(result);
+      } catch (error) {
+        if (error instanceof SweepTargetError) {
+          const partyUnavailable = request.body?.ridingNumber == null && error.code === 'MISSING_API_KEY';
+          const status = error.code === 'UNKNOWN_RIDING' || error.code === 'QOMON_DISABLED' || partyUnavailable ? 404 : 409;
+          return reply.code(status).send({ error: error.message });
         }
-        if (!riding.active) {
-          return reply.code(409).send({ error: `riding ${ridingNumber} is inactive` });
-        }
-        qomon = await buildRidingQomon(riding);
-        feedKind = `qomon-poll:riding-${ridingNumber}`;
-      } else {
-        const party = await opts.qomon();
-        if (!party) {
-          return reply
-            .code(404)
-            .send({ error: 'Qomon is not enabled (Admin > Qomon); cannot sweep' });
-        }
-        qomon = party;
+        throw error;
       }
-
-      const feed = new QomonPollChangeFeed(qomon, { kind: feedKind });
-      const result = await runPagedMirrorSweep(
-        { prisma: app.prisma, feed, qomon },
-        { mode: request.body?.mode },
-      );
-      return reply.send(result);
     },
   });
 }

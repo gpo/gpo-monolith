@@ -128,6 +128,51 @@ describe('POST /internal/sync/sweep (ticket 1.1 manual trigger)', () => {
     expect(res.statusCode).toBe(409);
   });
 
+  it('resolves database-held party settings at execution time through the route', async () => {
+    const built: string[] = [];
+    app = await buildApp({
+      prisma, sessionSecret: SECRET,
+      buildQomon: (config) => { built.push(config.apiKey); return new InMemoryQomon(); },
+    });
+    await app.ready();
+    const cookie = await sysadminCookie(app);
+    const call = (mode: 'incremental' | 'full') => app.inject({
+      method: 'POST', url: '/internal/sync/sweep',
+      cookies: { [cookie.name]: cookie.value }, payload: { mode },
+    });
+    await prisma.qomonSettings.create({
+      data: { id: 'singleton', enabled: true, apiKey: 'first-key', apiBase: 'https://party.example' },
+    });
+    expect((await call('incremental')).json()).toMatchObject({ mode: 'incremental', pulled: 0, hasMore: false });
+    await prisma.qomonSettings.update({ where: { id: 'singleton' }, data: { apiKey: 'rotated-key' } });
+    const full = await call('full');
+    expect(full.statusCode).toBe(200);
+    expect(full.json()).toMatchObject({ mode: 'full', pulled: 0, hasMore: false });
+    expect(built).toEqual(['first-key', 'rotated-key']);
+    await prisma.qomonSettings.update({ where: { id: 'singleton' }, data: { enabled: false } });
+    expect((await call('incremental')).statusCode).toBe(404);
+    await prisma.qomonSettings.update({ where: { id: 'singleton' }, data: { enabled: true, apiKey: '' } });
+    const missingKey = await call('incremental');
+    expect(missingKey.statusCode).toBe(404);
+    expect(missingKey.json()).toEqual({ error: 'Qomon is not enabled (Admin > Qomon); cannot sweep' });
+  });
+
+  it('rejects a riding without a key before constructing its client', async () => {
+    await prisma.riding.create({ data: { ridingNumber: 7, name: 'Seven', qomonApiKey: ' ' } });
+    app = await buildApp({
+      prisma, sessionSecret: SECRET,
+      buildRidingQomon: () => { throw new Error('must not construct client'); },
+    });
+    await app.ready();
+    const cookie = await sysadminCookie(app);
+    const response = await app.inject({
+      method: 'POST', url: '/internal/sync/sweep',
+      cookies: { [cookie.name]: cookie.value }, payload: { ridingNumber: 7 },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: 'riding 7 has no Qomon API key configured' });
+  });
+
   it('sweeps a riding with its own Qomon client, keyed by its own cursor', async () => {
     await prisma.riding.create({
       data: { ridingNumber: 7, name: 'Test Riding', qomonApiKey: 'riding-7-key' },
