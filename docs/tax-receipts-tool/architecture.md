@@ -243,3 +243,25 @@ This is presentation only; the API enforces each permission itself.
 - Qomon change dumps will arrive in an S3 bucket that does not exist yet; the
   "where incremental changes come from" boundary is abstracted behind
   `ChangeFeedSource`.
+
+## Qomon sweep paging
+
+The synchronous mirror sweep drains the source in bounded ingestion pages
+(`limit`, default 2,000 transactions). It saves the feed-specific cursor only
+after a terminal page and successful reconciliation. Failures restart from
+the original cursor; imported transactions are reused on replay. The
+`emergencyCeiling` option defaults to 1,000,000 transactions and throws on
+overflow, without cursor advancement or deletion detection.
+
+Full sweeps mark observed links with a run identifier in PostgreSQL, then
+check absent links in bounded database batches only after the source drains.
+Links carry their feed kind so a riding scan cannot flag party links as
+deleted. Existing links default to the party feed; deployments with historic
+riding imports must correct their feed assignment before full reconciliation.
+No receipt data is deleted.
+
+The polling adapter uses newest-first offset pagination, not a source
+snapshot. Concurrent source edits can shift offsets and cause repeated or
+missed records during a scan. Paging alone cannot guarantee a consistent
+snapshot; periodic full reconciliation remains necessary. A cursor is never
+saved from an intermediate page or an incomplete scan.

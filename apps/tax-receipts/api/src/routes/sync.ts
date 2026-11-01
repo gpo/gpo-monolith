@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { partyQomonApiBase, type QomonSource } from '../qomon/settings.js';
-import { runMirrorSweep } from '../sync/mirror-sweep.js';
+import { runPagedMirrorSweep } from '../sync/mirror-sweep.js';
 
 /**
  * Manual mirror-sweep trigger (ticket 1.1). A real cron/k8s schedule is
@@ -86,7 +86,7 @@ export async function syncRoutes(
       }
 
       const feed = new QomonPollChangeFeed(qomon, { kind: feedKind });
-      const result = await runMirrorSweep(
+      const result = await runPagedMirrorSweep(
         { prisma: app.prisma, feed, qomon },
         { mode: request.body?.mode },
       );
