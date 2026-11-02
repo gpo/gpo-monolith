@@ -15,7 +15,7 @@ gap still being there.
 
 | Gap | Meanwhile |
 |---|---|
-| The Qomon import sweep does not run on a schedule. | A system administrator starts it (through the API, or the Dev tools page in development builds). |
+| The Qomon import sweep does not run on a schedule. | A system administrator queues a party full sweep under [Admin > Sweep](administration.md#sweep). Incremental and riding sweeps still use the synchronous API or development controls. |
 | Contribution riding, entity kind, and received-by often cannot be worked out from Qomon data, so imports arrive with "Intake" items. | Confirm each in the [work queue](work-queue.md); bulk edit helps with batches. |
 | A later edit to an imported transaction in Qomon is not applied; it opens a sync incident. | Decide case by case, and correct the contribution if needed. |
 | Historical (CiviCRM) data is not loaded yet. | |

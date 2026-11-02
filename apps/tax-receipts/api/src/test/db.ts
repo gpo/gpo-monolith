@@ -13,6 +13,9 @@ export function testPrisma(): PrismaClient {
 /** Wipe every table (TRUNCATE bypasses the row-level delete guards by design),
  *  then put back the built-in roles every user row needs. */
 export async function resetDb(prisma: PrismaClient): Promise<void> {
+  // Delivery state lives outside public and must not leak between tests.
+  const [queue] = await prisma.$queryRaw<{ table: string | null }[]>`SELECT to_regclass('pgboss.job')::text AS "table"`;
+  if (queue?.table) await prisma.$executeRawUnsafe('TRUNCATE pgboss.job CASCADE');
   const rows = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables
     WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;

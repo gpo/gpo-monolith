@@ -16,7 +16,9 @@
     "migrate:reset": "prisma migrate reset --force",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
     "db:seed:fixtures": "tsx --env-file=.env prisma/seed-fixtures.ts",
-    "db:seed:demo": "tsx --env-file=.env prisma/seed-demo.ts"
+    "db:seed:demo": "tsx --env-file=.env prisma/seed-demo.ts",
+    "worker": "node dist/sweeps/worker.js",
+    "worker:dev": "tsx --env-file=.env src/sweeps/worker.ts"
   },
   "dependencies": {
     "@casl/ability": "^6.7.3",
@@ -34,6 +36,7 @@
     "fastify-type-provider-zod": "^4.0.2",
     "passport-local": "^1.0.0",
     "pdf-lib": "^1.17.1",
+    "pg-boss": "12.38.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

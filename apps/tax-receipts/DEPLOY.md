@@ -42,6 +42,21 @@ docker build -f apps/tax-receipts/Dockerfile --target web       -t tax-receipts-
 2. Roll out `api`.
 3. Roll out `web`.
 
+The existing `prisma migrate deploy` command installs both the application
+tables and pg-boss's separate `pgboss` namespace, including the sweep queue.
+The queue SQL is generated from the pinned pg-boss version and committed as a
+Prisma migration. Matching installations from the former queue setup command
+are adopted without deleting jobs. An incompatible existing version fails
+the migration.
+
+Run migrations before rolling out API and worker at the same code version.
+Runtime services use `migrate: false` and never migrate the queue schema.
+The deployment migration role needs permission to create the `pgboss`
+namespace; runtime roles need access to its existing data and functions.
+For pg-boss upgrades, generate and review a new SQL migration using the
+upstream migration plans, and test both a fresh install and an upgrade.
+Keep pg-boss objects outside the Prisma application data model.
+
 Migrations are forward-only and must run before the api that needs them.
 
 ## Constraints
@@ -127,3 +142,36 @@ docker compose --env-file .env.staging -f docker-compose.staging.yml run --rm mi
 The app is then on `http://localhost:8080`. Over plain http, set
 `NODE_ENV=development` in `.env.staging` or the browser will not get a
 session cookie and login fails.
+
+## Sweep worker
+
+Run a separate process from the same `api` image with the command
+`node dist/sweeps/worker.js`. Use one replica and supply `DATABASE_URL`
+pointing at the same database as the API. No HTTP ingress, session secret, or
+email settings are needed. When using this image for a worker, disable its
+API HTTP health check (`--no-healthcheck` with Docker); worker liveness is its
+running process after the `Sweep worker ready` message. Startup verifies
+database connectivity, pg-boss compatibility, and the installed queue.
+More detailed worker health and crash recovery are follow-up work.
+
+Finished queue jobs and application sweep results are retained indefinitely.
+Unprocessed queued jobs expire after a fixed 30 days. No retention environment
+variable is required.
+The worker disables scheduling. SIGINT or SIGTERM allows 30 seconds to drain;
+configure a termination grace period greater than 30 seconds. A sweep failure
+is recorded safely and stops the worker with exit code 1. Abrupt termination
+can leave application runs RUNNING until recovery tooling is added; investigate
+before manually restarting work.
+
+Locally, from the repository root:
+
+```bash
+pnpm --filter @gpo/tax-receipts-api migrate:deploy
+pnpm --filter @gpo/tax-receipts-api worker:dev
+```
+
+The API and Vite run separately using `pnpm dev`. Once both API and worker
+are running, queue a party full sweep under **Admin > Sweep**.
+Riding queue targets, schedules, retries, and history browsing are
+follow-up slices; existing synchronous controls remain temporarily available.
+Avoid running synchronous sweeps while queued work is active.

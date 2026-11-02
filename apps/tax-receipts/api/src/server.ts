@@ -1,3 +1,4 @@
+import { openSweepQueue, queueEnvironment } from './sweeps/queue.js';
 import { buildApp } from './app.js';
 import { getPrisma } from './db.js';
 import { startEmailDispatcher } from './delivery/dispatcher.js';
@@ -7,6 +8,8 @@ import { loadEnv } from './env.js';
 async function main(): Promise<void> {
   const env = loadEnv();
   const prisma = getPrisma();
+  const queueEnv = queueEnvironment();
+  const sweepQueue = await openSweepQueue(queueEnv.DATABASE_URL);
   const emailProvider = buildEmailProvider(env);
   const emailDispatch = {
     ratePerSecond: env.EMAIL_RATE_PER_SECOND,
@@ -14,6 +17,7 @@ async function main(): Promise<void> {
   };
   const app = await buildApp({
     prisma,
+    sweepQueue,
     ownsPrisma: true,
     sessionSecret: env.SESSION_SECRET,
     secureCookie: env.NODE_ENV === 'production',
@@ -25,6 +29,8 @@ async function main(): Promise<void> {
     emailLiveSendingAllowed: env.EMAIL_LIVE_SENDING_ALLOWED,
     publicWebUrl: env.PUBLIC_WEB_URL,
   });
+
+  app.addHook('onClose', () => sweepQueue.stop());
 
   const dispatcher = startEmailDispatcher(
     {
