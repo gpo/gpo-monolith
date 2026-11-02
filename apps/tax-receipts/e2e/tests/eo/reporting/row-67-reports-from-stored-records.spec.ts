@@ -20,6 +20,9 @@ test.describe('Reporting', () => {
     await reason.fill(`E2E row 67 ALL ${sfx}`);
     await expect(generate).toBeEnabled();
     await generate.click();
+    // A row 66 report can already satisfy the row check below; the page clears
+    // the reason only when this run finishes, which would wipe the next one.
+    await expect(reason).toHaveValue('');
     const allRow = page
       .locator('tbody tr')
       .filter({ has: page.getByRole('cell', { name: 'ALL', exact: true }) })
@@ -54,7 +57,7 @@ test.describe('Reporting', () => {
     for (const r of rows) {
       expect(r['Receipt_Number']).toMatch(/^GPO-\d+$/);
       expect(r['Contribution_Period_ID']).toBe('9503');
-      expect(r['Political_Entity']).toBe('Green Party of Ontario');
+      expect(r['Political_Entity']).toBe('GPO');
     }
     const theo = rows.filter(
       (r) => r['Contributor_First_Name'] === 'Threshold' && r['Contributor_Last_Name'] === 'Theo',

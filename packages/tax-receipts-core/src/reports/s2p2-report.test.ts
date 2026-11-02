@@ -94,9 +94,9 @@ describe('buildS2p2Rows', () => {
     expect(rows[0]!.Aggregate_Contribution_Amount).toBe('300.00');
   });
 
-  it('carries the ENTITY type letter in Contributor_Type, not the donor type like ALL', () => {
+  it('carries the donor type in Contributor_Type, separate from the entity type', () => {
     const { rows } = buildS2p2Rows([source({ amountCents: 30_000, entityKind: 'CA', ridingNumber: 84 })], label);
-    expect(rows[0]!.Contributor_Type).toBe('A');
+    expect(rows[0]!.Contributor_Type).toBe('I');
     expect(rows[0]!.Political_Entity_Type).toBe('A');
   });
 

@@ -128,7 +128,7 @@ describe('S2P2 report generator (ticket 4.2)', () => {
     // Party_ID,Contributor_ID,Political_Entity_Type,Political_Entity,Contribution_Period_ID,
     // Contributor_Type,Last,First,Org,Address,City,Province,Postal,Aggregate
     expect(lines[1]).toBe(
-      '8,198176,P,Green Party of Ontario,67,P,Donor,Dana,,1 Main St,Toronto,ON,M1M1M1,250.00',
+      '8,198176,P,Green Party of Ontario,67,I,Donor,Dana,,1 Main St,Toronto,ON,M1M1M1,250.00',
     );
 
     const stored = await prisma.entityReport.findUnique({ where: { id: result.entityReportId! } });

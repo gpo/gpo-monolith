@@ -148,7 +148,7 @@ test('generates a report with the entered label and reason', async () => {
     kind: 'ALL',
     entityKind: 'PARTY',
     ridingNumber: null,
-    politicalEntityLabel: 'Green Party of Ontario',
+    politicalEntityLabel: 'GPO',
     reason: 'annual filing',
   });
 });
