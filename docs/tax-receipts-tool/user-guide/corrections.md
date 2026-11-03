@@ -69,6 +69,11 @@ Then:
   **return note** for anything inside an entity report already filed.
 - Closes open validation items on the retired rows and validates the
   replacements.
+- Re-validates every other active contribution of each donor involved, so
+  checks that compare a donor's gifts stay current. Refunding one half of a
+  "possible duplicate" pair resolves the other half's item too, and
+  refunding a gift that put a donor over the limit clears their
+  over-limit items.
 
 Who can run them: *Correct contributions*, plus *Correct receipts* when a
 receipt will be cancelled or issued. A riding-limited user can correct only

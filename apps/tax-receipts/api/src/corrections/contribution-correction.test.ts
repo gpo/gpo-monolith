@@ -9,6 +9,7 @@ import { issueReceipt } from '../receipts/issue.js';
 import { markRtdFilingSent } from '../rtd/mark-sent.js';
 import { prepareRtdFiling } from '../rtd/prepare.js';
 import { createTestContribution, fixtureWrite, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
+import { runValidationForContribution } from '../validation/run.js';
 import { correctAmount, moveContributions, moveReceipt, reallocate, refund, splitContribution } from './actions.js';
 import {
   CorrectionBlockedError,
@@ -597,6 +598,24 @@ describe('contribution correction engine (corrections.md actions 4, 5, 6, 8, 9, 
       await applyCorrection(deps(), await refund(prisma, { ...common(), contributionIds: [samsPart.id] }));
 
       expect((await prisma.payment.findUniqueOrThrow({ where: { id: contribution.paymentId } })).state).toBe('RECEIVED');
+    });
+
+    it("resolves the surviving duplicate's A6 finding when the other half is refunded", async () => {
+      const dana = await seedContact();
+      const { contribution: first } = await seedContribution(dana.id, { amountCents: 5_000 });
+      const { contribution: second } = await seedContribution(dana.id, { amountCents: 5_000 });
+      await runValidationForContribution(prisma, first.id);
+      await runValidationForContribution(prisma, second.id);
+      const a6 = (subjectId: string) =>
+        prisma.workItem.findFirstOrThrow({ where: { kind: 'VALIDATION', subjectId, ruleRef: 'A6' } });
+      expect((await a6(first.id)).status).toBe('OPEN');
+      expect((await a6(second.id)).status).toBe('OPEN');
+
+      const result = await applyCorrection(deps(), await refund(prisma, { ...common(), contributionIds: [second.id] }));
+
+      expect(result.validationFailures).toEqual([]);
+      expect((await a6(second.id)).status).toBe('RESOLVED');
+      expect((await a6(first.id)).status).toBe('RESOLVED');
     });
 
     it('will not correct a row that has already been superseded', async () => {

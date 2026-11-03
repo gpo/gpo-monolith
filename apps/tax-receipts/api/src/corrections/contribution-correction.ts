@@ -787,7 +787,7 @@ export interface CorrectionResult {
   cancellationNoticeArtifactIds: string[];
   owedToEoWorkItemIds: string[];
   followUps: string[];
-  /** replacements whose post-commit validation run failed (the correction itself is committed) */
+  /** replacements or touched donors' other rows whose post-commit validation run failed (the correction itself is committed) */
   validationFailures: string[];
 }
 
@@ -1195,6 +1195,30 @@ export async function applyCorrection(deps: ArtifactStoreDeps, input: Correction
       await runValidationForContribution(prisma, created.id);
     } catch (err) {
       validationFailures.push(`${created.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // 7. re-validate the touched donors' other active rows: rules that compare
+  // a donor's contributions (A6 duplicates, over-limit) can stop or start
+  // firing on a row the correction never edited, e.g. the surviving half of
+  // a refunded duplicate
+  const touchedContactIds = new Set([
+    ...[...supersededContributionIds, ...refundedContributionIds].map((id) => loaded.get(id)!.contactId),
+    ...[...createdByRef.values()].map((c) => c.contactId),
+  ]);
+  const siblings = await prisma.contribution.findMany({
+    where: {
+      contactId: { in: [...touchedContactIds] },
+      status: 'ACTIVE',
+      id: { notIn: [...createdByRef.values()].map((c) => c.id) },
+    },
+    select: { id: true },
+  });
+  for (const { id } of siblings) {
+    try {
+      await runValidationForContribution(prisma, id);
+    } catch (err) {
+      validationFailures.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
