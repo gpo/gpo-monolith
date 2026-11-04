@@ -40,6 +40,17 @@ describe('auth + authorization (ticket 0.5)', () => {
     expect(health.json()).toMatchObject({ status: 'ok', db: 'up' });
   });
 
+  it('reports the build commit without authentication', async () => {
+    const versioned = await buildApp({ prisma, sessionSecret: SECRET, gitSha: 'abc1234' });
+    try {
+      const version = await versioned.inject({ method: 'GET', url: '/version' });
+      expect(version.statusCode).toBe(200);
+      expect(version.json()).toEqual({ gitSha: 'abc1234' });
+    } finally {
+      await versioned.close();
+    }
+  });
+
   it('logs a user in and exposes their identity + permissions', async () => {
     const login = await app.inject({
       method: 'POST',
