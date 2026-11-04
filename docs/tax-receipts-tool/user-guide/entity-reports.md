@@ -29,8 +29,9 @@ riding or campaign CFOs, who see only their own ridings), or *Read all
 records*. Other roles can open the screen but not the list.
 
 1. In **Generate a report**, choose **ALL** or **S2P2**.
-2. Enter the **political entity label**, the entity's name as it should
-   appear in the file.
+2. Enter the **political entity label**, as EO's format requires: the party
+   abbreviation (`GPO`, the default for the party), or the riding name and
+   number (`Ajax 001`), 10 characters at most.
 3. Give a reason and generate.
 
 Before writing anything, the tool runs EO's export checks on every receipt

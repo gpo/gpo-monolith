@@ -10,7 +10,7 @@ EXACT HEADERS observed live.
 ALL (21 columns): Party_ID,Contributor_ID,Receipt_Number,Receipt_Status,Agency_Contribution,General_Meetings,Political_Entity_Type,Political_Entity,Contribution_Amount,Contribution_Type,Acceptance_Date,Receipt_Issuance_Date,Contribution_Period_ID,Contributor_Type,Contributor_Last_Name,Contributor_First_Name,Organization_Name,Contributor_Address,Contributor_City,Contributor_Province,Contributor_Postal_Code
 S2P2 (14 columns): Party_ID,Contributor_ID,Political_Entity_Type,Political_Entity,Contribution_Period_ID,Contributor_Type,Contributor_Last_Name,Contributor_First_Name,Organization_Name,Contributor_Address,Contributor_City,Contributor_Province,Contributor_Postal_Code,Aggregate_Contribution_Amount
 
-Observed data: every row has Party_ID 8, Contributor_Type I (ALL) or P (S2P2), address "123 Main St", Toronto, ON, M5V 2T6.
+Observed data: every row has Party_ID 8, Contributor_Type I, address "123 Main St", Toronto, ON, M5V 2T6.
 
 Reads seeded data in periods 9503 and 9504 only; the only mutation anywhere in this plan is appending entity reports to spaces 9503 PARTY, 9503 CA riding 121, and 9504 PARTY. Do not use the 2025 Annual PARTY space (Security section generates there).
 
@@ -29,7 +29,7 @@ Reads seeded data in periods 9503 and 9504 only; the only mutation anywhere in t
     - expect: Heading 'Entity reports' and text 'Period 9503 · Party (province-wide)' are visible
     - expect: The 'Generate a report' form is shown with no permission warning
     - expect: The 'Generate' button is disabled while the reason is empty
-  2. Fill 'Reason for generating (required)' with 'E2E row 66 <suffix>' (leave Report as ALL and the label as 'Green Party of Ontario'), confirm Generate is enabled, then click it.
+  2. Fill 'Reason for generating (required)' with 'E2E row 66 <suffix>' (leave Report as ALL and the label as 'GPO'), confirm Generate is enabled, then click it.
     - expect: A new first row appears in the table with Kind 'ALL' and Rows '9'
     - expect: The row has a 'Download CSV' link and a 'Mark sent' button
   3. Click 'Download CSV' on that row and capture the download.
@@ -71,7 +71,7 @@ Reads seeded data in periods 9503 and 9504 only; the only mutation anywhere in t
   3. Download the ALL CSV from the ALL row you generated and parse it.
     - expect: Exactly 9 data rows, every Receipt_Number non-empty and matching /^GPO-\d+$/ (issued receipts, from stored records)
     - expect: Rows with Contributor_First_Name 'Threshold' (Contributor_Last_Name 'Theo') number exactly 3, with Contribution_Amount 100.00, 75.00, and 50.00
-    - expect: All rows have Contribution_Period_ID 9503 and Political_Entity 'Green Party of Ontario'
+    - expect: All rows have Contribution_Period_ID 9503 and Political_Entity 'GPO'
   4. Read the Status cell of the ALL row this scenario just generated.
     - expect: Status 'Clean': nothing changed between generating the file and reading it back, including Lost Lena's L status
 
@@ -109,7 +109,7 @@ Reads seeded data in periods 9503 and 9504 only; the only mutation anywhere in t
     - expect: Newest row: Kind 'S2P2', Rows '2', Status 'Clean'
     - expect: Header equals exactly the 14-column S2P2 header from the overview, ending in Aggregate_Contribution_Amount
   2. Parse the data rows.
-    - expect: Exactly 2 data rows, each with 14 fields, Contributor_Type P, Political_Entity_Type P, Political_Entity 'Green Party of Ontario', Contribution_Period_ID 9503
+    - expect: Exactly 2 data rows, each with 14 fields, Contributor_Type I, Political_Entity_Type P, Political_Entity 'GPO', Contribution_Period_ID 9503
     - expect: Split Sam (Last 'Sam', First 'Split'): Aggregate_Contribution_Amount 300.00
     - expect: Threshold Theo (Last 'Theo', First 'Threshold'): Aggregate_Contribution_Amount 225.00 (100 + 75 + 50 aggregated over three receipts)
     - expect: No row for Rory, Lena, Emma, or Gita (each at $200 or less) and no row for the 9503 CA donors

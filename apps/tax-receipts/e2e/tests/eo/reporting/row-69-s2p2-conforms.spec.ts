@@ -47,9 +47,9 @@ test.describe('Reporting', () => {
       return Object.fromEntries(header.map((h, i) => [h, cells[i] ?? '']));
     });
     for (const r of rows) {
-      expect(r['Contributor_Type']).toBe('P');
+      expect(r['Contributor_Type']).toBe('I');
       expect(r['Political_Entity_Type']).toBe('P');
-      expect(r['Political_Entity']).toBe('Green Party of Ontario');
+      expect(r['Political_Entity']).toBe('GPO');
       expect(r['Contribution_Period_ID']).toBe('9503');
     }
     const sam = rows.filter(

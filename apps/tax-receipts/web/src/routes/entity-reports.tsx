@@ -130,7 +130,10 @@ export function EntityReportsPage(params: EntityReportsParams) {
   const [genError, setGenError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const effectiveLabel = (politicalEntityLabel ?? defaultPoliticalEntityLabel(entityKind)).trim();
+  // EO's Political_Entity column takes the party abbreviation (10 characters
+  // at most), unlike the full name printed on receipts.
+  const defaultReportLabel = entityKind === 'PARTY' ? 'GPO' : defaultPoliticalEntityLabel(entityKind);
+  const effectiveLabel = (politicalEntityLabel ?? defaultReportLabel).trim();
 
   const generate = useMutation({
     mutationFn: () =>
@@ -181,9 +184,9 @@ export function EntityReportsPage(params: EntityReportsParams) {
           />
           <TextInput
             label="Political entity label (as it should print on the file)"
-            placeholder="e.g. Green Party of Ontario"
+            placeholder="e.g. GPO, or Ajax 001 for a riding"
             description={leadershipLabelNote(entityKind)}
-            value={politicalEntityLabel ?? defaultPoliticalEntityLabel(entityKind)}
+            value={politicalEntityLabel ?? defaultReportLabel}
             onChange={(e) => setPoliticalEntityLabel(e.currentTarget.value)}
           />
           <TextInput
