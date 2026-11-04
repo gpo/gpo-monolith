@@ -75,6 +75,12 @@ export interface Me {
     correctContributions: boolean;
     correctReceipts: boolean;
     administerUsers: boolean;
+    /** periods, limits, holidays, ridings, contestants, receipts, emails (settings.administer) */
+    administerSettings: boolean;
+    /** sysadmin-only functions: Qomon, dev tools (system.manage) */
+    manageSystem: boolean;
+    /** read every record, including the change log's who-did-what (records.readAll) */
+    readAllRecords: boolean;
   };
 }
 
@@ -241,6 +247,7 @@ export interface ContributionDetail {
     id: string;
     subjectType: string;
     actorUserId: string | null;
+    actorName: string | null;
     reason: string;
     before: unknown;
     after: unknown;
@@ -719,6 +726,23 @@ export interface ReceiptSettings {
   updatedAt: string | null;
 }
 
+/** The party-level Qomon space (api/src/qomon/settings.ts); the key is
+ *  write-only, so only whether one is on file comes back. */
+export interface QomonSettings {
+  enabled: boolean;
+  apiBase: string;
+  apiKeySet: boolean;
+  updatedByUserId: string | null;
+  updatedAt: string | null;
+}
+
+export interface QomonSettingsInput {
+  enabled?: boolean;
+  apiBase?: string;
+  apiKey?: string;
+  reason: string;
+}
+
 export interface EmailDeliverySettings {
   provider: string;
   liveSendingAllowed: boolean;
@@ -1145,6 +1169,8 @@ export const api = {
   },
   resolveWorkItem: (id: string, input: { reason: string; outcome: 'RESOLVED' | 'EXCEPTION' }) =>
     request<WorkItemRow>(`/work-items/${id}/resolve`, { method: 'POST', body: JSON.stringify(input) }),
+  editWorkItemException: (id: string, input: { exceptionReason: string; reason: string }) =>
+    request<WorkItemRow>(`/work-items/${id}/exception`, { method: 'PATCH', body: JSON.stringify(input) }),
   listSpaces: () => request<{ data: SpaceDashboardRow[] }>('/spaces'),
   previewSpaceIssuance: (periodId: number, entityKind: string, ridingNumber: number | null, combinePerDonor = false) => {
     const params = new URLSearchParams();
@@ -1220,6 +1246,9 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ receiptLayout, reason }),
     }),
+  getQomonSettings: () => request<QomonSettings>('/admin/qomon-settings'),
+  setQomonSettings: (input: QomonSettingsInput) =>
+    request<QomonSettings>('/admin/qomon-settings', { method: 'PUT', body: JSON.stringify(input) }),
   getEmailSettings: () => request<EmailDeliverySettings>('/admin/email-settings'),
   setLiveSending: (liveSendingEnabled: boolean, reason: string) =>
     request<EmailDeliverySettings>('/admin/email-settings', {
@@ -1247,7 +1276,14 @@ export const api = {
       body: JSON.stringify({ holidays }),
     }),
   listUsers: () => request<{ data: AdminUserRow[] }>('/admin/users'),
-  createUser: (input: { name: string; email: string; password: string; role: string }) =>
+  createUser: (input: {
+    name: string;
+    email: string;
+    password: string;
+    role: string;
+    allRidings: boolean;
+    ridingGrants: number[];
+  }) =>
     request<{ id: string }>('/admin/users', { method: 'POST', body: JSON.stringify(input) }),
   updateUser: (
     id: string,
@@ -1257,7 +1293,7 @@ export const api = {
   ) =>
     request<AdminUserRow>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   resetUserPassword: (id: string, newPassword: string, reason: string) =>
-    request<{ ok: true }>(`/admin/users/${id}/password`, {
+    request<{ ok: true; sessionsSignedOut: number }>(`/admin/users/${id}/password`, {
       method: 'POST',
       body: JSON.stringify({ newPassword, reason }),
     }),

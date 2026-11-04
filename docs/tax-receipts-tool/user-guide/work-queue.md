@@ -27,14 +27,23 @@ the rule, when it was opened, its due date if any, and its status.
 
 ## Resolving an item
 
-Needs *Resolve work items*. Each open item offers two ways to close it, and
-both need a note of at least three characters:
+Needs *Resolve work items*. Each open item offers two ways to close it.
+Each opens a dialog that needs a note of at least three characters, with
+room for a paragraph:
 
 - **Resolve**: the problem is dealt with.
-- **Except**: the tool's concern is understood and the contribution is
+- **Exception**: the tool's concern is understood and the contribution is
   correct as it stands (for example, a "possible duplicate" that is really
-  two separate gifts). The note is your justification, kept in the change
-  log.
+  two separate gifts, or an out-of-province address for a donor you have
+  confirmed lives in Ontario, such as a student away at university). The
+  note is your justification, kept in the change log, so say how you know.
+  An exception is never a way to accept a gift the rules forbid: a donor
+  who really lives outside Ontario is refunded.
+
+An exception's reason stays editable: **Edit** on its row opens the reason
+with a required reason for the edit, and both the old and new text are kept
+in the change log. Editing does not extend the exception; it still lapses
+at the end of the calendar year it was granted in.
 
 Usually the better path is to fix the underlying data. Validation runs
 again whenever a contribution or its donor is edited, and an item whose

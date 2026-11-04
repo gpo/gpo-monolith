@@ -7,17 +7,19 @@ review-interval-days: 90
 
 [Back to the guide](README.md)
 
-The **Admin** area holds the tool's configuration. Anyone signed in can
-view most sections; changing them needs the permission named for each
-section. Almost every change asks for a reason and is recorded in the
-[change log](change-log.md).
+The **Admin** area holds the tool's configuration. You see only the
+sections your role has a use for, listed below; if it has none, the
+**Admin** link is not shown at all. Almost every change asks for a reason
+and is recorded in the [change log](change-log.md).
 
-| Section | Needs |
+| Section | Shown to anyone with |
 |---|---|
 | Periods, Contribution limits, RTD holidays, Ridings, Leadership contestants, Receipts, Emails | *Manage annual settings* |
 | Users, Roles | *Manage users and roles* |
 | Kill switch | *Operate the issuance kill switch* |
-| Validation rules, Change log | Reading only |
+| Qomon | System administrator only |
+| Validation rules (reading only) | *Manage annual settings*, *Edit contribution details*, or *Correct contributions* |
+| Change log (reading only) | *Read all records*, *Manage annual settings*, or *Manage users and roles* |
 
 ## Annual settings
 
@@ -50,7 +52,8 @@ standard Ontario statutory holidays; review it each year.
 ### Ridings
 
 The 124 ridings from EO's riding directory: number, name, and whether the
-riding is active. Import an updated directory as a JSON file; re-importing
+riding is active, plus the Qomon API key of a riding that runs its own
+Qomon space. Import an updated directory as a JSON file; re-importing
 updates existing ridings rather than duplicating them. A contribution to a
 CA in an inactive riding is flagged (rule A3).
 
@@ -79,6 +82,23 @@ While engaged:
 - cancelling receipts and other corrections that do not issue a new
   receipt still work, so mistakes can be fixed;
 - donor pre-check emails and cancellation notices still go out.
+
+## Qomon
+
+**Admin > Qomon** connects the tool to the party's Qomon space. It is off
+until a system administrator turns it on:
+
+- **Off** (the default on a new installation): contributors are kept in
+  this tool only, contributors that came from Qomon cannot be edited, and the
+  party mirror sweep does not run.
+- **Enabled**: a contributor added or edited in the tool is written to Qomon
+  first, then copied here.
+
+Enabling needs an API key. The key is never shown again once saved; the page
+says only whether one is on file, and entering a new one replaces it. The
+API base URL is also the default for ridings with their own space. Every
+change needs a reason and is recorded in the change log (subject
+`QomonSettings`), without the key.
 
 ## Receipt layout
 

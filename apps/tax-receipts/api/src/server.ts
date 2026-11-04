@@ -1,4 +1,3 @@
-import { QomonClient } from '@gpo/qomon-client';
 import { buildApp } from './app.js';
 import { getPrisma } from './db.js';
 import { startEmailDispatcher } from './delivery/dispatcher.js';
@@ -20,10 +19,6 @@ async function main(): Promise<void> {
     secureCookie: env.NODE_ENV === 'production',
     trustProxy: env.TRUST_PROXY,
     logger: true,
-    qomon: env.QOMON_API_KEY
-      ? new QomonClient({ apiKey: env.QOMON_API_KEY, baseUrl: env.QOMON_API_BASE })
-      : undefined,
-    qomonApiBase: env.QOMON_API_BASE,
     artifactStorageDir: env.ARTIFACT_STORAGE_DIR,
     emailProvider,
     emailDispatch,

@@ -163,5 +163,6 @@ export const ChangeLogSubjectType = z.enum([
   'Role',
   'LeadershipContestant',
   'ReceiptSettings',
+  'QomonSettings',
 ]);
 export type ChangeLogSubjectType = z.infer<typeof ChangeLogSubjectType>;

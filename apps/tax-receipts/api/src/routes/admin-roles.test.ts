@@ -93,7 +93,15 @@ describe('roles and permissions (EO evaluation rows 7 to 10)', () => {
     expect(me.json()).toMatchObject({
       role: 'riding_auditor',
       roleName: 'Riding Auditor',
-      can: { generateEntityReports: true, issueReceipts: false, administerUsers: false },
+      can: {
+        generateEntityReports: true,
+        issueReceipts: false,
+        administerUsers: false,
+        // what the web uses to decide which admin sections to show
+        readAllRecords: true,
+        administerSettings: false,
+        manageSystem: false,
+      },
     });
 
     const edit = await app.inject({
@@ -255,5 +263,92 @@ describe('roles and permissions (EO evaluation rows 7 to 10)', () => {
       payload: { name: '2020 Annual', kind: 'ANNUAL', startsAt: '2020-01-01T05:00:00Z', endsAt: '2021-01-01T05:00:00Z', reason: 'new period' },
     });
     expect(period.statusCode).toBe(403);
+  });
+
+  it('only full system access can grant or revoke full system access', async () => {
+    const admin = await login('sysadmin@gpo.test', 'sysadmin-pass-phrase');
+    for (const [name, permissions] of [
+      ['User Manager', ['users.administer']],
+      ['Deputy Sysadmin', ['system.manage']],
+    ] as const) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/admin/roles',
+        cookies: admin,
+        payload: { name, permissions, reason: 'set up delegation' },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+    const manager = await prisma.user.findUniqueOrThrow({ where: { email: 'admin@gpo.test' } });
+    await prisma.user.update({ where: { id: manager.id }, data: { roleKey: 'user_manager' } });
+    const cookies = await login('admin@gpo.test', 'admin-pass-phrase');
+
+    const createRole = await app.inject({
+      method: 'POST',
+      url: '/admin/roles',
+      cookies,
+      payload: { name: 'Sneaky', permissions: ['system.manage'], reason: 'escalation' },
+    });
+    expect(createRole.statusCode).toBe(403);
+
+    const grant = await app.inject({
+      method: 'PATCH',
+      url: '/admin/roles/user_manager',
+      cookies,
+      payload: { permissions: ['users.administer', 'system.manage'], reason: 'escalation' },
+    });
+    expect(grant.statusCode).toBe(403);
+
+    const revoke = await app.inject({
+      method: 'PATCH',
+      url: '/admin/roles/deputy_sysadmin',
+      cookies,
+      payload: { permissions: ['records.readAll'], reason: 'demotion' },
+    });
+    expect(revoke.statusCode).toBe(403);
+
+    const assignSelf = await app.inject({
+      method: 'PATCH',
+      url: `/admin/users/${manager.id}`,
+      cookies,
+      payload: { role: 'sysadmin' },
+    });
+    expect(assignSelf.statusCode).toBe(403);
+
+    const demote = await app.inject({ method: 'PATCH', url: `/admin/users/${sysadminId}`, cookies, payload: { role: 'readonly' } });
+    expect(demote.statusCode).toBe(403);
+
+    const createUser = await app.inject({
+      method: 'POST',
+      url: '/admin/users',
+      cookies,
+      payload: { name: 'New', email: 'new@gpo.test', password: 'a-long-enough-password', role: 'deputy_sysadmin' },
+    });
+    expect(createUser.statusCode).toBe(403);
+
+    // Edits that leave full access where it was still go through.
+    const rename = await app.inject({
+      method: 'PATCH',
+      url: '/admin/roles/deputy_sysadmin',
+      cookies,
+      payload: { description: 'Backup system administrator', permissions: ['system.manage'], reason: 'clarify' },
+    });
+    expect(rename.statusCode).toBe(200);
+    const edit = await app.inject({
+      method: 'PATCH',
+      url: '/admin/roles/user_manager',
+      cookies,
+      payload: { permissions: ['users.administer', 'records.readAll'], reason: 'needs to read records' },
+    });
+    expect(edit.statusCode).toBe(200);
+
+    // The system administrator can do all of it.
+    const sysGrant = await app.inject({
+      method: 'PATCH',
+      url: `/admin/users/${manager.id}`,
+      cookies: admin,
+      payload: { role: 'deputy_sysadmin' },
+    });
+    expect(sysGrant.statusCode).toBe(200);
   });
 });

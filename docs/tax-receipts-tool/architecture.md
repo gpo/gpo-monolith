@@ -16,6 +16,7 @@ live in the private `gpo/qomon-migration-documents` repo.
 apps/tax-receipts/
   api/     Fastify + Zod + Prisma + PostgreSQL   (@gpo/tax-receipts-api)
   web/     Vite + React + Mantine + Tanstack     (@gpo/tax-receipts-web)
+  e2e/     Playwright browser tests               (@gpo/tax-receipts-e2e)
 packages/
   tax-receipts-core/   domain enums, money, the Qomon metadata schema,
                        the period calendar, the ContributionLimit service,
@@ -31,8 +32,19 @@ resolves from every package. Node version is pinned in `.nvmrc`.
 
 ## Commands
 
+The one-command way to run the tool locally, from the repo root:
+
 ```bash
 pnpm install
+pnpm dev    # dev Postgres up (waits for healthy), migrate:deploy, builds the
+            # packages, then api (:3000) and web (:5173) in watch mode
+```
+
+It reads `apps/tax-receipts/api/.env` (copy `.env.example` first) and does not
+seed: run `db:seed` once on a fresh database (below). The step-by-step
+equivalent, plus tests:
+
+```bash
 pnpm turbo run lint typecheck test build     # everything
 
 # the api's tests need a Postgres on :5433 (docker-compose.test.yml).
@@ -40,7 +52,13 @@ pnpm turbo run lint typecheck test build     # everything
 # for dev data.
 pnpm db:test:up
 export DATABASE_URL="postgresql://gpo:gpo@localhost:5433/tax_receipts_test"
-pnpm --filter @gpo/tax-receipts-api test
+pnpm turbo run test --filter=@gpo/tax-receipts-api
+
+# The api's build, typecheck, and test scripts don't run `prisma generate`
+# themselves: turbo runs it once first (api/turbo.json), because three
+# parallel generates rewriting src/generated raced each other's tsc. Going
+# through turbo, as above, handles it; to run a script with plain
+# `pnpm --filter`, run `prisma:generate` first after any schema change.
 
 # day-to-day dev/manual-testing data is a SEPARATE Postgres on :5434
 # (docker-compose.dev.yml), with a persistent named volume. This is what
@@ -51,6 +69,11 @@ pnpm db:dev:up
 export DATABASE_URL="postgresql://gpo:gpo@localhost:5434/tax_receipts_dev"
 pnpm --filter @gpo/tax-receipts-api migrate:deploy
 pnpm --filter @gpo/tax-receipts-api db:seed  # dev/eval seed data (sysadmin@gpo.test, etc.)
+pnpm --filter @gpo/tax-receipts-api db:seed:fixtures  # manual-test fixtures (Split Sam, Lost Lena, ...)
+# EO evaluation demo: records the demo issues, corrects, and resolves live,
+# the "With contributor type" receipt layout, and every seeded login's
+# password set to `gpo`. Local databases only, unless run with --allow-remote.
+pnpm --filter @gpo/tax-receipts-api db:seed:demo
 
 # `dev`/`db:seed` load apps/tax-receipts/api/.env themselves (tsx --env-file)
 # — but env vars already exported in your shell win over .env, so if you
@@ -58,6 +81,18 @@ pnpm --filter @gpo/tax-receipts-api db:seed  # dev/eval seed data (sysadmin@gpo.
 # before running `dev` or it'll keep pointing at whatever you last exported.
 pnpm --filter @gpo/tax-receipts-api dev      # Fastify on :3000
 pnpm --filter @gpo/tax-receipts-web dev      # Vite on :5173, proxies /api -> :3000
+```
+
+The Playwright suite in `apps/tax-receipts/e2e/` drives the real app in a
+browser. It needs only the dev Postgres (`pnpm db:dev:up`): it resets and
+seeds its own `tax_receipts_e2e` database on every run and starts its own api
+(:3100) and web (:5174) servers, so dev data is left alone. Qomon stays off,
+because the fresh database never enables it. The suite covers every row of
+the EO Evaluation Tool: plans in `e2e/specs/`, tests in `e2e/tests/eo/`. It
+is not part of `turbo run test`; see its README.
+
+```bash
+pnpm --filter @gpo/tax-receipts-e2e e2e
 ```
 
 CI is `.github/workflows/tax-receipts-ci.yml`: lint, typecheck, tests
@@ -79,6 +114,13 @@ its own. Every image takes a `GIT_SHA` build arg: it becomes the
 `org.opencontainers.image.revision` label, the api's `GET /api/version`, and
 the web's `/version.json`, so a deployment shows which commit each container
 runs.
+
+Note: this setup makes use of [multi platform builds](https://docs.docker.com/build/building/multi-platform/)
+which require some [specific prerequisites](https://docs.docker.com/build/building/multi-platform/#prerequisites)
+to leverage. Namely: Docker Engine > v29.0 and ensure that the option
+"Use containerd for pulling and storing images" is enabled under Settings->General.
+
+You can then build the images by running `docker buildx bake`.
 
 ## Data model and invariants
 
@@ -112,8 +154,16 @@ need a contact or contribution row directly use `fixtureContact` and
 Contributors (`contact` rows) are added and edited under **Contributors**
 (`/contributors`), from the donor picker on payment entry, and from a
 contribution's detail page. All writes go through `api/src/contacts/write.ts`.
-Who owns a contact depends on whether the API has a Qomon client
-(`QOMON_API_KEY` set):
+Who owns a contact depends on whether Qomon is enabled. That is a database
+setting (`qomon_settings`, `api/src/qomon/settings.ts`), not an environment
+variable: a system administrator enables the party-level space under
+**Admin > Qomon** with an API key, and until then the tool never talks to
+Qomon, so a fresh database (a new deployment, the e2e suite) is
+Qomon-free whatever its environment holds. The setting is read on each
+request, so a change takes effect without a restart. The key is write-only:
+the API reports only whether one is on file, and the `QomonSettings`
+change-log entry records the same. Riding spaces (Admin > Ridings) use the
+party-level base URL unless they set their own.
 
 - **Without Qomon**, contacts are owned by the tool: a new one has no
   `qomonContactId`, and edits update the row.
@@ -122,8 +172,8 @@ Who owns a contact depends on whether the API has a Qomon client
   changed fields to Qomon (read, merge, full replace, via
   `QomonApi.updateContact`) and then mirrors what Qomon holds. If Qomon
   refuses, nothing is written locally.
-- A Qomon-linked contact cannot be edited while Qomon is not configured
-  (409). A contact with no Qomon link stays tool-owned either way.
+- A Qomon-linked contact cannot be edited while Qomon is off (409). A
+  contact with no Qomon link stays tool-owned either way.
 
 Every contact has a `contributorId`: the `Contributor ID` on EO filings
 (RTD, ALL, S2P2, DC-1A) and receipts, at most 10 alphanumeric characters.
@@ -171,15 +221,26 @@ changes their name and email (an email change needs the current password,
 since the email is the sign-in name), and **Change password** needs the
 current password and signs out the user's other sessions. An administrator
 holding `users.administer` can edit any user's name and email and reset a
-password (which leaves that user's sessions signed in) from Admin, Users. User
+password (which signs out every session of that user, apart from the
+admin's own when they reset their own) from Admin, Users. User
 creates and edits are change-logged under subject type `User`, never with
 the password hash. Sessions are tied to their user through
 `session.userId` and the passport field in the session data
 (`sessionsOfUser` in `api/src/auth/session-store.ts`).
 
+`users.administer` is not a path to `system.manage`: the role and user
+routes in `api/src/routes/admin.ts` refuse (403) any write by a user without
+`manage all` that adds `system.manage` to a role or removes it, or that
+moves a user onto or off a role holding it.
+
 The web app's root layout (`web/src/router.tsx`) gates every route on
 `GET /auth/me`: while signed out it renders only the login form, and the nav
-shell and all app routes stay hidden until sign-in succeeds.
+shell and all app routes stay hidden until sign-in succeeds. The Admin
+area shows only the sections the user's role has a use for: each entry in
+`ADMIN_SECTIONS` (`web/src/routes/admin.tsx`) carries an `allowed` check
+against the `can` flags from `/auth/me`, the header hides Admin when none
+pass, and a link to a hidden section redirects to the first permitted one.
+This is presentation only; the API enforces each permission itself.
 
 ## What is faked in Phase 0
 

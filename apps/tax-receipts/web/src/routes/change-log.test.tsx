@@ -1,12 +1,19 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { makeRouter } from '../router.js';
+import type { ChangeLogRow } from '../api.js';
 import { ME, jsonResponse } from '../test/fixtures.js';
 
-const PAGE = {
+const PAGE: { data: ChangeLogRow[]; nextCursor: string | null } = {
   data: [
     {
       id: 'e1',
@@ -14,7 +21,8 @@ const PAGE = {
       subjectId: 'c1',
       actorUserId: null,
       actorName: null,
-      reason: 'mirror sweep: new transaction, ticket-1.1 intake defaults applied',
+      reason:
+        'mirror sweep: new transaction, ticket-1.1 intake defaults applied',
       before: null,
       after: { periodId: 67 },
       at: '2026-03-01T12:00:00.000Z',
@@ -25,16 +33,18 @@ const PAGE = {
 };
 
 let calls: string[] = [];
+let page = PAGE;
 
 beforeEach(() => {
   calls = [];
+  page = PAGE;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
       calls.push(String(url));
       if (String(url).includes('/auth/me')) return jsonResponse(ME);
       if (String(url).includes('/change-log')) {
-        return new Response(JSON.stringify(PAGE), {
+        return new Response(JSON.stringify(page), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -52,7 +62,9 @@ afterEach(() => {
 });
 
 function renderPage() {
-  const router = makeRouter(createMemoryHistory({ initialEntries: ['/admin/change-log'] }));
+  const router = makeRouter(
+    createMemoryHistory({ initialEntries: ['/admin/change-log'] }),
+  );
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <MantineProvider>
@@ -65,7 +77,9 @@ function renderPage() {
 
 test('lists entries with reason, actor, and before/after', async () => {
   renderPage();
-  expect(await screen.findByText(/mirror sweep: new transaction/)).toBeInTheDocument();
+  expect(
+    await screen.findByText(/mirror sweep: new transaction/),
+  ).toBeInTheDocument();
   expect(screen.getByText('System')).toBeInTheDocument();
   expect(screen.getByText('ContributionMetadata (c1)')).toBeInTheDocument();
 });
@@ -74,15 +88,50 @@ test('a subject-id filter re-queries with the param set', async () => {
   renderPage();
   await screen.findByText(/mirror sweep/);
   calls = [];
-  fireEvent.change(screen.getByLabelText('Subject id'), { target: { value: 'c1' } });
-  await waitFor(() => expect(calls.some((u) => u.includes('subjectId=c1'))).toBe(true));
+  fireEvent.change(screen.getByLabelText('Subject id'), {
+    target: { value: 'c1' },
+  });
+  await waitFor(() =>
+    expect(calls.some((u) => u.includes('subjectId=c1'))).toBe(true),
+  );
 });
 
 test('the export link points at the CSV export endpoint with current filters', async () => {
   renderPage();
   await screen.findByText(/mirror sweep/);
-  fireEvent.change(screen.getByLabelText('Subject id'), { target: { value: 'c1' } });
+  fireEvent.change(screen.getByLabelText('Subject id'), {
+    target: { value: 'c1' },
+  });
   const link = await screen.findByRole('link', { name: 'Export CSV (for EO)' });
-  expect(link).toHaveAttribute('href', expect.stringContaining('/change-log/export'));
+  expect(link).toHaveAttribute(
+    'href',
+    expect.stringContaining('/change-log/export'),
+  );
   expect(link).toHaveAttribute('href', expect.stringContaining('subjectId=c1'));
+});
+
+test('clicking a row opens a field-by-field view of the change', async () => {
+  page = {
+    ...PAGE,
+    data: [
+      {
+        ...PAGE.data[0]!,
+        before: { periodId: 66, status: 'open' },
+        after: { periodId: 67, status: 'open' },
+      },
+    ],
+  };
+  renderPage();
+  fireEvent.click(await screen.findByText('periodId'));
+  const dialog = await screen.findByRole('dialog');
+  expect(
+    within(dialog).getByText('Updated ContributionMetadata (c1)'),
+  ).toBeInTheDocument();
+  expect(within(dialog).getByText('66')).toBeInTheDocument();
+  expect(within(dialog).getByText('67')).toBeInTheDocument();
+  expect(within(dialog).queryByText('status')).not.toBeInTheDocument();
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: 'Show 1 unchanged fields' }),
+  );
+  expect(within(dialog).getByText('status')).toBeInTheDocument();
 });

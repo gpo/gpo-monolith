@@ -26,6 +26,9 @@ export const ME: Me = {
     correctContributions: true,
     correctReceipts: true,
     administerUsers: true,
+    administerSettings: true,
+    manageSystem: true,
+    readAllRecords: true,
   },
 };
 

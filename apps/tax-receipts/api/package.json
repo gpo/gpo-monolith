@@ -4,18 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "prisma generate && tsc -p tsconfig.build.json && cp -R src/generated dist/",
-    "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json && cp -R src/generated dist/",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
-    "test": "prisma generate && vitest run",
-    "dev": "tsx watch --env-file=.env src/server.ts",
+    "test": "vitest run",
+    "dev": "prisma generate && tsx watch --env-file=.env src/server.ts",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "migrate:dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:reset": "prisma migrate reset --force",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
-    "db:seed:fixtures": "tsx --env-file=.env prisma/seed-fixtures.ts"
+    "db:seed:fixtures": "tsx --env-file=.env prisma/seed-fixtures.ts",
+    "db:seed:demo": "tsx --env-file=.env prisma/seed-demo.ts"
   },
   "dependencies": {
     "@casl/ability": "^6.7.3",

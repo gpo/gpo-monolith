@@ -24,7 +24,6 @@ gap still being there.
 
 | Gap | Meanwhile |
 |---|---|
-| Riding grants (limiting a user to some ridings) cannot be set on the Users screen. | Set through the API. |
 | Manually creating, or assigning, work items has no screen. | |
 
 ## Validation

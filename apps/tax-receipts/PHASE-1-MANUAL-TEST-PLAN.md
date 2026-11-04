@@ -51,15 +51,12 @@ for all of them is `change-me-please-12345`:
 
 The fullest test needs live Qomon data flowing through the mirror sweep.
 The sandbox key lives in the private `../qomon-test/.env` (gitignored, per
-`PHASE-0-NOTES.md`) — ask the team if you don't have it. Put it in
-`apps/tax-receipts/api/.env`:
+`PHASE-0-NOTES.md`) — ask the team if you don't have it. Sign in as
+`sysadmin@gpo.test`, open **Admin > Qomon**, enter the key, tick
+**Enabled**, and save with a reason. (Qomon is no longer read from
+`api/.env`.)
 
-```
-QOMON_API_KEY="..."
-QOMON_API_BASE="https://incoming.qomon.app"
-```
-
-With this set, `POST /internal/sync/sweep` and the write-through/refresh/
+With this enabled, `POST /internal/sync/sweep` and the write-through/refresh/
 bulk-edit routes actually talk to Qomon. **Without it**, those routes return
 `501` (by design — see `PHASE-1-NOTES.md` ticket 1.1/1.2), and the
 mirror-sweep / write-through / bulk-edit sections below can't be exercised
@@ -359,7 +356,7 @@ Straight from `PHASE-1-NOTES.md` — if you hit one of these, it's expected:
   data no ticket populates before Phase 3.
 - Any write route (`PATCH`/`POST` under `/contributions`, `/work-items`,
   `/admin`, plus the sync/validation triggers) that needs Qomon returns
-  `501` if `QOMON_API_KEY` isn't set.
+  `501` while Qomon is off (Admin > Qomon).
 
 ## If something looks genuinely wrong
 

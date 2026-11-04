@@ -83,6 +83,28 @@ describe('entity reports: listing, drift, send-to-CFO (ticket 4.5)', () => {
     expect(list[0]).toMatchObject({ id: result.entityReportId, kind: 'ALL', rowCount: 1, dirty: false });
   });
 
+  it('lists a report with a lost receipt as clean immediately after generation (status L both times)', async () => {
+    const receiptId = await seedReportableReceipt();
+    await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'donor lost it' }, async (ctx) => {
+      await ctx.tx.receipt.update({ where: { id: receiptId }, data: { lost: true } });
+      await ctx.log({ subjectType: 'Receipt', subjectId: receiptId, before: { lost: false }, after: { lost: true } });
+    });
+    const result = await generateAllReport(
+      { prisma, storageDir },
+      {
+        periodId: baseline.periodId,
+        entityKind: 'PARTY',
+        ridingNumber: null,
+        actorUserId: baseline.cfoUserId,
+        reason: 'generate',
+        politicalEntityLabel: label,
+      },
+    );
+
+    const list = await listEntityReports(prisma, baseline.periodId);
+    expect(list.find((r) => r.id === result.entityReportId)).toMatchObject({ dirty: false });
+  });
+
   it('flags a report dirty once a later metadata edit changes a rendered field (rule E5)', async () => {
     const receiptId = await seedReportableReceipt();
     const result = await generateAllReport(

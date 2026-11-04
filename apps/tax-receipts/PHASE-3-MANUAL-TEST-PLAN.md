@@ -235,8 +235,8 @@ fixture donor, for example one of Space A's.
       a read-only user.
 - [ ] Correct the amount to something smaller, tick "the payment itself was
       mis-keyed", give a reason, **Preview cascade**. The preview names the old
-      receipt to cancel and a new one "cancels and replaces GPO-...", and shows
-      the "Qomon still shows ..." follow-up. **Commit correction** stays
+      receipt to cancel and a new one "cancels and replaces GPO-...".
+      **Commit correction** stays
       disabled until you preview; change any field afterwards and the preview
       disappears.
 - [ ] Commit it. The page now shows the contribution as history, and its

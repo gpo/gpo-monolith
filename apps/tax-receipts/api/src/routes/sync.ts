@@ -2,6 +2,7 @@ import { QomonClient, QomonPollChangeFeed, type QomonApi } from '@gpo/qomon-clie
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { partyQomonApiBase, type QomonSource } from '../qomon/settings.js';
 import { runMirrorSweep } from '../sync/mirror-sweep.js';
 
 /**
@@ -11,7 +12,7 @@ import { runMirrorSweep } from '../sync/mirror-sweep.js';
  * data-entry one.
  *
  * Two spaces a sweep can target:
- *  - the party-level space, configured by QOMON_API_KEY (`opts.qomon`) —
+ *  - the party-level space, configured in Admin > Qomon (`opts.qomon`) —
  *    the default, and the only mode that existed before per-riding spaces;
  *  - a single riding's own space (`body.ridingNumber`), looked up in the
  *    `Riding` table and swept with that riding's own key. Each riding gets
@@ -25,8 +26,8 @@ import { runMirrorSweep } from '../sync/mirror-sweep.js';
 export async function syncRoutes(
   app: FastifyInstance,
   opts: {
-    qomon?: QomonApi;
-    qomonApiBase?: string;
+    /** the party-level space; resolves to undefined while Qomon is off */
+    qomon: QomonSource;
     /** builds the QomonApi for a riding's own space; defaults to a real
      *  QomonClient. Overridable so tests can inject a fake instead of
      *  hitting the network. */
@@ -36,8 +37,11 @@ export async function syncRoutes(
   const r = app.withTypeProvider<ZodTypeProvider>();
   const buildRidingQomon =
     opts.buildRidingQomon ??
-    ((riding: { qomonApiKey: string; qomonApiBase: string | null }) =>
-      new QomonClient({ apiKey: riding.qomonApiKey, baseUrl: riding.qomonApiBase ?? opts.qomonApiBase }));
+    (async (riding: { qomonApiKey: string; qomonApiBase: string | null }) =>
+      new QomonClient({
+        apiKey: riding.qomonApiKey,
+        baseUrl: riding.qomonApiBase ?? (await partyQomonApiBase(app.prisma)),
+      }));
 
   r.route({
     method: 'POST',
@@ -69,15 +73,16 @@ export async function syncRoutes(
         if (!riding.active) {
           return reply.code(409).send({ error: `riding ${ridingNumber} is inactive` });
         }
-        qomon = buildRidingQomon(riding);
+        qomon = await buildRidingQomon(riding);
         feedKind = `qomon-poll:riding-${ridingNumber}`;
       } else {
-        if (!opts.qomon) {
+        const party = await opts.qomon();
+        if (!party) {
           return reply
             .code(404)
-            .send({ error: 'Qomon is not configured (QOMON_API_KEY unset); cannot sweep' });
+            .send({ error: 'Qomon is not enabled (Admin > Qomon); cannot sweep' });
         }
-        qomon = opts.qomon;
+        qomon = party;
       }
 
       const feed = new QomonPollChangeFeed(qomon, { kind: feedKind });

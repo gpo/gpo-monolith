@@ -207,6 +207,34 @@ describe('correction actions 1 & 2: cancel / reissue (ticket 3.10)', () => {
     expect(newReceipt.allocations[0]!.amountCents).toBe(5_000);
   });
 
+  it('reissues from current data: the replacement carries the contributor\'s current name and address, the original keeps its own', async () => {
+    const contact = await seedContact();
+    const contribution = await seedContribution(contact.id, 5_000);
+    await seedMetadata(contribution.id);
+    const issued = await issue(contribution.id);
+
+    await fixtureContactUpdate(prisma, {
+      where: { id: contact.id },
+      data: {
+        name: 'Dana Renamed',
+        addresses: [{ housenumber: '9', street: 'Elm Court', city: 'Ottawa', state: 'ON', postalcode: 'K1A0B1', country: 'CA' }],
+      },
+    });
+
+    const result = await reissueReceipt(
+      { prisma, storageDir },
+      { receiptId: issued.id, actorUserId: baseline.cfoUserId, reason: 'donor changed their name', politicalEntityLabel: 'Green Party of Ontario' },
+    );
+
+    const oldReceipt = await prisma.receipt.findUniqueOrThrow({ where: { id: issued.id }, include: { addressSnapshot: true } });
+    expect(oldReceipt.contactNameSnapshot).toBe('Dana Donor');
+    expect(oldReceipt.addressSnapshot.line1).toBe('1 Main St');
+
+    const newReceipt = await prisma.receipt.findUniqueOrThrow({ where: { id: result.newReceiptId }, include: { addressSnapshot: true } });
+    expect(newReceipt.contactNameSnapshot).toBe('Dana Renamed');
+    expect(newReceipt.addressSnapshot.line1).toBe('9 Elm Court');
+  });
+
   it('reissues a multi-allocation receipt, carrying every contribution over to one new receipt', async () => {
     const contact = await seedContact();
     const first = await seedContribution(contact.id, 4_000);

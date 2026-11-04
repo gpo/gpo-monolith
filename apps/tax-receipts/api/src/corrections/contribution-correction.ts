@@ -244,7 +244,7 @@ export interface CorrectionPlan {
   dirtyReports: { entityReportId: string; kind: string; periodId: number; filed: boolean }[];
   /** entities the caller must supply a "received by" label for */
   labelsNeeded: { entityKind: EntityKind; ridingNumber: number | null; key: string }[];
-  /** non-blocking, e.g. "Qomon still shows ..." (corrections.md, "Qomon after a correction") */
+  /** non-blocking notes, e.g. a contact merge's "merge them in Qomon too" */
   followUps: string[];
   blockers: string[];
 }
@@ -746,23 +746,7 @@ async function prepare(prisma: PrismaClient, input: CorrectionInput): Promise<Pr
   owedToEo.push(...effects.owedToEo);
   blockers.push(...effects.blockers);
 
-  const followUps: string[] = [];
-  for (const change of plannedChanges) {
-    const old = loaded.get(change.contributionId)!;
-    const link = old.payment.qomonLink;
-    if (!link) continue;
-    const differs =
-      change.kind === 'refund' ||
-      change.replacements.some((r) => r.contactId !== old.contactId || r.amountCents !== old.amountCents);
-    if (differs) {
-      followUps.push(
-        `Qomon still shows transaction ${link.qomonTransactionId} as ${old.contact.name}, ` +
-          `${(old.amountCents / 100).toFixed(2)}; fix it by hand if Fundraising needs it (the tool never writes to Qomon transactions)`,
-      );
-    }
-  }
-
-  followUps.push(...(input.extraFollowUps ?? []));
+  const followUps = [...(input.extraFollowUps ?? [])];
 
   const plan: CorrectionPlan = {
     action: input.action,
@@ -803,7 +787,7 @@ export interface CorrectionResult {
   cancellationNoticeArtifactIds: string[];
   owedToEoWorkItemIds: string[];
   followUps: string[];
-  /** replacements whose post-commit validation run failed (the correction itself is committed) */
+  /** replacements or touched donors' other rows whose post-commit validation run failed (the correction itself is committed) */
   validationFailures: string[];
 }
 
@@ -1211,6 +1195,30 @@ export async function applyCorrection(deps: ArtifactStoreDeps, input: Correction
       await runValidationForContribution(prisma, created.id);
     } catch (err) {
       validationFailures.push(`${created.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // 7. re-validate the touched donors' other active rows: rules that compare
+  // a donor's contributions (A6 duplicates, over-limit) can stop or start
+  // firing on a row the correction never edited, e.g. the surviving half of
+  // a refunded duplicate
+  const touchedContactIds = new Set([
+    ...[...supersededContributionIds, ...refundedContributionIds].map((id) => loaded.get(id)!.contactId),
+    ...[...createdByRef.values()].map((c) => c.contactId),
+  ]);
+  const siblings = await prisma.contribution.findMany({
+    where: {
+      contactId: { in: [...touchedContactIds] },
+      status: 'ACTIVE',
+      id: { notIn: [...createdByRef.values()].map((c) => c.id) },
+    },
+    select: { id: true },
+  });
+  for (const { id } of siblings) {
+    try {
+      await runValidationForContribution(prisma, id);
+    } catch (err) {
+      validationFailures.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

@@ -21,15 +21,14 @@ import { formatReportCsv } from './csv.js';
  *    $200.20, and rows at exactly $200.00 are excluded (a mandatory test
  *    population, per the README).
  *
- * Two S2P2-only quirks the tool reproduces (same source):
- *  - `Contributor_Type` here carries the ENTITY type letter (P/A/C), not the
- *    donor's type like the ALL file (always 'I' there) — the same value as
- *    this row's own `Political_Entity_Type`, just repeated under a
- *    differently-meaning column name;
- *  - a period whose top aggregate does not exceed $200 emits no S2P2 file at
- *    all (not an empty one) — the caller (the api-layer generator) is
- *    responsible for skipping artifact/EntityReport creation when
- *    `buildS2p2Rows` returns `[]`.
+ * `Contributor_Type` follows EO's written spec (always 'I', as on the ALL
+ * file), which Evaluation Tool row 69 scores against. GPO's accepted filings
+ * carried the entity letter (P/A/C) there instead.
+ *
+ * A period whose top aggregate does not exceed $200 emits no S2P2 file at all
+ * (not an empty one) — the caller (the api-layer generator) is responsible
+ * for skipping artifact/EntityReport creation when `buildS2p2Rows` returns
+ * `[]`.
  */
 
 export const S2P2_REPORT_HEADER = [
@@ -184,9 +183,7 @@ export function buildS2p2Rows(
       Political_Entity_Type: entityTypeLetter,
       Political_Entity: politicalEntity,
       Contribution_Period_ID: group.periodId,
-      // S2P2 quirk (see this file's header comment): the entity letter, not
-      // the donor's type like the ALL file.
-      Contributor_Type: entityTypeLetter,
+      Contributor_Type: 'I',
       Contributor_Last_Name: group.contributorLastName,
       Contributor_First_Name: group.contributorFirstName,
       Organization_Name: '',

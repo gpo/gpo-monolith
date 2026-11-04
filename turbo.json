@@ -3,6 +3,11 @@
   "ui": "stream",
   "globalEnv": ["DATABASE_URL", "NODE_ENV", "CI"],
   "tasks": {
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]

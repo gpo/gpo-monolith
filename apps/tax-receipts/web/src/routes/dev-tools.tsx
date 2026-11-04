@@ -39,7 +39,7 @@ export function DevToolsPage() {
             <NativeSelect
               label="Space"
               data={[
-                { value: 'party', label: 'Party space (QOMON_API_KEY)' },
+                { value: 'party', label: 'Party space (Admin > Qomon)' },
                 ...(ridings.data?.data.map((r) => ({
                   value: String(r.ridingNumber),
                   label: `Riding ${r.ridingNumber} — ${r.name}${r.active ? '' : ' (inactive)'}`,
@@ -58,7 +58,7 @@ export function DevToolsPage() {
             <Alert color="yellow">
               404 — {ridingNumber
                 ? `no riding ${ridingNumber} on file (Admin > Ridings).`
-                : 'no Qomon client is configured on the API. Set QOMON_API_KEY (and QOMON_API_BASE) in apps/tax-receipts/api/.env and restart the API.'}
+                : 'Qomon is not enabled. A system administrator can enable it, with an API key, under Admin > Qomon.'}
             </Alert>
           )}
           {sweep.isError && !notConfigured && (

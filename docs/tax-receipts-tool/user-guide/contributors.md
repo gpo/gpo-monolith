@@ -25,7 +25,8 @@ email. Open a contributor to see:
   amount, status, and what is left to receipt. With *Issue receipts*, tick
   two or more to issue one receipt for all of them (see
   [Combined receipts](issuing-receipts.md#combined-receipts)).
-- **Change history**: every change to their record, with before and after.
+- **Change history**: every change to their record; select an entry to
+  see its before and after, field by field.
   It starts collapsed, showing when the record last changed; select **Show**
   to see the entries.
 
@@ -52,6 +53,15 @@ the [work queue](work-queue.md) straight away.
 A correction to a name or address does not change a receipt already issued:
 the receipt keeps the address it was printed with. To put the corrected
 details on a receipt, see [Corrections](corrections.md#receipt-actions).
+
+## Recording a payment from a contributor
+
+On a contributor's page, **Add a payment** opens the payment form with that
+contributor already picked as the donor, and the contribution's entity,
+riding, and leadership contestant copied from their latest active
+contribution. Needs the *Enter payments* permission; it is not offered on a
+merged record. See
+[Recording a payment by hand](contributions-and-payments.md#recording-a-payment-by-hand).
 
 ## Qomon and contributor records
 

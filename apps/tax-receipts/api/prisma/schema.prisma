@@ -221,6 +221,7 @@ enum ChangeLogSubjectType {
   Role
   LeadershipContestant
   ReceiptSettings
+  QomonSettings
 }
 
 // ---------------------------------------------------------------------------
@@ -924,7 +925,7 @@ model SyncCursor {
 }
 
 /// A riding-specific Qomon space (some ridings run their own Qomon account,
-/// separate from the party-level space configured by QOMON_API_KEY). One row
+/// separate from the party-level space in QomonSettings). One row
 /// per riding that needs its own credentials; a riding absent here has no
 /// space of its own and isn't sweepable individually. Not a data-model §2
 /// entity: sync bookkeeping/config, in the same vein as SyncCursor above.
@@ -933,8 +934,8 @@ model Riding {
   ridingNumber Int      @id
   name         String
   qomonApiKey  String
-  /// overrides the default QOMON_API_BASE when this riding's space lives on
-  /// a different host; null uses the default.
+  /// overrides the party-level QomonSettings.apiBase when this riding's
+  /// space lives on a different host; null uses the party-level base.
   qomonApiBase String?
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -1074,6 +1075,23 @@ model ReceiptSettings {
   updatedAt       DateTime      @updatedAt
 
   @@map("receipt_settings")
+}
+
+/// The party-level Qomon space (singleton row). Qomon is off until a system
+/// administrator enables it here with an API key: a fresh database, such as
+/// the e2e one, never talks to Qomon, whatever the environment holds. Off,
+/// the tool owns its contributors (D13) and the party mirror sweep refuses.
+/// `apiKey` is write-only: never returned by the API or change-logged, the
+/// same rule as Riding.qomonApiKey.
+model QomonSettings {
+  id              String   @id @default("singleton")
+  enabled         Boolean  @default(false)
+  apiKey          String   @default("")
+  apiBase         String   @default("https://incoming.qomon.app")
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
+
+  @@map("qomon_settings")
 }
 
 model PrintBatchItem {

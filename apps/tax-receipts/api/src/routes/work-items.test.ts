@@ -85,4 +85,33 @@ describe('work queue routes (ticket 1.8)', () => {
     });
     expect(res.statusCode).toBe(409);
   });
+
+  it('edits an exception reason', async () => {
+    const cookie = await login();
+    await app.inject({
+      method: 'POST',
+      url: `/work-items/${itemId}/resolve`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: { reason: 'two gifts', outcome: 'EXCEPTION' },
+    });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/work-items/${itemId}/exception`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: { exceptionReason: 'two separate gifts, confirmed with the donor', reason: 'more detail' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: 'EXCEPTION', resolutionNote: 'two separate gifts, confirmed with the donor' });
+  });
+
+  it('rejects editing the exception reason of an open item', async () => {
+    const cookie = await login();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/work-items/${itemId}/exception`,
+      cookies: { [cookie.name]: cookie.value },
+      payload: { exceptionReason: 'two separate gifts', reason: 'more detail' },
+    });
+    expect(res.statusCode).toBe(409);
+  });
 });

@@ -6,6 +6,7 @@ import type { AppAbility } from '../auth/abilities.js';
 import { hashPassword } from '../auth/password.js';
 import { LOCKED_ROLE_KEYS, PERMISSION_KEYS, PERMISSIONS } from '../auth/permissions.js';
 import { roleKeyFromName } from '../auth/roles.js';
+import { sessionsOfUser } from '../auth/session-store.js';
 import { withChangeLog } from '../changelog/write.js';
 import { listOutstandingDonorPrechecks } from '../donors/precheck.js';
 import {
@@ -14,20 +15,24 @@ import {
   updateLeadershipContestant,
 } from '../leadership/contestants.js';
 import type { SessionUser } from '../plugins/auth.js';
+import { getQomonSettings, QomonKeyRequiredError, setQomonSettings } from '../qomon/settings.js';
 import { getReceiptSettings, setReceiptLayout } from '../receipts/settings.js';
 import { runValidationForAllContributions } from '../validation/run.js';
 
 /**
  * Annual settings and admin (ticket 1.12, screens.md 11): periods,
  * ContributionLimit buckets, users/roles, the RTD holiday calendar,
- * per-riding Qomon spaces, and leadership contestants. Period, limit, and
+ * the party-level Qomon space, per-riding Qomon spaces, and leadership
+ * contestants. Period, limit, and
  * contestant writes take a reason and are change-logged (EO evaluation row
  * 19). Settings writes need `administer Period` (`settings.administer`);
  * user and role writes need `administer User` (`users.administer`); see
  * auth/permissions.ts. Reads need only authentication, matching every other
  * list route.
- * The one exception is a riding's `qomonApiKey`: never round-tripped back
- * out of a GET, sysadmin-only or not (see `redactRiding` below).
+ * The exceptions are the Qomon API keys, party and riding: never
+ * round-tripped back out of a GET (see `redactRiding` and
+ * `qomon/settings.ts`). The party-level Qomon settings are read and written
+ * by the system administrator only (`manage all`), like the mirror sweep.
  *
  * Not built here: the receipt letter template (Phase 3 — no template
  * system exists yet, and template changes route through the EO
@@ -57,6 +62,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     return { ok: true as const, user };
   }
+
+  /** Only a holder of full system access (`system.manage`) may hand it out:
+   *  otherwise `users.administer` could escalate itself to everything. */
+  const FULL_ACCESS_REFUSED = 'only a user with full system access can grant or revoke full system access';
 
   // ---- Periods -------------------------------------------------------
 
@@ -120,6 +129,45 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
       const { receiptLayout, reason } = request.body;
       return reply.send(await setReceiptLayout(app.prisma, { userId: auth.user.id, reason }, receiptLayout));
+    },
+  });
+
+  // ---- Qomon (party-level space) ---------------------------------------
+
+  function requireSysadmin(user: SessionUser | undefined, ability: AppAbility) {
+    if (!user) return { ok: false as const, code: 401, error: 'authentication required' };
+    if (!ability.can('manage', 'all')) return { ok: false as const, code: 403, error: 'sysadmin only' };
+    return { ok: true as const, user };
+  }
+
+  r.get('/admin/qomon-settings', async (request, reply) => {
+    const auth = requireSysadmin(request.user as SessionUser | undefined, request.ability);
+    if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+    return reply.send(await getQomonSettings(app.prisma));
+  });
+
+  r.route({
+    method: 'PUT',
+    url: '/admin/qomon-settings',
+    schema: {
+      body: z.object({
+        enabled: z.boolean().optional(),
+        apiBase: z.string().trim().url().optional(),
+        /** omit to keep the key on file; it is never read back */
+        apiKey: z.string().trim().min(1).optional(),
+        reason: z.string().trim().min(3),
+      }),
+    },
+    handler: async (request, reply) => {
+      const auth = requireSysadmin(request.user as SessionUser | undefined, request.ability);
+      if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
+      const { reason, ...input } = request.body;
+      try {
+        return reply.send(await setQomonSettings(app.prisma, { userId: auth.user.id, reason }, input));
+      } catch (err) {
+        if (err instanceof QomonKeyRequiredError) return reply.code(400).send({ error: err.message });
+        throw err;
+      }
     },
   });
 
@@ -455,6 +503,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return (await app.prisma.role.count({ where: { key } })) > 0;
   }
 
+  async function roleHasFullAccess(key: string): Promise<boolean> {
+    return (await app.prisma.rolePermission.count({ where: { roleKey: key, permission: 'system.manage' } })) > 0;
+  }
+
   r.get('/admin/users', async (request, reply) => {
     if (!request.user) return reply.code(401).send({ error: 'authentication required' });
     const users = await app.prisma.user.findMany({
@@ -492,6 +544,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       if (!auth.ok) return reply.code(auth.code).send({ error: auth.error });
       const { password, role, ...rest } = request.body;
       if (!(await roleExists(role))) return reply.code(400).send({ error: `unknown role: ${role}` });
+      if (!request.ability.can('manage', 'all') && (await roleHasFullAccess(role))) {
+        return reply.code(403).send({ error: FULL_ACCESS_REFUSED });
+      }
       if (await emailTaken(rest.email)) {
         return reply.code(409).send({ error: `another user already has the email ${rest.email}` });
       }
@@ -545,6 +600,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         include: { role: { select: { name: true } } },
       });
       if (!before) return reply.code(404).send({ error: 'user not found' });
+      if (
+        role !== undefined &&
+        role !== before.roleKey &&
+        !request.ability.can('manage', 'all') &&
+        ((await roleHasFullAccess(role)) || (await roleHasFullAccess(before.roleKey)))
+      ) {
+        return reply.code(403).send({ error: FULL_ACCESS_REFUSED });
+      }
       if (rest.email !== undefined && (await emailTaken(rest.email, id))) {
         return reply.code(409).send({ error: `another user already has the email ${rest.email}` });
       }
@@ -566,8 +629,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Admin password reset (EO evaluation row 12): for a user who has
-  // forgotten theirs. Leaves the user's sessions alone, and is
-  // change-logged with the admin as actor and their reason.
+  // forgotten theirs, or whose account may be compromised. Signs out every
+  // session of that user (except the admin's own, when resetting their own
+  // password), and is change-logged with the admin as actor and their reason.
   r.route({
     method: 'POST',
     url: '/admin/users/:id/password',
@@ -586,11 +650,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: 'user not found' });
       }
       const passwordHash = await hashPassword(request.body.newPassword);
-      await withChangeLog(app.prisma, { userId: auth.user.id, reason: request.body.reason }, async (ctx) => {
-        await ctx.tx.user.update({ where: { id }, data: { passwordHash } });
-        await ctx.log({ subjectType: 'User', subjectId: id, after: { passwordReset: true } });
-      });
-      return reply.send({ ok: true });
+      const signedOut = await withChangeLog(
+        app.prisma,
+        { userId: auth.user.id, reason: request.body.reason },
+        async (ctx) => {
+          await ctx.tx.user.update({ where: { id }, data: { passwordHash } });
+          const { count } = await ctx.tx.session.deleteMany({
+            where: { ...sessionsOfUser(id), sid: { not: request.session.sessionId } },
+          });
+          await ctx.log({ subjectType: 'User', subjectId: id, after: { passwordReset: true, sessionsSignedOut: count } });
+          return count;
+        },
+      );
+      return reply.send({ ok: true, sessionsSignedOut: signedOut });
     },
   });
 
@@ -667,6 +739,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const { name, description, permissions, reason } = request.body;
       const key = roleKeyFromName(name);
       if (!key) return reply.code(400).send({ error: 'the role name needs at least one letter or digit' });
+      if (permissions.includes('system.manage') && !request.ability.can('manage', 'all')) {
+        return reply.code(403).send({ error: FULL_ACCESS_REFUSED });
+      }
       if (await roleExists(key)) {
         return reply.code(409).send({ error: `a role with the key "${key}" already exists; choose another name` });
       }
@@ -703,6 +778,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       }
       const before = await app.prisma.role.findUnique({ where: { key }, include: roleInclude });
       if (!before) return reply.code(404).send({ error: 'role not found' });
+      const hadFullAccess = before.permissions.some((p) => p.permission === 'system.manage');
+      if (
+        permissions &&
+        permissions.includes('system.manage') !== hadFullAccess &&
+        !request.ability.can('manage', 'all')
+      ) {
+        return reply.code(403).send({ error: FULL_ACCESS_REFUSED });
+      }
       const role = await withChangeLog(app.prisma, { userId: auth.user.id, reason }, async (ctx) => {
         if (permissions) {
           await ctx.tx.rolePermission.deleteMany({ where: { roleKey: key } });

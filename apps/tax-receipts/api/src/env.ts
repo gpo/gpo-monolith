@@ -13,10 +13,6 @@ const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
-  /** unset in most environments until B5/B6 land; the mirror-sweep trigger
-   *  route (ticket 1.1) registers only when this is present. */
-  QOMON_API_KEY: z.string().optional(),
-  QOMON_API_BASE: z.string().url().optional(),
   /** where Artifact bytes (receipt PDFs, etc.) are written. A local-disk
    *  stand-in (ticket 3.1) — object storage is a later infra ticket; the
    *  Artifact.uri pointer stays storage-agnostic so that swap needs no

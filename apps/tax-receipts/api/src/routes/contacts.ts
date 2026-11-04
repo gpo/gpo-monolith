@@ -1,4 +1,4 @@
-import { QomonError, QomonValidationError, type QomonApi } from '@gpo/qomon-client';
+import { QomonError, QomonValidationError } from '@gpo/qomon-client';
 import { remainingEligibleCents } from '@gpo/tax-receipts-core';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -13,14 +13,16 @@ import {
 } from '../contacts/write.js';
 import type { Contact } from '../generated/prisma/index.js';
 import type { SessionUser } from '../plugins/auth.js';
+import type { QomonSource } from '../qomon/settings.js';
 
 /**
  * Contributors (D13; EO evaluation rows 20 to 23): search, view, add, and
  * edit. Reads need `read Contribution` (every signed-in user); adding needs
  * `create Contact` and editing `update Contact` (`contact.manage`).
  *
- * Where a new contributor is created depends on whether a Qomon space is
- * configured (`contacts/write.ts`); `GET /contacts/settings` tells the form
+ * Where a new contributor is created depends on whether Qomon is enabled
+ * in Admin > Qomon (`contacts/write.ts`, `qomon/settings.ts`), read per
+ * request; `GET /contacts/settings` tells the form
  * which, so it can say so before anything is saved.
  */
 
@@ -92,13 +94,13 @@ function sendQomonError(reply: FastifyReply, err: QomonError) {
   return reply.code(502).send({ error: `Qomon could not be reached or failed: ${err.message}. Nothing was saved.` });
 }
 
-export async function contactRoutes(app: FastifyInstance, opts: { qomon?: QomonApi }): Promise<void> {
+export async function contactRoutes(app: FastifyInstance, opts: { qomon: QomonSource }): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
-  const deps: ContactWriteDeps = { prisma: app.prisma, qomon: opts.qomon };
+  const depsNow = async (): Promise<ContactWriteDeps> => ({ prisma: app.prisma, qomon: await opts.qomon() });
 
   r.get('/contacts/settings', async (request, reply) => {
     if (!request.user) return reply.code(401).send({ error: 'authentication required' });
-    return reply.send({ source: contactSource(deps) });
+    return reply.send({ source: contactSource(await depsNow()) });
   });
 
   // The donor picker (payment entry, move, split, and merge) and the
@@ -164,6 +166,7 @@ export async function contactRoutes(app: FastifyInstance, opts: { qomon?: QomonA
       const contact = await app.prisma.contact.findUnique({ where: { id: request.params.id } });
       if (!contact) return reply.code(404).send({ error: `no contact ${request.params.id}` });
 
+      const deps = await depsNow();
       const [contributions, changeLog] = await Promise.all([
         app.prisma.contribution.findMany({
           where: {
@@ -236,7 +239,7 @@ export async function contactRoutes(app: FastifyInstance, opts: { qomon?: QomonA
       }
       const { reason, allowDuplicate, ...contact } = request.body;
       try {
-        const created = await createContact(deps, { actorUserId: user.id, reason, contact, allowDuplicate });
+        const created = await createContact(await depsNow(), { actorUserId: user.id, reason, contact, allowDuplicate });
         return reply.code(201).send(serializeContact(created));
       } catch (err) {
         if (err instanceof QomonError) return sendQomonError(reply, err);
@@ -260,7 +263,7 @@ export async function contactRoutes(app: FastifyInstance, opts: { qomon?: QomonA
       }
       const { reason, ...contact } = request.body;
       try {
-        const updated = await updateContact(deps, {
+        const updated = await updateContact(await depsNow(), {
           actorUserId: user.id,
           reason,
           contactId: request.params.id,

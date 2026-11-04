@@ -69,6 +69,11 @@ Then:
   **return note** for anything inside an entity report already filed.
 - Closes open validation items on the retired rows and validates the
   replacements.
+- Re-validates every other active contribution of each donor involved, so
+  checks that compare a donor's gifts stay current. Refunding one half of a
+  "possible duplicate" pair resolves the other half's item too, and
+  refunding a gift that put a donor over the limit clears their
+  over-limit items.
 
 Who can run them: *Correct contributions*, plus *Correct receipts* when a
 receipt will be cancelled or issued. A riding-limited user can correct only
@@ -83,7 +88,7 @@ designates, and receipt administrators hold):
 | Action | What it does | Receipt cancelled? |
 |---|---|---|
 | **Cancel this receipt** | Cancels it and stores a watermarked cancellation notice. The amount can be receipted again. If it was RTD-reported, a DC-1A is queued. | Yes |
-| **Reissue this receipt** | Cancels it and issues a replacement from current data (for example, after an address fix), marked as cancelling and replacing the original. | Yes |
+| **Reissue this receipt** | Cancels it and issues a replacement from current data: the contributor's name and address as they are now on file (for example, after an address fix or a name change), marked as cancelling and replacing the original. The cancelled original keeps the name and address it was issued with. | Yes |
 | **Reprint as a lost-receipt copy** | Reprints the receipt unchanged, stamped COPY, and flags the original lost. The receipt stays valid. | No |
 | **Fix the spelling of the donor name** | Regenerates the receipt with a corrected spelling. Only a small spelling fix of the same person qualifies (a few characters); anything bigger is a reissue. | No |
 
