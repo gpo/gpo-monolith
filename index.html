@@ -79,6 +79,7 @@ main { padding-block: 16px 96px; }
 .hero p { margin: 0 0 6px; color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lg-see { color: var(--see); font-weight: 600; }
 .sec { margin-top: 22px; }
 .sec h2 {
   font: 600 13px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
@@ -2276,17 +2277,19 @@ function renderIndex() {
   $('crumb').textContent = 'EO evaluation demo';
   let h = `<div class="hero">
     <h1>Elections Ontario evaluation demo</h1>
-    <p>One page per Elections Ontario checklist row for the Tax Receipts & Contributions tool: the steps the demo follows and what each should show.</p>
+    <p>This walkthrough follows the demo from start to finish. Each page lists the steps done in the app and what each step should show. A page can cover several checklist rows, and a few rows are shown out of numeric order where they fit the flow of the demo. A green badge marks the exact step that proves each row. To find a row, type its number in the Row box at the top. Each page also has an "EO checklist wording" box with the row's text from the evaluation tool.</p>
     <div class="legend">
       <span><span class="ui">Button</span> in the app</span>
       <span><span class="val">value</span> text entered in the demo</span>
       <span><span class="path">/path</span> a page in the app</span>
+      <span><span class="lg-see">→</span> what the step should show</span>
+      <span><span class="proof">✓ Row 14</span> this step proves checklist row 14</span>
     </div>
   </div>`;
   for (const [sid, sname] of SECTIONS) {
     const items = CASES.filter((c) => c.sec === sid);
     const rows = items.flatMap((c) => c.rows);
-    const range = rows.length ? `rows ${Math.min(...rows)}–${Math.max(...rows)}` : '';
+    const range = rows.length ? `rows ${rowList([...rows].sort((a, b) => a - b))}` : '';
     h += `<section class="sec"><h2><span>${esc(sname)}</span><small>${range}</small></h2><ul class="list">`;
     for (const c of items) {
       const p = progress(c);
