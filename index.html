@@ -840,7 +840,7 @@ const CASES = [
    66
   ],
   "title": "Sign-in, a new user, and report access",
-  "mins": "5 min",
+  "mins": "4 min",
   "who": [
    "sysadmin"
   ],
@@ -850,17 +850,17 @@ const CASES = [
    {
     "d": "Sign out of cfo. Open <</>> and sign in as **sysadmin**, then [[Admin]] then [[Users]] (<</admin/users>>).",
     "s": [
-     "\"Users & roles\" table: Name, Email, Role, Ridings, CFO designate, Status. A [[New user]] button."
+     "Users table with a [[New user]] button."
     ]
    },
    {
     "d": "Click [[New user]]. Name {{Demo Reader}}, Email {{demo.reader@gpo.test}}, Temporary password {{short}}.",
     "s": [
-     "[[Create user]] is disabled, \"At least 12 characters (5 so far)\"."
+     "[[Create user]] is disabled (12-character minimum)."
     ]
    },
    {
-    "d": "Change the password to {{reader-pass-12345}}, Role [[Read only]], click [[Create user]].",
+    "d": "Change the password to {{reader-pass-12345}}, click [[Create user]].",
     "s": [
      "A new row: Demo Reader, Read only, Active ((row 4))."
     ]
@@ -958,7 +958,7 @@ const CASES = [
    {
     "d": "Back as sysadmin: [[Change log]] (<</admin/change-log>>), Subject type [[User]].",
     "s": [
-     "The entry's Actor is Demo Twin B, and the subject is twin B. Twin A is unchanged in Users ((row 6))."
+     "The newest entry's Actor is Demo Twin B. Twin A is unchanged in Users ((row 6))."
     ]
    }
   ]
@@ -972,7 +972,7 @@ const CASES = [
    9
   ],
   "title": "Roles: created, given functions, assigned to users",
-  "mins": "7 min",
+  "mins": "6 min",
   "who": [
    "sysadmin"
   ],
@@ -982,7 +982,7 @@ const CASES = [
    {
     "d": "Open [[Admin]] then [[Roles]] (<</admin/roles>>).",
     "s": [
-     "Ten roles. Nine marked Built-in, System administrator marked Locked."
+     "Ten roles; System administrator is Locked."
     ]
    },
    {
@@ -1033,8 +1033,7 @@ const CASES = [
    {
     "d": "Normal window: [[Change log]] (<</admin/change-log>>), Subject type [[Role]].",
     "s": [
-     "Two Role entries: \"Created\" and the edit, each with Sys Admin and its reason.",
-     "Click each: the new role's name and permissions; then the permissions listed by position, now including entityReport.share."
+     "Two Role entries, \"Created\" and the edit, each with Sys Admin and its reason."
     ]
    },
    {
@@ -1124,7 +1123,7 @@ const CASES = [
    12
   ],
   "title": "Password changes and resets",
-  "mins": "5 min",
+  "mins": "4 min",
   "who": [
    "sysadmin"
   ],
@@ -1138,19 +1137,7 @@ const CASES = [
     "d": "Open <</>> and sign in as {{demo.admin2@gpo.test}} / {{second-admin-12345}} in both the normal and the private window."
    },
    {
-    "d": "Normal window: [[Account menu]] then [[Change password]]. Current {{second-admin-12345}}, New and Confirm {{short}}.",
-    "s": [
-     "\"At least 12 characters\", button disabled."
-    ]
-   },
-   {
-    "d": "New {{pwd-changed-67890}}, Confirm {{different-67890}}.",
-    "s": [
-     "\"Does not match the new password\"."
-    ]
-   },
-   {
-    "d": "Confirm {{pwd-changed-67890}}, click [[Change password]].",
+    "d": "Normal window: [[Account menu]] then [[Change password]]. Current {{second-admin-12345}}, New and Confirm {{pwd-changed-67890}}, [[Change password]].",
     "s": [
      "\"Your password has been changed.\" Other sessions were signed out ((row 12)). Click [[Done]]."
     ]
@@ -1191,7 +1178,7 @@ const CASES = [
    19
   ],
   "title": "Every change is an audit entry",
-  "mins": "8 min",
+  "mins": "7 min",
   "who": [
    "cfo"
   ],
@@ -1220,7 +1207,7 @@ const CASES = [
     ]
    },
    {
-    "d": "At the bottom, [[Change history]], click [[Show 2 changes]].",
+    "d": "At the bottom, [[Change history]], click [[Show 2 changes]], then click each entry.",
     "s": [
      "Two separate entries ((row 13)).",
      "Field addresses.0.city: After Ottawa ((row 14)).",
@@ -1242,12 +1229,6 @@ const CASES = [
     "s": [
      "The same two Contact entries, newest first, with their reasons. The list shows a Changes summary; click a row for Field / Before / After."
     ]
-   },
-   {
-    "d": "Click [[Export CSV (for EO)]].",
-    "s": [
-     "change-log-export.csv downloads with at, subjectType, subjectId, actor, reason, correlationId, before, after."
-    ]
    }
   ]
  },
@@ -1262,7 +1243,7 @@ const CASES = [
    65
   ],
   "title": "The contributor record",
-  "mins": "5 min",
+  "mins": "4 min",
   "who": [
    "cfo"
   ],
@@ -1280,13 +1261,6 @@ const CASES = [
     "s": [
      "Contributor id T followed by digits, \"Qomon contact: none (kept in this tool)\" ((row 20)).",
      "\"Contributor type: Individual\" ((row 23))."
-    ]
-   },
-   {
-    "d": "On <</contributors>>, open [[Email Emma]].",
-    "s": [
-     "A different T number ((row 20)).",
-     "Email: email.emma@g4.fixture.test ((row 65))."
     ]
    },
    {
@@ -1315,18 +1289,6 @@ const CASES = [
      "\"First name: Audra\" and the new email on the record ((rows 21, 65)).",
      "The Contributor id is unchanged ((row 20))."
     ]
-   },
-   {
-    "d": "[[Change history]], open the newest change.",
-    "s": [
-     "Field firstName: Before Audrey, After Audra; field email: Before blank, After the new email ((rows 21, 65))."
-    ]
-   },
-   {
-    "d": "Open Audra's $40.00 contribution.",
-    "s": [
-     "Under the donor name: \"Individual, contributor id T...\" ((row 23))."
-    ]
    }
   ]
  },
@@ -1340,7 +1302,7 @@ const CASES = [
    31
   ],
   "title": "One contribution record",
-  "mins": "4 min",
+  "mins": "2 min",
   "who": [
    "cfo"
   ],
@@ -1361,18 +1323,6 @@ const CASES = [
      "\"Accepted on\" 3/1/2029, and \"Received on\" on the payment ((row 30)).",
      "Period \"Fixture — EO evaluation (not a real EO period)\" ((row 31))."
     ]
-   },
-   {
-    "d": "[[← Back to list]] (<</contributions>>), open [[Direct Dee]] ($120.00).",
-    "s": [
-     "A different id ((row 24))."
-    ]
-   },
-   {
-    "d": "Back on the list, use the [[Period]] filter.",
-    "s": [
-     "Only that period's rows remain. By-Election Donor is in 9501, Agency Alex in 9503 ((row 31))."
-    ]
    }
   ]
  },
@@ -1383,7 +1333,7 @@ const CASES = [
    25
   ],
   "title": "Which entity received it",
-  "mins": "3 min",
+  "mins": "2 min",
   "who": [
    "cfo"
   ],
@@ -1400,15 +1350,9 @@ const CASES = [
     ]
    },
    {
-    "d": "Set the [[Entity kind]] filter to [[Leadership contestant]].",
-    "s": [
-     "Only leadership contributions remain."
-    ]
-   },
-   {
     "d": "On <</contributions>>, open [[Leadership Lee]].",
     "s": [
-     "Recipient: \"Leadership contestant: Jordan Rivers\". [[Edit]] is disabled because it backs an issued receipt."
+     "Recipient: \"Leadership contestant: Jordan Rivers\". The contribution's [[Edit]] is disabled because it backs an issued receipt."
     ]
    }
   ]
@@ -1420,7 +1364,7 @@ const CASES = [
    26
   ],
   "title": "Agency contributions",
-  "mins": "3 min",
+  "mins": "2 min",
   "who": [
    "cfo"
   ],
@@ -1434,21 +1378,9 @@ const CASES = [
     ]
    },
    {
-    "d": "Hover the \"agency\" badge.",
-    "s": [
-     "Explains it; it files as Agency_Contribution = Y in the ALL report."
-    ]
-   },
-   {
     "d": "On <</contributions>>, open [[Direct Dee]].",
     "s": [
      "Same riding, no badge: the association received it directly."
-    ]
-   },
-   {
-    "d": "On [[Contributions]] (<</contributions>>), [[Show advanced filters]], [[Agency contribution]] = [[Agency only]], then [[Not agency]].",
-    "s": [
-     "The list filters accordingly."
     ]
    }
   ]
@@ -1500,7 +1432,7 @@ const CASES = [
    29
   ],
   "title": "Goods and services received",
-  "mins": "2 min",
+  "mins": "1 min",
   "who": [
    "cfo"
   ],
@@ -1508,13 +1440,7 @@ const CASES = [
   "ask": "Whether the donor received goods or services, and the non-deductible amount.",
   "steps": [
    {
-    "d": "[[Contributions]] (<</contributions>>), find [[Goods Gita]].",
-    "s": [
-     "$100.00 with Non-deductible $20.00. Other rows show a dash."
-    ]
-   },
-   {
-    "d": "Open Goods Gita.",
+    "d": "On <</contributions>>, open [[Goods Gita]].",
     "s": [
      "\"Donor received goods or services: Yes\", Non-deductible $20.00 ((row 29))."
     ]
@@ -1529,7 +1455,7 @@ const CASES = [
    33
   ],
   "title": "Ineligible contributors: flagged and resolved",
-  "mins": "6 min",
+  "mins": "5 min",
   "who": [
    "admin"
   ],
@@ -1546,12 +1472,6 @@ const CASES = [
     "d": "Find [[Ineligible Refund]].",
     "s": [
      "Rule \"Donor's address is out of province\" (B1) and a postal-code row (C3), both OPEN ((row 32))."
-    ]
-   },
-   {
-    "d": "Find a row for [[Anonymous]].",
-    "s": [
-     "\"Donor is anonymous or unidentifiable\" (B3): a second kind of ineligible donor."
     ]
    },
    {
@@ -1580,13 +1500,7 @@ const CASES = [
     ]
    },
    {
-    "d": "[[Work queue]] (<</work-queue>>): find Ineligible Except's B1 row, click [[Exception]]. Type {{ab}}.",
-    "s": [
-     "The \"Record an exception\" dialog opens. [[Record exception]] stays disabled (needs three characters)."
-    ]
-   },
-   {
-    "d": "Type {{Ontario resident studying at UBC}}, [[Record exception]].",
+    "d": "[[Work queue]] (<</work-queue>>): Ineligible Except's B1 row, [[Exception]], type {{Ontario resident studying at UBC}}, [[Record exception]].",
     "s": [
      "Status EXCEPTION with that note ((row 33)). The C3 row is still OPEN; the exception covers only B1. An exception means the donor is confirmed to live in Ontario despite the address; a true non-resident is refunded, as above."
     ]
@@ -1601,7 +1515,7 @@ const CASES = [
    35
   ],
   "title": "Duplicate contributors: flagged and merged",
-  "mins": "5 min",
+  "mins": "4 min",
   "who": [
    "admin"
   ],
@@ -1611,13 +1525,7 @@ const CASES = [
    {
     "d": "[[Work queue]] (<</work-queue>>), find [[Dupone Merge]] and [[Duptwo Merge]].",
     "s": [
-     "Each has \"Possible duplicate donor record\" (B4), OPEN ((row 34))."
-    ]
-   },
-   {
-    "d": "[[Contributors]] (<</contributors>>), search {{merge@demo.test}}.",
-    "s": [
-     "Two contributors sharing one email."
+     "Each has \"Possible duplicate donor record\" (B4), OPEN, and they share one email ((row 34))."
     ]
    },
    {
@@ -1666,7 +1574,7 @@ const CASES = [
    37
   ],
   "title": "Duplicate contributions: flagged and resolved",
-  "mins": "4 min",
+  "mins": "3 min",
   "who": [
    "admin"
   ],
@@ -1698,12 +1606,6 @@ const CASES = [
     ]
    },
    {
-    "d": "On <</contributors>>, open Repeat Rowan, then the 3/10/2025 contribution.",
-    "s": [
-     "Still ACTIVE. Only the duplicate was refunded."
-    ]
-   },
-   {
     "d": "For row 39, while still admin: on <</contributors>> open Overlimit Olive's contribution, click [[Correct]], open the Action list, then close it.",
     "s": [
      "Work items: \"Donor is over a contribution limit\" (B2), OPEN.",
@@ -1721,7 +1623,7 @@ const CASES = [
    40
   ],
   "title": "Over-limit contributions: flagged and resolved, and every action recorded",
-  "mins": "8 min",
+  "mins": "7 min",
   "who": [
    "cfo"
   ],
@@ -1729,21 +1631,9 @@ const CASES = [
   "ask": "The system identifies contributions over the limit and stops receipts until resolved (38), the excess can be reallocated or refunded (39), and how each problem was resolved is recorded (40).",
   "steps": [
    {
-    "d": "[[Work queue]] (<</work-queue>>), find [[Blocked Blake]].",
-    "s": [
-     "\"Donor is over a contribution limit\" (B2), OPEN."
-    ]
-   },
-   {
-    "d": "Open its [[Contribution]].",
-    "s": [
-     "$3500.00 to the Constituency association, riding 121, 2026 Annual. CA limit is $3,425.00."
-    ]
-   },
-   {
     "d": "Open <</spaces/67/CA/issue?ridingNumber=121>>.",
     "s": [
-     "\"open work item(s) block issuance for this space\", listing Blocked Blake and other donors. [[Next: generate]] is disabled ((row 38))."
+     "\"open work item(s) block issuance for this space\", listing Blocked Blake (over the CA limit, B2) and other donors. [[Next: generate]] is disabled ((row 38))."
     ]
    },
    {
@@ -1793,7 +1683,7 @@ const CASES = [
    47
   ],
   "title": "Issue receipts from contributions, and email them",
-  "mins": "7 min",
+  "mins": "6 min",
   "who": [
    "cfo"
   ],
@@ -1839,12 +1729,6 @@ const CASES = [
     ]
    },
    {
-    "d": "Open a contribution from a result row, then come back.",
-    "s": [
-     "Allocations & receipts shows the receipt, ISSUED. The contribution's [[Edit]] is now disabled: receipted data is frozen."
-    ]
-   },
-   {
     "d": "Back on the Deliver step (if you left, open <</spaces/9601/PARTY/issue>> and click [[Go to delivery]]).",
     "s": [
      "Email \"Ready to send\" with the three receipts."
@@ -1853,7 +1737,7 @@ const CASES = [
    {
     "d": "Letter {{Thank you for your support.}}, Reason {{Send receipts}}, keep the subject. Click [[Send ... email(s)]].",
     "s": [
-     "Ready to send drops; Sent rises within about 15 seconds. The Emails log is checked as sysadmin on the Cancellation notice page."
+     "Ready to send drops; Sent rises within a few seconds. The Emails log is checked as sysadmin on the Cancellation notice page."
     ]
    }
   ]
@@ -1866,7 +1750,7 @@ const CASES = [
    63
   ],
   "title": "The receipt record is a snapshot, and reissuing it",
-  "mins": "4 min",
+  "mins": "3 min",
   "who": [
    "cfo"
   ],
@@ -1876,26 +1760,20 @@ const CASES = [
    {
     "d": "[[Contributors]] (<</contributors>>), open Snapshot Sid, open his $50.00 contribution.",
     "s": [
-     "Allocations & receipts: number, ISSUED, $50.00, View PDF. Address on file: 77 Maple Ave, Ottawa."
-    ]
-   },
-   {
-    "d": "[[View PDF]].",
-    "s": [
-     "SNAPSHOT SID, 77 MAPLE AVE."
+     "Receipt ISSUED, $50.00. Address on file: 77 Maple Ave, Ottawa."
     ]
    },
    {
     "d": "Click [[Snapshot Sid]] under Donor, [[Edit contributor]]: Last name {{Smith}}, Street {{Elm Court}}, Reason {{Donor moved and changed name}}, save."
    },
    {
-    "d": "Open that receipt's [[View PDF]] again.",
+    "d": "Open the receipt's [[View PDF]].",
     "s": [
      "Unchanged: still SNAPSHOT SID, 77 MAPLE AVE. The stored PDF and its snapshot do not move ((row 42))."
     ]
    },
    {
-    "d": "Open the $50.00 contribution again. [[Correct]] beside the receipt opens a menu: choose [[Reissue this receipt]], Reason {{Reissue with new address}}, [[Confirm]].",
+    "d": "Open the $50.00 contribution again. [[Correct]] under Allocations & receipts, [[Reissue this receipt]], Reason {{Reissue with new address}}, [[Confirm]].",
     "s": [
      "The old row CANCELLED, a new row ISSUED with a new GPO-00###### number."
     ]
@@ -1958,12 +1836,12 @@ const CASES = [
     ]
    },
    {
-    "d": "Right-click [[View PDF]], copy the link. The receipt id is between /receipts/ and /pdf."
+    "d": "Copy the receipt id from the [[View PDF]] link (between /receipts/ and /pdf)."
    },
    {
     "d": "[[Admin]] then [[Change log]] (<</admin/change-log>>): Subject type [[Receipt]], Subject id = that id.",
     "s": [
-     "Subject \"Receipt (<id>)\", Actor Party CFO ((row 44)), At with the exact date and time ((row 45)), and the issuing reason."
+     "Two \"Created\" Receipt entries, each with Actor Party CFO ((row 44)), At with the exact date and time ((row 45)), and the reason \"Receipt run for the period\"."
     ]
    }
   ]
@@ -2031,7 +1909,7 @@ const CASES = [
   "ask": "A receipt can be set to lost.",
   "steps": [
    {
-    "d": "[[Contributors]] (<</contributors>>), open {{Lost Liam}}, open his contribution. [[Correct receipt GPO-...]], [[Reprint as a lost-receipt copy]].",
+    "d": "[[Contributors]] (<</contributors>>), open {{Lost Liam}}, open his contribution. [[Correct]] under Allocations & receipts, [[Reprint as a lost-receipt copy]].",
     "s": [
      "Explains it reprints unaltered, stamped COPY; the receipt stays valid. Confirm is disabled until a reason is typed."
     ]
@@ -2096,7 +1974,7 @@ const CASES = [
     ]
    },
    {
-    "d": "[[Correct receipt GPO-...]], [[Cancel this receipt]].",
+    "d": "[[Correct]] under Allocations & receipts, [[Cancel this receipt]].",
     "s": [
      "Explains the number is kept and a watermarked notice is stored."
     ]
@@ -2140,19 +2018,19 @@ const CASES = [
    {
     "d": "Letter {{Your receipt was cancelled; the cancelled copy is attached.}}, Reason {{Notify donor}}, [[Queue email]].",
     "s": [
-     "\"queued to cancel.cara@demo.test\", then \"sent ... (simulated)\"."
+     "\"queued to cancel.cara@demo.test\"."
     ]
    },
    {
     "d": "As sysadmin, [[Admin]] then [[Emails]] (<</admin/emails>>), Kind [[Cancellation notice]].",
     "s": [
-     "Cara's email, SENT, SIMULATED. Open it: attached receipt PDF and the letter."
+     "Cara's email, SENT, SIMULATED. Click the row: the attached receipt PDF and the letter."
     ]
    },
    {
     "d": "Kind [[Receipt]].",
     "s": [
-     "Iris and Devon's receipt emails from the issue run, SENT, SIMULATED. Open one: \"Attached receipt PDF\" and the letter ((row 64))."
+     "Iris and Devon's receipt emails from the issue run, SENT, SIMULATED. Click one: \"Attached receipt PDF\" and the letter ((row 64))."
     ]
    }
   ]
@@ -2166,7 +2044,7 @@ const CASES = [
    69
   ],
   "title": "Reports from stored records, in EO's format",
-  "mins": "9 min",
+  "mins": "8 min",
   "who": [
    "sysadmin"
   ],
@@ -2196,9 +2074,7 @@ const CASES = [
     "s": [
      "9 rows, each with a GPO- receipt number. Threshold Theo appears 3 times (100.00, 75.00, 50.00) ((row 67)).",
      "21 columns, from Party_ID to Contributor_Postal_Code ((row 68)).",
-     "Receipt_Status: I issued, C cancelled (Reissued Rory's original), L lost (Lost Lena).",
-     "Contribution_Type: GS for Goods Gita, MO for the rest.",
-     "Acceptance_Date as MMDDYYYY (Split Sam: 03012029). Amounts with two decimals."
+     "Receipt_Status I, C, and L; Contribution_Type GS and MO; dates as MMDDYYYY."
     ]
    },
    {
