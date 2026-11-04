@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>EO Demo Walkthrough</title>
 <meta name="robots" content="noindex, nofollow">
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -86,7 +87,7 @@ main { padding-block: 16px 96px; }
 .sec h2 small { font: 500 12px var(--font-mono); letter-spacing: 0; text-transform: none; }
 .list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .list li + li { border-top: 1px solid var(--line); }
-.list a { display: grid; grid-template-columns: 4.6em 1fr auto; gap: 10px; align-items: center; padding: 11px 12px; color: inherit; text-decoration: none; }
+.list a { display: grid; grid-template-columns: 6.4em 1fr auto; gap: 10px; align-items: center; padding: 11px 12px; color: inherit; text-decoration: none; }
 .list a:hover, .list a:focus-visible { background: var(--accent-soft); outline: none; }
 .rowtag { font: 500 12px/1.25 var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; }
 .ltitle { min-width: 0; }
@@ -100,6 +101,12 @@ main { padding-block: 16px 96px; }
 .rowpill { font: 500 12px var(--font-mono); letter-spacing: 0; text-transform: none; color: var(--accent-ink); background: var(--accent); border-radius: 4px; padding: 3px 6px; }
 h1.case { font: 600 26px/1.15 var(--font-display); margin: 8px 0 8px; text-wrap: balance; }
 .ask { margin: 0 0 14px; color: var(--muted); }
+.eo { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 14px; font-size: 14px; }
+.eo summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+.eo-row { margin-top: 10px; }
+.eo-row p { margin: 0; }
+.eo-row ul { margin: 4px 0 0; padding-left: 20px; color: var(--muted); }
+.eo-ref { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-right: 4px; }
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 14px; font-size: 14px; }
 .facts dt { color: var(--muted); font-size: 13px; padding-top: 1px; }
 .facts dd { margin: 0; min-width: 0; }
@@ -118,10 +125,12 @@ ol.steps li .tick {
   font: 500 12px/21px var(--font-mono); text-align: center; cursor: pointer; padding: 0;
 }
 ol.steps li .tick::before { content: counter(s); }
+ol.steps ul.see li { counter-increment: none; }
 ol.steps li.done { opacity: .55; }
 ol.steps li.done .tick { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 ol.steps li.done .tick::before { content: "✓"; }
 .do { margin: 0; }
+.proof { display: inline-block; font: 600 11px var(--font-display); letter-spacing: .04em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 1px 8px; white-space: nowrap; vertical-align: 1px; }
 .optlabel { font: 600 11px var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
 ul.see { list-style: none; margin: 8px 0 0; padding: 8px 10px; background: var(--see-soft); border-radius: 6px; display: grid; gap: 4px; font-size: 14px; }
 ul.see li { padding-left: 18px; position: relative; }
@@ -135,7 +144,7 @@ ul.see li::before { content: "→"; position: absolute; left: 0; color: var(--se
   font: 500 .9em var(--font-mono); background: var(--type-bg); color: var(--type-ink); border: 1px solid var(--type-line);
   border-radius: 5px; padding: 0 5px; cursor: copy; word-break: break-all;
 }
-.val.copied { outline: 2px solid var(--accent); }
+.val.copied, .path.copied { outline: 2px solid var(--accent); }
 a.path { font: 500 .88em var(--font-mono); color: var(--see); word-break: break-all; }
 code { font: .9em var(--font-mono); }
 
@@ -230,29 +239,560 @@ const SECTIONS = [
  ]
 ];
 
+const EO = {
+ "1": {
+  "ref": "11.(1)",
+  "q": "Is the database used for recording contributions an electronic database, as defined in the electronic database guideline?",
+  "ex": [
+   "Acceptable",
+   "Raiser’s Edge",
+   "CIVI CRM",
+   "MS Access",
+   "Custom App",
+   "Not Acceptable",
+   "Excel",
+   "Hand-written"
+  ]
+ },
+ "2": {
+  "ref": "11.(1)",
+  "q": "Does the electronic database solution use a relational database for storing information?",
+  "ex": [
+   "Acceptable",
+   "Oracle",
+   "MySQL",
+   "MS SQL",
+   "MS Access",
+   "Not Acceptable",
+   "Excel"
+  ]
+ },
+ "3": {
+  "ref": "12.(1)(a)",
+  "q": "Does the electronic database only allow individuals with an assigned username and password to access the system?",
+  "ex": []
+ },
+ "4": {
+  "ref": "12.(1)(b)",
+  "q": "Does the electronic database allow the system administrator to create new user accounts?",
+  "ex": []
+ },
+ "5": {
+  "ref": "12.(1)(b)",
+  "q": "Does the electronic database allow user information in existing user accounts to be modified?",
+  "ex": [
+   "User’s first and Last Name",
+   "User’s address"
+  ]
+ },
+ "6": {
+  "ref": "12.(1)(c)",
+  "q": "Is each user account in the electronic database assigned a unique identifier?",
+  "ex": [
+   "Each user in the database is assigned a unique user id which is used for creating foreign key relationships (e.g.: tracking user transactions)"
+  ]
+ },
+ "7": {
+  "ref": "12.(1)(d)",
+  "q": "Does the electronic database allow the system administrator to create new user roles?",
+  "ex": [
+   "The database has a role table that is used to record all of the roles"
+  ]
+ },
+ "8": {
+  "ref": "12.(1)(e)",
+  "q": "Does the electronic database allow various systems functions to be assigned to a user role?",
+  "ex": [
+   "The role table in the database allows system functionality to be assigned to specific roles"
+  ]
+ },
+ "9": {
+  "ref": "12.(1)(f)",
+  "q": "Does the electronic database allow roles to be assigned to one or more electronic database users?",
+  "ex": [
+   "A user record can be assigned / linked to one or more roles"
+  ]
+ },
+ "10": {
+  "ref": "12.(1)(g)",
+  "q": "Does the electronic database allow a system administrator role to be assigned to one or more electronic database users?",
+  "ex": [
+   "A system administrator role assigned to one or more users",
+   "A unique login / password that only system administrators use"
+  ]
+ },
+ "11": {
+  "ref": "12.(1)(h)",
+  "q": "Does the electronic database allow user accounts to be designated as being inactive (i.e.: disabling a user login / account)?",
+  "ex": [
+   "The user table in the database has a status for each user, one of which allows a user and their access to be disabled"
+  ]
+ },
+ "12": {
+  "ref": "12.(1)(i)",
+  "q": "Does the electronic database allow users to change their password at their own discretion?",
+  "ex": [
+   "The electronic database has “change password” functionality",
+   "The system administrator changes passwords over a set period"
+  ]
+ },
+ "13": {
+  "ref": "13.(1)(a)",
+  "q": "Is each audit trail transaction in the electronic database assigned a unique identifier?",
+  "ex": [
+   "The audit trail table in the database has a unique identifier for each record"
+  ]
+ },
+ "14": {
+  "ref": "13.(1)(b)(ii)",
+  "q": "For each audit trail record, does the electronic database capture the new value for the field that is being modified?",
+  "ex": [
+   "The audit trail table in the database has a field that captures the new value of the field that is being changed",
+   "The audit trail table in the database has a field that is a foreign key to the record that was modified (i.e.: the new value)"
+  ]
+ },
+ "15": {
+  "ref": "13.(1)(b)(iii)",
+  "q": "For each audit trail record, does the electronic database capture the old value for the field that is being modified?",
+  "ex": [
+   "The audit trail table in the database has a field that captures the old value of the field that is being changed"
+  ]
+ },
+ "16": {
+  "ref": "13.(1)(b)(iv)",
+  "q": "For each audit trail record, does the electronic database capture the user that made the modification?",
+  "ex": [
+   "The audit trail table in the database has a field that captures the user id for the individual that modified the record"
+  ]
+ },
+ "17": {
+  "ref": "13.(1)(b)(v)",
+  "q": "For each audit trail record, does the electronic database capture the date & time that the modification was made?",
+  "ex": [
+   "The audit trail table in the database has a field that captures the date and time that the record was modified"
+  ]
+ },
+ "18": {
+  "ref": "13.(1)(b)(vi)",
+  "q": "For each audit trail record, does the electronic database capture a description of the task being performed?",
+  "ex": [
+   "The audit trail table in the database has a field that captures a description of the task being performed",
+   "The audit trail table in the database has a foreign key to another table that describes the task being performed"
+  ]
+ },
+ "19": {
+  "ref": "13.(1)(b)(i)",
+  "q": "For each audit trail record, does the electronic database capture the audit information for new records?",
+  "ex": [
+   "Same as above"
+  ]
+ },
+ "20": {
+  "ref": "15.(3)(a)",
+  "q": "Can the electronic database uniquely identify each contributor in the database?",
+  "ex": [
+   "A contributor table in the database exists, and it contains a field that has a unique identifier for each contributor"
+  ]
+ },
+ "21": {
+  "ref": "15.(3)(b)",
+  "q": "For each contributor record, can the individual’s name be recorded?",
+  "ex": [
+   "A contributor table in the database exists, and it contains multiple fields that allow the name of a contributor to be recorded (e.g.: first name, last name, middle initial, etc.)",
+   "A contributor table in the database exists, and it contains a single field that allows the name of a contributor to be recorded (Optional)"
+  ]
+ },
+ "22": {
+  "ref": "15.(3)(c)",
+  "q": "For each contributor’s record, can the address be recorded?",
+  "ex": [
+   "A contributor table in the database exists, and it contains a single field that allows the address of a contributor to be recorded",
+   "A contributor table in the database exists, and it contains multiple fields that allow the address of a contributor to be recorded (e.g.: street name, street number, etc.)",
+   "An address table exists in the database, which allows a contributor record to be associated with an address record (i.e.: through a foreign key relationship)"
+  ]
+ },
+ "23": {
+  "ref": "15.(3)(d)",
+  "q": "Does the electronic database allow each contributor to be assigned as an “Individual” contributor?",
+  "ex": [
+   "A contributor record has a field that allows a contributor type to be recorded (individual)",
+   "A contributor type table exists, and a contributor record can be linked to a contributor type (i.e.: through a foreign key relationship)",
+   "As of January 1, 2017, only individuals are eligible contributors."
+  ]
+ },
+ "24": {
+  "ref": "15.(4)(a)",
+  "q": "Is there a unique identifier for each contribution record in the database?",
+  "ex": [
+   "A contribution table in the database exists, and it contains a field that is a unique identifier for each record"
+  ]
+ },
+ "25": {
+  "ref": "15.(4)(b)",
+  "q": "Does the electronic database allow each contribution record to identify the party, association, candidate, and leadership contestant that the contribution is being made to?",
+  "ex": [
+   "The contribution table in the database has a field in it that allows the party, association, candidate or leadership contestant name to be identified",
+   "The contribution table contains an identifier that is linked to the party, association, candidate or leadership contestant that the contribution is for (i.e.: through a foreign key relationship)"
+  ]
+ },
+ "26": {
+  "ref": "15.(4)(c)",
+  "q": "Can a contribution record be identified as an agency contribution?",
+  "ex": [
+   "The contribution table contains a field that allows a record to be identified as an agency contribution (e.g.: Boolean field)"
+  ]
+ },
+ "27": {
+  "ref": "15.(4)(e)",
+  "q": "For each contribution record, does the electronic database allow the total amount being contributed to be recorded?",
+  "ex": [
+   "The contribution table contains a field that allows the amount of the contribution to be recorded"
+  ]
+ },
+ "28": {
+  "ref": "15.(4)(e)(i)",
+  "q": "For an agency contribution, can each party, association and / or candidate be identified as well as the amount of the donation that is being contributed to each?",
+  "ex": [
+   "The contribution table contains a field that allows a party, and multiple associations and candidates to be assigned a portion of the total contribution",
+   "The contribution table contains a field that contains a unique identifier to multiple agency contribution records that allocates the money accordingly (i.e.: through a foreign key relationship)"
+  ]
+ },
+ "29": {
+  "ref": "15.(4)(d)",
+  "q": "For each contribution record, does the electronic database allow it to be identified as being monetary or goods and services?",
+  "ex": [
+   "The contribution table contains a field that allows a record to be identified as being monetary or goods and services (e.g.: Boolean field)",
+   "A contribution type table exists, and the contribution table references the unique identifier for the associate contribution type (i.e.: a foreign key relationship)"
+  ]
+ },
+ "30": {
+  "ref": "15.(4)(f)",
+  "q": "For each contribution record, does the electronic database allow the day, month and year for the contribution to be recorded?",
+  "ex": [
+   "The contribution table contains a field that allows the day, month and year that the contribution was captured to be recorded",
+   "The transaction history table (audit table) captures the date that the contribution record was created"
+  ]
+ },
+ "31": {
+  "ref": "15.(4)(g)",
+  "q": "For each contribution record, does the electronic database allow contribution period for the donation to be recorded (specific Event ID)?",
+  "ex": [
+   "The contribution table contains a field that allows the contribution period for the donation to be recorded",
+   "A contribution period table exists, with each contribution record being linked to the contribution period through a unique identifier for the contribution period (i.e.: a foreign key relationship)"
+  ]
+ },
+ "32": {
+  "ref": "16.(1)(a)",
+  "q": "Does the electronic database have any mechanisms for identifying contributor records that are ineligible?",
+  "ex": [
+   "A report can be generated that identifies potential ineligible records",
+   "An automated business rule can be created that checks each record as it is inputted into the database",
+   "Triggers in the database conduct a number of checks. Any violations are brought to the user’s attention"
+  ]
+ },
+ "33": {
+  "ref": "16.(2)",
+  "q": "Does the electronic database allow flagged contributor records, for ineligible contributors to be resolved?",
+  "ex": [
+   "Records in questions can be tagged as being “valid”",
+   "Records in question can be modified as required (e.g.: refunded)"
+  ]
+ },
+ "34": {
+  "ref": "16.(1)(b)",
+  "q": "Does the electronic database have any mechanisms for identifying possible duplicate contributor records?",
+  "ex": [
+   "A report can be generated that identifies potential duplicate records",
+   "An automated business rule can be created that checks each record as it is inputted into the database",
+   "Triggers in the database conduct a number of checks. Any violations are brought to the user’s attention"
+  ]
+ },
+ "35": {
+  "ref": "16.(2)",
+  "q": "Does the electronic database allow flagged contributor records, which are duplicates, to be resolved?",
+  "ex": [
+   "Records in questions can be tagged as being “valid”",
+   "Records in question can be modified as required (e.g.: merged)"
+  ]
+ },
+ "36": {
+  "ref": "16.(1)(c)",
+  "q": "Does the electronic database provide any mechanisms for identifying contribution records that may be duplicates?",
+  "ex": [
+   "A report can be generated that identifies potential duplicate records",
+   "An automated business rule can be created that checks each record as it is inputted into the database",
+   "Triggers in the database conduct a number of checks. Any violations are brought to the user’s attention"
+  ]
+ },
+ "37": {
+  "ref": "16.(2)",
+  "q": "Does the electronic database allow flagged contribution records, which are duplicates, to be resolved?",
+  "ex": [
+   "Records in question can be tagged as being “valid”",
+   "Records in question can be modified as required (e.g.: merged)"
+  ]
+ },
+ "38": {
+  "ref": "16.(1)(d)",
+  "q": "Does the electronic database provide any mechanisms for identifying contribution records that result in a contributor exceeding the maximum contribution limits defined in the EFA?",
+  "ex": [
+   "A report can be generated that identifies potential records that have exceeded the limit",
+   "An automated business rule can be created that checks each record as it is inputted into the database",
+   "Triggers in the database conduct a number of checks. Any violations are brought to the user’s attention"
+  ]
+ },
+ "39": {
+  "ref": "16.(2)",
+  "q": "Does the electronic database allow flagged contribution records, which may have exceeded the maximum contribution limits, to be resolved?",
+  "ex": [
+   "Flagged records can have their status changed to “refunded”",
+   "Records in question can be modified as required (e.g.: refunded)"
+  ]
+ },
+ "40": {
+  "ref": "16.(3)",
+  "q": "Does the electronic database allow flagged records that have been resolved to record the action that was taken?",
+  "ex": [
+   "A comment field record the action that was taken",
+   "A link to another table that identifies that action that was taken by the user (i.e.: through a foreign key relationship)"
+  ]
+ },
+ "41": {
+  "ref": "17.(1)",
+  "q": "Does the electronic database allow electronic receipts to be generated from contribution records in the database?",
+  "ex": [
+   "Generates a report that mimics a tax receipt (e.g.: HTML, PDF, etc.)",
+   "Receipts that are to be emailed need to be converted to PDFs"
+  ]
+ },
+ "42": {
+  "ref": "17.(3)",
+  "q": "Does the electronic database record the contribution information that was used to create the tax receipt (the tax receipt record)?",
+  "ex": [
+   "Tax receipt database table that records the information that was used to create the tax receipt",
+   "Tax receipt table that keeps an image of the tax receipt that was printed",
+   "Prints a duplicate copy of the tax receipt that is retained by the central party"
+  ]
+ },
+ "43": {
+  "ref": "17.(3)",
+  "q": "If multiple contribution records are aggregated into a single tax receipt, does the electronic database record the contribution information for each contribution record that was aggregated, as well as a copy of the information that was used to generate the aggregated tax receipt?",
+  "ex": [
+   "Multiple records in the tax receipt database that records the information that was used to create the aggregated tax receipt, which contain a tax receipt identifier that links each record to the aggregated tax receipt record"
+  ]
+ },
+ "44": {
+  "ref": "17.(5)(a)",
+  "q": "Does the electronic database record the user who is generating the tax receipt?",
+  "ex": [
+   "Database transaction table records all user activities, including the electronic database user’s identifier, who performed the activity",
+   "The tax receipt table records the electronic database user identifier for the individual that generated the tax receipt"
+  ]
+ },
+ "45": {
+  "ref": "17.(5)(b)",
+  "q": "Does the electronic database record the time, day and month that the tax receipt was generated?",
+  "ex": [
+   "Database transaction table records all user activities, which includes the day, month and year that the activity was done",
+   "The tax receipt table records the day, month and year that the tax receipt was generated"
+  ]
+ },
+ "46": {
+  "ref": "17.(5)(c)",
+  "q": "Does the electronic database allow multiple contribution records to be aggregated into a single tax receipt that is issued for the associated contributor?",
+  "ex": [
+   "Linking multiple tax receipt contribution information records to a single record"
+  ]
+ },
+ "47": {
+  "ref": "17.(6)",
+  "q": "Does the electronic database uniquely identify each tax receipt record in the database through the use of a sequential number?",
+  "ex": [
+   "Tax receipt table in the database has a unique identifier – a sequence number"
+  ]
+ },
+ "48": {
+  "ref": "17.(7)(a)",
+  "q": "Does the electronic database produce a tax receipt that has a statement on it that identifies the receipt as being an official receipt for income tax purposes?",
+  "ex": [
+   "Text on the tax receipt reads “Official receipt for income tax purposes”"
+  ]
+ },
+ "49": {
+  "ref": "17.(7)(b)",
+  "q": "Does the electronic database produce a tax receipt that has the party’s name, association’s name, candidate’s name, or leadership contestant’s name on the receipt?",
+  "ex": [
+   "Text on the tax receipt indicates the party’s name, association’s name, candidate’s name, or leadership contestant’s name"
+  ]
+ },
+ "50": {
+  "ref": "17.(7)(c)",
+  "q": "Does the electronic database produce a tax receipt that indicates when the contribution was accepted?",
+  "ex": [
+   "Text on the tax receipt indicates the date that the contribution was deposited"
+  ]
+ },
+ "51": {
+  "ref": "17.(7)(d)",
+  "q": "Does the electronic database produce a tax receipt that indicates the day that the receipt was issued?",
+  "ex": [
+   "Text on the tax receipt indicates the date that the receipt was generated"
+  ]
+ },
+ "52": {
+  "ref": "17.(7)(e)",
+  "q": "Does the electronic database produce a tax receipt that indicates the amount of the contribution made?",
+  "ex": [
+   "Text on the tax receipt indicates the amount that was contributed"
+  ]
+ },
+ "53": {
+  "ref": "17.(7)(f)",
+  "q": "Does the electronic database produce a tax receipt that has the contributor’s name and address?",
+  "ex": [
+   "Text on the tax receipt indicates the individual’s name and address"
+  ]
+ },
+ "54": {
+  "ref": "17.(7)(g)",
+  "q": "Does the electronic database produce a tax receipt that has the signature of an authorized individual?",
+  "ex": [
+   "A digital signature of the central party’s CFO is included on the tax receipt"
+  ]
+ },
+ "55": {
+  "ref": "17.(7)(h)",
+  "q": "Does the electronic database produce a tax receipt that has a unique tax receipt identifier?",
+  "ex": [
+   "A unique tax receipt number is visible on a generated tax receipt"
+  ]
+ },
+ "56": {
+  "ref": "17.(7)(i)",
+  "q": "Does the electronic database produce a tax receipt that indicates the type of contributor that the tax receipt is for (i.e.: individual)?",
+  "ex": [
+   "Text on the tax receipt indicates the type of contributor"
+  ]
+ },
+ "57": {
+  "ref": "17.(7)(j)",
+  "q": "Does the electronic database produce a tax receipt that indicates the type of contribution that the contributor made (i.e.: monetary, or goods and services)?",
+  "ex": [
+   "Text on the tax receipt indicates the contribution type"
+  ]
+ },
+ "58": {
+  "ref": "17.(7)(k)",
+  "q": "Does the electronic database produce a tax receipt that indicates the name of the political party?",
+  "ex": [
+   "Text on the tax receipt indicates the name of the political party"
+  ]
+ },
+ "59": {
+  "ref": "17.(8)",
+  "q": "Does the electronic database allow tax receipt records to have their status changed to “lost”?",
+  "ex": [
+   "A status field in the tax receipt record table is used to track the status of the tax receipts"
+  ]
+ },
+ "60": {
+  "ref": "17.(8)",
+  "q": "For lost tax receipts, does the electronic database allow tax receipts to be re-printed using the duplicated tax receipt information, and indicates that the receipt is a “copy”?",
+  "ex": [
+   "A tax receipt that has its status changed to lost results in any additional generated tax receipts having the words “Copy” on it"
+  ]
+ },
+ "61": {
+  "ref": "17.(9)",
+  "q": "Does the electronic database allow tax receipt records to have their status changed to “cancelled”?",
+  "ex": [
+   "A status field in the tax receipt record table is used to track the status of the tax receipts"
+  ]
+ },
+ "62": {
+  "ref": "17.(9)",
+  "q": "For cancelled tax receipts, does the electronic database allow a cancellation notice to be generated?",
+  "ex": [
+   "A cancellation notice report",
+   "A mail merge document for a cancellation notice"
+  ]
+ },
+ "63": {
+  "ref": "17.(9)",
+  "q": "For cancelled tax receipts, does the newly generated tax receipt indicate that “this cancels and replaces tax receipt # (insert the receipt number of the cancelled tax receipt)”?",
+  "ex": [
+   "The re-generated tax receipt has text on it that indicates that “this cancels and replaces tax receipt # (insert tax receipt number)”"
+  ]
+ },
+ "64": {
+  "ref": "17.(10)(a)",
+  "q": "If the electronic database allows generated tax receipts to be emailed to a contributor, is the emailed tax receipt in a non-editable format?",
+  "ex": [
+   "PDF",
+   "GIF",
+   "PNG",
+   "BMP"
+  ]
+ },
+ "65": {
+  "ref": "17.(10)(b)",
+  "q": "If the electronic database allows generated tax receipts to be emailed to a contributor, is the individual’s email address stored as part of the contributor’s record in the contributor table?",
+  "ex": [
+   "The contributor table contains a field that allows the contributor’s email address to be recorded"
+  ]
+ },
+ "66": {
+  "ref": "18.(2)",
+  "q": "Does the electronic database limit access to individuals that can generate reports?",
+  "ex": [
+   "The electronic database has a role for accessing reports that are assigned only to privileged users",
+   "The electronic database has a role for creating reports which is assigned only to privileged users"
+  ]
+ },
+ "67": {
+  "ref": "18.(1)",
+  "q": "Does the electronic database allow reports to be generated from stored information?",
+  "ex": [
+   "Tax Receipt Summary",
+   "List of Contributors Whose Contributions Totalled More than $200.00"
+  ]
+ },
+ "68": {
+  "ref": "18.(3)(a)",
+  "q": "Does the structure of the Tax Receipt Summary conform to the requirements of the “Election’s Ontario Contributions Reporting Technical Specification?”",
+  "ex": [
+   "Information can be generated in a format that needs minimal changes before being sent to EO",
+   "Minimal changes would include changing codes to reflect the reporting codes assigned by EO in the technical specifications document"
+  ]
+ },
+ "69": {
+  "ref": "18.(3)(b)",
+  "q": "Does the structure of the List of Contributors Whose Contributions Totalled More than $200.00 report conform to the requirements of the “Election’s Ontario Contributions Reporting Technical Specification?”",
+  "ex": [
+   "Information can be generated in a format that needs minimal changes before being sent to EO",
+   "Minimal changes would include changing codes to reflect the reporting codes assigned by EO in the technical specifications document"
+  ]
+ }
+};
+
 const CASES = [
  {
   "id": "r01",
   "sec": "general",
   "rows": [
-   1
+   1,
+   2
   ],
-  "title": "The tool is an electronic database",
-  "mins": "2 min",
+  "title": "An electronic, relational database",
+  "mins": "4 min",
   "who": [
    "cfo"
   ],
   "start": "/contributions",
-  "ask": "EO wants to see that contributions are kept in an electronic database, not a spreadsheet or paper.",
+  "ask": "Contributions are kept in an electronic database, not a spreadsheet or paper (1), and the records are relational: contributors, payments, contributions, and receipts linked to each other (2).",
   "steps": [
    {
-    "d": "In a private window (signed out), open <</contributions>>.",
-    "s": [
-     "The Sign in form. No contribution data and no navigation."
-    ]
-   },
-   {
-    "d": "Sign in as **cfo**.",
+    "d": "Open <</>> and sign in as **cfo**.",
     "s": [
      "Home page heading \"Spaces\", a table with Period, Riding, Entity, Stage, Stage owner, Contributions, Open flags."
     ]
@@ -260,31 +800,9 @@ const CASES = [
    {
     "d": "Click [[Contributions]] (<</contributions>>) in the top bar.",
     "s": [
-     "Every contribution in one searchable table: Date, Donor, Amount, Period, Entity, Receipt."
+     "Every contribution in one searchable table: Date, Donor, Amount, Period, Entity, Receipt ((row 1))."
     ]
    },
-   {
-    "d": "Click [[Contributors]] (<</contributors>>).",
-    "s": [
-     "The contributor list."
-    ]
-   }
-  ]
- },
- {
-  "id": "r02",
-  "sec": "general",
-  "rows": [
-   2
-  ],
-  "title": "Records are relational",
-  "mins": "3 min",
-  "who": [
-   "cfo"
-  ],
-  "start": "/contributions?periodId=9503&entityKind=PARTY",
-  "ask": "EO wants a relational database: contributors, payments, contributions, and receipts linked to each other.",
-  "steps": [
    {
     "d": "Open <</contributions?periodId=9503&entityKind=PARTY>>. Click the donor link [[Split Sam]] on the $300.00 row.",
     "s": [
@@ -307,47 +825,7 @@ const CASES = [
    {
     "d": "Click the date [[3/1/2029]] on the $300.00 row.",
     "s": [
-     "Back on the same contribution. The link works both ways."
-    ]
-   }
-  ]
- },
- {
-  "id": "r03",
-  "sec": "security",
-  "rows": [
-   3
-  ],
-  "title": "Sign-in is required",
-  "mins": "2 min",
-  "who": [
-   "sysadmin"
-  ],
-  "start": "/",
-  "ask": "Access needs a user name and password.",
-  "steps": [
-   {
-    "d": "In a private window open the app home, then <</admin/users>>, then <</contributions>>.",
-    "s": [
-     "The Sign in form each time, with no data shown."
-    ]
-   },
-   {
-    "d": "On <</>>, email {{sysadmin@gpo.test}}, password {{wrong-password-123456}}, click [[Sign in]].",
-    "s": [
-     "An error. Still on the Sign in form."
-    ]
-   },
-   {
-    "d": "Clear both fields and click [[Sign in]].",
-    "s": [
-     "Refused."
-    ]
-   },
-   {
-    "d": "Sign in with the correct password.",
-    "s": [
-     "The navigation appears: Contributions, Contributors, Admin, Account menu."
+     "Back on the same contribution: payment, contributions, contributor, and receipt all link to each other ((row 2))."
     ]
    }
   ]
@@ -356,20 +834,22 @@ const CASES = [
   "id": "r04",
   "sec": "security",
   "rows": [
-   4
+   3,
+   4,
+   66
   ],
-  "title": "An administrator creates a user",
-  "mins": "3 min",
+  "title": "Sign-in, a new user, and report access",
+  "mins": "5 min",
   "who": [
    "sysadmin"
   ],
   "start": "/admin/users",
-  "ask": "An administrator can create user accounts.",
+  "ask": "Access needs a user name and password (3), an administrator can create user accounts (4), and report access is limited to privileged users (66).",
   "steps": [
    {
-    "d": "Open [[Admin]] then [[Users]] (<</admin/users>>).",
+    "d": "Sign out of cfo. Open <</>> and sign in as **sysadmin**, then [[Admin]] then [[Users]] (<</admin/users>>).",
     "s": [
-     "\"Users & roles\" table: Name, Email, Role, CFO designate, Status. A [[New user]] button."
+     "\"Users & roles\" table: Name, Email, Role, Ridings, CFO designate, Status. A [[New user]] button."
     ]
    },
    {
@@ -381,13 +861,31 @@ const CASES = [
    {
     "d": "Change the password to {{reader-pass-12345}}, Role [[Read only]], click [[Create user]].",
     "s": [
-     "A new row: Demo Reader, Read only, Active."
+     "A new row: Demo Reader, Read only, Active ((row 4))."
     ]
    },
    {
-    "d": "In a private window open <</>> and sign in as {{demo.reader@gpo.test}} / {{reader-pass-12345}}.",
+    "d": "In a private window open <</admin/users>>, then <</contributions>>.",
     "s": [
-     "Signed in. No way to manage users (Read only role)."
+     "The Sign in form each time, with no data shown."
+    ]
+   },
+   {
+    "d": "Email {{demo.reader@gpo.test}}, password {{wrong-password-123456}}, click [[Sign in]]. Then clear both fields and click [[Sign in]] again.",
+    "s": [
+     "Refused both times. Still on the Sign in form ((row 3))."
+    ]
+   },
+   {
+    "d": "Password {{reader-pass-12345}}, [[Sign in]].",
+    "s": [
+     "Signed in: Contributions, Contributors, Work queue, RTD filings. No way to manage users (Read only role)."
+    ]
+   },
+   {
+    "d": "Private window: open <</spaces/9503/PARTY/entity-reports>>.",
+    "s": [
+     "\"Only the party CFO, a designate, bookkeeper, or filer may generate reports.\" and \"Your role cannot view generated reports.\" No list, no download ((row 66))."
     ]
    }
   ]
@@ -421,21 +919,8 @@ const CASES = [
    {
     "d": "Open [[Admin]] then [[Change log]] (<</admin/change-log>>), Subject type [[User]].",
     "s": [
-     "Newest row: Actor Sys Admin, the reason, Before with the old name and email, After with the new ones."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "In the private window open <</>> and sign in as {{demo.reader2@gpo.test}}. [[Account menu]] then [[Edit profile]]: change only the name and save.",
-    "s": [
-     "Saves without a password."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "Edit profile again and change the email.",
-    "s": [
-     "Now [[Current password]] is required; a wrong one is refused."
+     "Newest row: Actor Sys Admin, the reason, Changes \"email, name\".",
+     "Click the row: a Field / Before / After table with the old and new name and email ((row 5))."
     ]
    }
   ]
@@ -455,24 +940,24 @@ const CASES = [
   "ask": "Each user is uniquely identified, so actions are attributed to the right person.",
   "steps": [
    {
-    "d": "[[Admin]] then [[Users]] (<</admin/users>>), [[New user]]: Name {{Demo Twin}}, Email {{demo.twin.a@gpo.test}}, password {{twin-pass-12345}}, Read only. Repeat with the same name and {{demo.twin.b@gpo.test}}.",
+    "d": "Open [[Admin]] then [[Users]] (<</admin/users>>).",
     "s": [
-     "Two rows with the same name, told apart by email."
+     "Two users named Demo Twin, told apart by email: demo.twin.a@gpo.test and demo.twin.b@gpo.test."
     ]
    },
    {
-    "d": "Try [[New user]] again with Email {{demo.twin.a@gpo.test}}.",
+    "d": "Click [[New user]]: Name {{Demo Twin}}, Email {{demo.twin.a@gpo.test}}, password {{twin-pass-12345}}, Read only.",
     "s": [
      "Refused: the email is already in use. No new row."
     ]
    },
    {
-    "d": "In the private window open <</>> and sign in as {{demo.twin.b@gpo.test}}. [[Account menu]] then [[Edit profile]], name {{Demo Twin B}}, save."
+    "d": "In the private window open <</>> and sign in as {{demo.twin.b@gpo.test}} / {{twin-pass-12345}}. [[Account menu]] then [[Edit profile]], name {{Demo Twin B}}, save."
    },
    {
     "d": "Back as sysadmin: [[Change log]] (<</admin/change-log>>), Subject type [[User]].",
     "s": [
-     "The entry's Actor is Demo Twin B, and the subject is twin B. Twin A is unchanged in Users."
+     "The entry's Actor is Demo Twin B, and the subject is twin B. Twin A is unchanged in Users ((row 6))."
     ]
    }
   ]
@@ -481,15 +966,17 @@ const CASES = [
   "id": "r07",
   "sec": "security",
   "rows": [
-   7
+   7,
+   8,
+   9
   ],
-  "title": "An administrator creates a role",
-  "mins": "3 min",
+  "title": "Roles: created, given functions, assigned to users",
+  "mins": "7 min",
   "who": [
    "sysadmin"
   ],
   "start": "/admin/roles",
-  "ask": "Roles can be created, and creating one is logged.",
+  "ask": "Roles can be created (7), functions are assigned to a role and take effect (8), and roles, including custom ones, can be assigned to one or more users (9). The system administrator role is protected.",
   "steps": [
    {
     "d": "Open [[Admin]] then [[Roles]] (<</admin/roles>>).",
@@ -498,54 +985,31 @@ const CASES = [
     ]
    },
    {
-    "d": "Click [[New role]]: Name {{Riding Auditor}}, Description {{Reads records for audit}}, tick [[Read all records]].",
+    "d": "Click [[New role]]: Name {{Demo Reporter Role}}, Description {{Reads records and generates entity reports}}, tick [[Read all records]] and [[Generate entity reports]] only.",
     "s": [
      "[[Create role]] is disabled until a reason is entered."
     ]
    },
    {
-    "d": "Reason {{Create auditor role for EO demo}}, click [[Create role]].",
+    "d": "Reason {{Reporter role}}, click [[Create role]].",
     "s": [
-     "The role is listed with its permission and 0 users."
+     "The role is listed with its two permissions and 0 users ((row 7))."
     ]
    },
    {
-    "d": "[[Change log]] (<</admin/change-log>>), Subject type [[Role]].",
+    "d": "[[Users]] (<</admin/users>>), [[Edit]] Demo Reader Renamed, open the [[Role]] list.",
     "s": [
-     "Newest row: Sys Admin, the reason, Before empty, After with the role name and permission."
+     "All ten built-in roles plus Demo Reporter Role."
     ]
    },
    {
-    "opt": true,
-    "d": "Try to create another role named {{Riding Auditor}}.",
+    "d": "Role [[Demo Reporter Role]], Reason {{Assign reporter role}}, [[Save]].",
     "s": [
-     "Refused. No duplicate."
+     "Demo Reader Renamed now has the custom role ((row 9))."
     ]
-   }
-  ]
- },
- {
-  "id": "r08",
-  "sec": "security",
-  "rows": [
-   8
-  ],
-  "title": "A role controls what a user can do",
-  "mins": "6 min",
-  "who": [
-   "sysadmin"
-  ],
-  "start": "/admin/roles",
-  "ask": "Functions assigned to a role take effect, and the system administrator role is protected.",
-  "steps": [
-   {
-    "d": "[[Roles]] (<</admin/roles>>), [[New role]]: {{Demo Reporter Role}}, tick [[Read all records]] and [[Generate entity reports]] only, Reason {{Reporter role}}."
    },
    {
-    "d": "[[Users]] (<</admin/users>>), [[New user]]: {{Demo Reporter}}, {{demo.reporter@gpo.test}}, password {{reporter-pass-12345}}, Role [[Demo Reporter Role]]."
-   },
-   {
-    "d": "Private window: open <</>> and sign in as Demo Reporter. Open <</spaces/63/PARTY/entity-reports>> (home page row \"2025 Annual\" / \"Party (province-wide)\", [[Reports]]). Reason {{Reporter generate}}, click [[Generate]].",
+    "d": "Private window: open <</>> and sign in as {{demo.reader2@gpo.test}} (sign out first if still signed in). Open <</spaces/63/PARTY/entity-reports>> (home page row \"2025 Annual\" / \"Party (province-wide)\", [[Reports]]). Reason {{Reporter generate}}, click [[Generate]].",
     "s": [
      "A new report row with a grey \"Not sent\" badge and no [[Mark sent]] button."
     ]
@@ -562,62 +1026,21 @@ const CASES = [
    {
     "d": "Private window: reload the Entity reports page.",
     "s": [
-     "[[Mark sent]] now appears. Still signed in. Issuing is still blocked."
+     "[[Mark sent]] now appears. Still signed in. Issuing is still blocked ((row 8))."
     ]
    },
    {
-    "d": "[[Change log]] (<</admin/change-log>>), Subject type [[Role]].",
+    "d": "Normal window: [[Change log]] (<</admin/change-log>>), Subject type [[Role]].",
     "s": [
-     "Before lists two permissions, After lists three."
+     "Two Role entries: \"Created\" and the edit, each with Sys Admin and its reason.",
+     "Click each: the new role's name and permissions; then the permissions listed by position, now including entityReport.share."
     ]
    },
    {
-    "d": "[[Roles]] (<</admin/roles>>), click [[View]] on System administrator.",
+    "d": "[[Roles]] (<</admin/roles>>).",
     "s": [
-     "Locked, \"Full system access\". It cannot be edited or deleted."
-    ]
-   }
-  ]
- },
- {
-  "id": "r09",
-  "sec": "security",
-  "rows": [
-   9
-  ],
-  "title": "Roles are assigned to users",
-  "mins": "4 min",
-  "who": [
-   "sysadmin"
-  ],
-  "start": "/admin/roles",
-  "ask": "Roles, including custom ones, can be assigned to users, and many users can share a role.",
-  "steps": [
-   {
-    "d": "[[Roles]] (<</admin/roles>>), [[New role]]: {{Demo Shared Role}}, tick [[View entity reports]], Reason {{Shared role}}.",
-    "s": [
-     "Listed with 0 users."
-    ]
-   },
-   {
-    "d": "[[Users]] (<</admin/users>>), [[New user]], open the [[Role]] list.",
-    "s": [
-     "All ten built-in roles plus the custom roles."
-    ]
-   },
-   {
-    "d": "Create {{Demo Holder One}} ({{demo.holder1@gpo.test}}, {{holder-pass-12345}}) with Demo Shared Role, and {{Demo Holder Two}} ({{demo.holder2@gpo.test}}) with Read only."
-   },
-   {
-    "d": "[[Edit]] Holder Two, Role [[Demo Shared Role]], Reason {{Assign shared role}}, [[Save]].",
-    "s": [
-     "Both users show the custom role."
-    ]
-   },
-   {
-    "d": "Open [[Roles]] (<</admin/roles>>).",
-    "s": [
-     "Demo Shared Role shows 2 users."
+     "Read only shows 3 users (Read Only and both Demo Twins): one role, many users ((row 9)).",
+     "System administrator: [[View]] shows Locked, \"Full system access\". It cannot be edited or deleted."
     ]
    }
   ]
@@ -651,7 +1074,7 @@ const CASES = [
    {
     "d": "Private window: open <</>> and sign in as the new user, open [[Admin]] then [[Users]] (<</admin/users>>).",
     "s": [
-     "[[New user]] and [[Edit]] are available. Roles shows System administrator with 2 or more users."
+     "[[New user]] and [[Edit]] are available. Roles shows System administrator with 2 or more users ((row 10))."
     ]
    }
   ]
@@ -663,7 +1086,7 @@ const CASES = [
    11
   ],
   "title": "Deactivated users are locked out",
-  "mins": "4 min",
+  "mins": "3 min",
   "who": [
    "sysadmin"
   ],
@@ -671,13 +1094,10 @@ const CASES = [
   "ask": "A user can be deactivated, which stops them signing in.",
   "steps": [
    {
-    "d": "[[Users]] (<</admin/users>>), [[New user]]: {{Demo Leaver}}, {{demo.leaver@gpo.test}}, {{leaver-pass-12345}}, Read only."
+    "d": "Private window: sign out (it is still Demo Second Admin from row 10), sign in as {{demo.twin.a@gpo.test}} / {{twin-pass-12345}}, and open [[Contributions]] (<</contributions>>)."
    },
    {
-    "d": "Private window: open <</>>, sign in as Demo Leaver, and open [[Contributions]] (<</contributions>>)."
-   },
-   {
-    "d": "Normal window: [[Edit]] Demo Leaver, untick [[Active (inactive users cannot sign in)]], Reason {{Left the party}}, [[Save]].",
+    "d": "Normal window: [[Users]] (<</admin/users>>), [[Edit]] on Demo Twin (demo.twin.a@gpo.test), untick [[Active (inactive users cannot sign in)]], Reason {{Left the party}}, [[Save]].",
     "s": [
      "Status is no longer Active."
     ]
@@ -691,12 +1111,8 @@ const CASES = [
    {
     "d": "Sign in again with the correct password.",
     "s": [
-     "Refused."
+     "Refused ((row 11))."
     ]
-   },
-   {
-    "opt": true,
-    "d": "Re-tick Active with Reason {{Returned}}; sign in again works. [[Change log]] (<</admin/change-log>>), Subject type [[User]] shows both changes."
    }
   ]
  },
@@ -707,7 +1123,7 @@ const CASES = [
    12
   ],
   "title": "Password changes and resets",
-  "mins": "6 min",
+  "mins": "5 min",
   "who": [
    "sysadmin"
   ],
@@ -715,13 +1131,13 @@ const CASES = [
   "ask": "Users can change their password, administrators can reset one, and old sessions end.",
   "steps": [
    {
-    "d": "As sysadmin, on <</admin/users>>, create {{Demo Password}}, {{demo.pwd@gpo.test}}, password {{pwd-initial-12345}}, Read only. Sign out."
+    "d": "Sign out of sysadmin."
    },
    {
-    "d": "Open <</>> and sign in as demo.pwd in both the normal and the private window."
+    "d": "Open <</>> and sign in as {{demo.admin2@gpo.test}} / {{second-admin-12345}} in both the normal and the private window."
    },
    {
-    "d": "Normal window: [[Account menu]] then [[Change password]]. Current {{pwd-initial-12345}}, New and Confirm {{short}}.",
+    "d": "Normal window: [[Account menu]] then [[Change password]]. Current {{second-admin-12345}}, New and Confirm {{short}}.",
     "s": [
      "\"At least 12 characters\", button disabled."
     ]
@@ -735,7 +1151,7 @@ const CASES = [
    {
     "d": "Confirm {{pwd-changed-67890}}, click [[Change password]].",
     "s": [
-     "\"Your password has been changed.\" Other sessions were signed out. Click [[Done]]."
+     "\"Your password has been changed.\" Other sessions were signed out ((row 12)). Click [[Done]]."
     ]
    },
    {
@@ -748,7 +1164,7 @@ const CASES = [
     "d": "Private window: the old password is refused, the new one works."
    },
    {
-    "d": "Normal window: sign out, sign in as sysadmin. [[Users]] (<</admin/users>>), [[Reset password]] on Demo Password: Temporary password {{reset-temp-67890-ab}}, Reason {{Forgot password}}, [[Reset password]].",
+    "d": "Normal window: sign out, sign in as sysadmin. [[Users]] (<</admin/users>>), [[Reset password]] on Demo Second Admin: Temporary password {{reset-temp-67890-ab}}, Reason {{Forgot password}}, [[Reset password]].",
     "s": [
      "The private window, on reload, is signed out again."
     ]
@@ -756,7 +1172,7 @@ const CASES = [
    {
     "d": "[[Change log]] (<</admin/change-log>>), Subject type [[User]].",
     "s": [
-     "Entries for the change and the reset. No password or hash is shown."
+     "Two newest entries, for the change and the reset, each listed as \"Created\". Click one: fields such as passwordReset and sessionsSignedOut. No password or hash is shown."
     ]
    }
   ]
@@ -769,21 +1185,35 @@ const CASES = [
    14,
    15,
    16,
-   17
+   17,
+   18,
+   19
   ],
   "title": "Every change is an audit entry",
-  "mins": "5 min",
+  "mins": "8 min",
   "who": [
-   "admin"
+   "cfo"
   ],
   "start": "/contributors",
-  "ask": "One edit shows all five rows: a unique entry (13), the new value (14), the old value (15), the user (16), and the date and time (17).",
+  "ask": "One new contributor shows every audit field: a unique entry (13), the new value (14), the old value (15), the user (16), the date and time (17), the reason (18), and the creation itself (19).",
   "steps": [
    {
-    "d": "[[Contributors]] (<</contributors>>), [[Add a contributor]]: {{Audrey}} {{Trail}}, {{10}} {{Elm St}}, {{Toronto}}, ON, {{M5V 2T6}}, Reason {{Demo create}}. [[Add contributor]]."
+    "d": "[[Contributors]] (<</contributors>>), [[Add a contributor]]: {{Audrey}} {{Trail}}, {{10}} {{Elm St}}, {{Toronto}}, ON, {{M5V 2T6}}. Leave Reason blank.",
+    "s": [
+     "[[Add contributor]] is disabled ((row 18))."
+    ]
    },
    {
-    "d": "[[Edit contributor]], City {{Ottawa}}, Reason {{Demo city change}}, [[Save changes]].",
+    "d": "Reason {{Demo create}}, [[Add contributor]]."
+   },
+   {
+    "d": "[[Edit contributor]], City {{Ottawa}}, leave Reason blank.",
+    "s": [
+     "[[Save changes]] is disabled ((row 18))."
+    ]
+   },
+   {
+    "d": "Reason {{Donor moved to Ottawa}}, [[Save changes]].",
     "s": [
      "Address: 10 Elm St, Ottawa ON M5V 2T6, CA."
     ]
@@ -791,112 +1221,25 @@ const CASES = [
    {
     "d": "At the bottom, [[Change history]], click [[Show 2 changes]].",
     "s": [
-     "Two separate entries (row 13).",
-     "After has \"city\":\"Ottawa\" (row 14).",
-     "Before has \"city\":\"Toronto\" (row 15).",
-     "By: Receipt Administrator (row 16).",
-     "At: the date and time (row 17)."
+     "Two separate entries ((row 13)).",
+     "Field addresses.0.city: After Ottawa ((row 14)).",
+     "Before Toronto ((row 15)).",
+     "By: Party CFO ((row 16)).",
+     "At: the date and time ((row 17)).",
+     "Reasons \"Donor moved to Ottawa\" and \"Demo create\" ((row 18)).",
+     "The creation entry: every field with Before blank and After filled ((row 19))."
     ]
    },
    {
-    "d": "Copy the contributor id from the address bar (/contributors/<id>). Open [[Admin]] then [[Change log]] (<</admin/change-log>>), paste it into [[Subject id]].",
+    "d": "<</payments/new>>: donor Audrey Trail, Amount {{40}}, Received on {{2025-03-15}}, Period [[2025 General Election]], Reason {{Cheque at the office}}, [[Save payment]], [[Open the contribution]], [[Show 2 changes]].",
     "s": [
-     "The same two Contact entries, newest first."
+     "Payment and Contribution entries, both with Before blank and the same reason ((rows 18, 19))."
     ]
    },
    {
-    "opt": true,
-    "d": "Set [[From]] to tomorrow.",
+    "d": "Click [[Audrey Trail]] under Donor and copy the contributor id from the address bar (/contributors/<id>). [[Admin]] then [[Change log]] (<</admin/change-log>>), paste it into [[Subject id]].",
     "s": [
-     "Both rows disappear. Set it to today and they return."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "In a new tab open <</api/change-log?subjectId=>> followed by the contributor id.",
-    "s": [
-     "The raw entries: each has its own \"id\" and \"correlationId\"."
-    ]
-   }
-  ]
- },
- {
-  "id": "r18",
-  "sec": "history",
-  "rows": [
-   18
-  ],
-  "title": "A reason is required for every change",
-  "mins": "4 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/contributors",
-  "ask": "Each change records a task description.",
-  "steps": [
-   {
-    "d": "On <</contributors>>, [[Add a contributor]]: {{Rhea}} {{Reason}}, {{10}} {{Elm St}}, {{Toronto}}, ON, {{M5V 2T6}}. Leave Reason blank.",
-    "s": [
-     "[[Add contributor]] is disabled."
-    ]
-   },
-   {
-    "d": "Reason {{Demo create}}, add. Then [[Edit contributor]], City {{London}}, Reason blank.",
-    "s": [
-     "[[Save changes]] is disabled."
-    ]
-   },
-   {
-    "d": "Reason {{Donor moved to London}}, save."
-   },
-   {
-    "d": "[[Change log]] (<</admin/change-log>>), [[Subject id]] = the contributor id.",
-    "s": [
-     "The Reason column reads exactly \"Donor moved to London\" and \"Demo create\"."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "Record a payment for Rhea (<</payments/new>>, Amount {{25}}, Period [[2025 General Election]], Reason {{Cheque at the office}}), then [[Open the contribution]] and [[Show 2 changes]].",
-    "s": [
-     "Payment and Contribution entries share the same reason."
-    ]
-   }
-  ]
- },
- {
-  "id": "r19",
-  "sec": "history",
-  "rows": [
-   19
-  ],
-  "title": "New records are audited too",
-  "mins": "4 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/contributors",
-  "ask": "Creating a record is logged, not only edits, and the log can be exported for EO.",
-  "steps": [
-   {
-    "d": "On <</contributors>>, [[Add a contributor]]: {{Carla}} {{Create}}, {{10}} {{Elm St}}, {{Toronto}}, ON, {{M5V 2T6}}, Reason {{Demo new record}}."
-   },
-   {
-    "d": "[[Change history]], [[Show 1 change]].",
-    "s": [
-     "Before is blank (—). After holds the whole new record."
-    ]
-   },
-   {
-    "d": "<</payments/new>>: donor Carla Create, Amount {{40}}, Period [[2025 General Election]], Reason {{Demo new payment}}, [[Save payment]], [[Open the contribution]], [[Show 2 changes]].",
-    "s": [
-     "Two entries, both with Before blank."
-    ]
-   },
-   {
-    "d": "[[Change log]] (<</admin/change-log>>), Subject type [[Contribution]], Subject id = the contribution id from the address bar.",
-    "s": [
-     "Contribution (<id>), Receipt Administrator, Before —, After filled."
+     "The same two Contact entries, newest first, with their reasons. The list shows a Changes summary; click a row for Field / Before / After."
     ]
    },
    {
@@ -911,171 +1254,77 @@ const CASES = [
   "id": "r20",
   "sec": "contributors",
   "rows": [
-   20
+   20,
+   21,
+   22,
+   23,
+   65
   ],
-  "title": "Each contributor has a unique id",
-  "mins": "4 min",
+  "title": "The contributor record",
+  "mins": "5 min",
   "who": [
-   "admin"
+   "cfo"
   ],
   "start": "/contributors",
-  "ask": "Contributors have a unique, system-assigned id that does not change.",
+  "ask": "Each contributor has a unique, unchanging id (20), a first and last name (21), an address in parts (22), the type Individual (23), and an email that can be updated (65).",
   "steps": [
    {
     "d": "[[Contributors]] (<</contributors>>), open [[Baseline Donor]].",
     "s": [
-     "Contributor id 800001 and Qomon contact 800001. A banner says it is a Qomon contact and cannot be edited here."
+     "Contributor id 800001 and Qomon contact 800001. A banner says it is a Qomon contact and cannot be edited here ((row 20))."
+    ]
+   },
+   {
+    "d": "On <</contributors>>, open Audrey Trail.",
+    "s": [
+     "Contributor id T followed by digits, \"Qomon contact: none (kept in this tool)\" ((row 20)).",
+     "\"Contributor type: Individual\" ((row 23))."
     ]
    },
    {
     "d": "On <</contributors>>, open [[Email Emma]].",
     "s": [
-     "Contributor id T followed by digits. \"Qomon contact: none (kept in this tool)\"."
+     "A different T number ((row 20)).",
+     "Email: email.emma@g4.fixture.test ((row 65))."
     ]
    },
    {
     "d": "On <</contributors>>, [[Add a contributor]].",
     "s": [
-     "There is no Contributor id field."
+     "No Contributor id field ((row 20)).",
+     "Contributor type fixed at \"Individual\": \"Ontario accepts political contributions from individuals only.\" ((row 23))"
     ]
    },
    {
-    "d": "Add {{Ida}} {{Unique}}, Reason {{Demo id}}. Then add a second {{Ida}} {{Unique2}}.",
+    "d": "Fill only First name {{Ada}}, Street {{Elm St}}, and Reason {{Demo}}.",
     "s": [
-     "Each gets its own T number."
+     "[[Add contributor]] stays disabled: last name is required ((row 21)).",
+     "\"Fill in the street, city, province, postal code, and country, or leave the address blank.\" ((row 22))"
     ]
    },
    {
-    "d": "On the second, [[Edit contributor]], First name {{Idabel}}, Reason {{Demo rename}}, save.",
+    "d": "Click [[Cancel]]. Open Audrey Trail, [[Edit contributor]].",
     "s": [
-     "The edit dialog has no id field. The Contributor id is unchanged after saving."
-    ]
-   }
-  ]
- },
- {
-  "id": "r21",
-  "sec": "contributors",
-  "rows": [
-   21
-  ],
-  "title": "First and last name are recorded",
-  "mins": "4 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/contributors",
-  "ask": "The contributor's full name is recorded, first and last separately.",
-  "steps": [
-   {
-    "d": "On <</contributors>>, [[Add a contributor]].",
-    "s": [
-     "The Add a contributor dialog opens."
+     "First and last name, street number, street, city, province, postal code, and country are separate fields ((rows 21, 22)). No id field ((row 20))."
     ]
    },
    {
-    "d": "Fill only First name {{Ada}} and Reason {{New donor added at event}}.",
+    "d": "First name {{Audra}}, Email {{audra.demo@example.test}}, Reason {{Corrected first name and added email}}, save.",
     "s": [
-     "[[Add contributor]] stays disabled: last name is required."
+     "\"First name: Audra\" and the new email on the record ((rows 21, 65)).",
+     "The Contributor id is unchanged ((row 20))."
     ]
    },
    {
-    "d": "Last name {{Lovelace}}, Email {{ada.demo@example.test}}, [[Add contributor]].",
+    "d": "[[Change history]], open the newest change.",
     "s": [
-     "\"First name: Ada\" and \"Last name: Lovelace\" on separate lines."
+     "Field firstName: Before Audrey, After Audra; field email: Before blank, After the new email ((rows 21, 65))."
     ]
    },
    {
-    "d": "[[Edit contributor]], First name {{Augusta}}, Reason {{Corrected first name spelling}}, save. [[Show 2 changes]].",
+    "d": "Open Audra's $40.00 contribution.",
     "s": [
-     "Before \"firstName\":\"Ada\", After \"firstName\":\"Augusta\", By Receipt Administrator."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "<</payments/new>>, click [[Not on file? Add a new contributor]].",
-    "s": [
-     "The same name fields, so a new donor can be added while entering a cheque."
-    ]
-   }
-  ]
- },
- {
-  "id": "r22",
-  "sec": "contributors",
-  "rows": [
-   22
-  ],
-  "title": "The address is recorded in parts",
-  "mins": "4 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/contributors",
-  "ask": "The contributor's full address is recorded.",
-  "steps": [
-   {
-    "d": "On <</contributors>>, [[Add a contributor]]: {{Edith}} {{Address}}, Reason {{Demo address}}.",
-    "s": [
-     "\"Optional here, but a receipt cannot be issued without one.\" Province defaults to ON, Country to CA."
-    ]
-   },
-   {
-    "d": "Fill only Street {{Elm St}}.",
-    "s": [
-     "\"Fill in the street, city, province, postal code, and country, or leave the address blank.\" [[Add contributor]] is disabled."
-    ]
-   },
-   {
-    "d": "Street number {{10}}, City {{Toronto}}, Postal code {{M5V 2T6}}.",
-    "s": [
-     "The message goes away."
-    ]
-   },
-   {
-    "d": "[[Add contributor]].",
-    "s": [
-     "Address: 10 Elm St, Toronto ON M5V 2T6, CA."
-    ]
-   },
-   {
-    "d": "[[Edit contributor]]: City {{Ottawa}}, Postal code {{K1A 0B1}}, Reason {{Donor moved}}, save.",
-    "s": [
-     "Address: 10 Elm St, Ottawa ON K1A 0B1, CA."
-    ]
-   }
-  ]
- },
- {
-  "id": "r23",
-  "sec": "contributors",
-  "rows": [
-   23
-  ],
-  "title": "Contributor type is Individual",
-  "mins": "2 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/contributors",
-  "ask": "The contributor type is recorded.",
-  "steps": [
-   {
-    "d": "On <</contributors>>, [[Add a contributor]].",
-    "s": [
-     "Contributor type is fixed at \"Individual\". Note: \"Ontario accepts political contributions from individuals only.\""
-    ]
-   },
-   {
-    "d": "Close the dialog. On <</contributors>>, open [[Baseline Donor]], then [[Email Emma]].",
-    "s": [
-     "Both read \"Contributor type: Individual\"."
-    ]
-   },
-   {
-    "d": "Open any contribution from [[Contributions]] (<</contributions>>).",
-    "s": [
-     "Under the donor name: \"Individual, contributor id T...\"."
+     "Under the donor name: \"Individual, contributor id T...\" ((row 23))."
     ]
    }
   ]
@@ -1084,32 +1333,44 @@ const CASES = [
   "id": "r24",
   "sec": "contributions",
   "rows": [
-   24
+   24,
+   27,
+   30,
+   31
   ],
-  "title": "Each contribution has a unique id",
-  "mins": "2 min",
+  "title": "One contribution record",
+  "mins": "4 min",
   "who": [
-   "admin"
+   "cfo"
   ],
   "start": "/contributions",
-  "ask": "Every contribution is uniquely identified.",
+  "ask": "Each contribution has a unique id (24), its total amount (27), the date it was accepted (30), and its contribution period (31).",
   "steps": [
    {
-    "d": "[[Contributions]] (<</contributions>>). Click [[Agency Alex]] ($150.00, period 9503).",
+    "d": "[[Contributions]] (<</contributions>>), find [[Agency Alex]].",
     "s": [
-     "The address bar ends /contributions/<id>. That is its id."
+     "Date 3/1/2029, $150.00, Period 9503."
+    ]
+   },
+   {
+    "d": "Open it.",
+    "s": [
+     "The address bar ends /contributions/<id>: its id ((row 24)).",
+     "Payment $150.00, Contribution $150.00 ((row 27)).",
+     "\"Accepted on\" 3/1/2029, and \"Received on\" on the payment ((row 30)).",
+     "Period \"Fixture — EO evaluation (not a real EO period)\" ((row 31))."
     ]
    },
    {
     "d": "[[← Back to list]] (<</contributions>>), open [[Direct Dee]] ($120.00).",
     "s": [
-     "A different id."
+     "A different id ((row 24))."
     ]
    },
    {
-    "d": "Go back to the first address.",
+    "d": "Back on the list, use the [[Period]] filter.",
     "s": [
-     "The same Agency Alex contribution. The id is stable."
+     "Only that period's rows remain. By-Election Donor is in 9501, Agency Alex in 9503 ((row 31))."
     ]
    }
   ]
@@ -1121,9 +1382,9 @@ const CASES = [
    25
   ],
   "title": "Which entity received it",
-  "mins": "4 min",
+  "mins": "3 min",
   "who": [
-   "admin"
+   "cfo"
   ],
   "start": "/contributions",
   "ask": "Each contribution records the political entity: party, constituency association, campaign, or leadership contestant.",
@@ -1134,7 +1395,7 @@ const CASES = [
      "Split Sam $300.00: PARTY.",
      "Agency Alex $150.00: CA, riding 121.",
      "Leadership Lee $250.00: LEADERSHIP: Jordan Rivers.",
-     "By-Election Donor $50.00: CAMPAIGN, riding 121, period 9501."
+     "By-Election Donor $50.00: CAMPAIGN, riding 121, period 9501 ((row 25))."
     ]
    },
    {
@@ -1148,19 +1409,6 @@ const CASES = [
     "s": [
      "Recipient: \"Leadership contestant: Jordan Rivers\". [[Edit]] is disabled because it backs an issued receipt."
     ]
-   },
-   {
-    "d": "[[Admin]] then [[Leadership contestants]] (<</admin/leadership-contestants>>).",
-    "s": [
-     "Registry with Jordan Rivers and Sam Okafor."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "<</payments/new>>: in the Contribution block set Recipient [[Leadership contestant]].",
-    "s": [
-     "A contestant picker replaces the Riding field."
-    ]
    }
   ]
  },
@@ -1173,7 +1421,7 @@ const CASES = [
   "title": "Agency contributions",
   "mins": "3 min",
   "who": [
-   "admin"
+   "cfo"
   ],
   "start": "/contributions",
   "ask": "The record shows whether the party received the contribution on behalf of another entity.",
@@ -1181,7 +1429,7 @@ const CASES = [
    {
     "d": "On <</contributions>>, open [[Agency Alex]].",
     "s": [
-     "Recipient \"Constituency association, riding 121\" with an \"agency\" badge. Received by: GPO (party office, central)."
+     "Recipient \"Constituency association, riding 121\" with an \"agency\" badge. Received by: GPO (party office, central) ((row 26))."
     ]
    },
    {
@@ -1201,41 +1449,6 @@ const CASES = [
     "s": [
      "The list filters accordingly."
     ]
-   },
-   {
-    "opt": true,
-    "d": "<</payments/new>>: Recipient [[Constituency association]], Riding {{121}}. Switch Received by between GPO and [[Entity / subspace entry]].",
-    "s": [
-     "The hint \"Agency contribution: GPO received it for another entity\" appears and disappears. The flag is worked out, not typed."
-    ]
-   }
-  ]
- },
- {
-  "id": "r27",
-  "sec": "contributions",
-  "rows": [
-   27
-  ],
-  "title": "Total amount",
-  "mins": "2 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/contributions",
-  "ask": "The total amount of each contribution is recorded.",
-  "steps": [
-   {
-    "d": "On <</contributions>>, open [[Agency Alex]].",
-    "s": [
-     "Payment $150.00, Contribution $150.00."
-    ]
-   },
-   {
-    "d": "On <</contributions?periodId=9503&entityKind=PARTY>>, open the [[Split Sam]] $300.00 contribution.",
-    "s": [
-     "Payment $500.00 (what was paid), Contribution $300.00 (this part). The split lists $300.00 + $200.00 = $500.00."
-    ]
    }
   ]
  },
@@ -1246,27 +1459,18 @@ const CASES = [
    28
   ],
   "title": "One payment split across entities",
-  "mins": "5 min",
+  "mins": "4 min",
   "who": [
-   "admin"
+   "cfo"
   ],
-  "start": "/contributions",
+  "start": "/payments/new",
   "ask": "A single payment can be split between entities, with the amount for each.",
   "steps": [
    {
-    "d": "On <</contributions?periodId=9503&entityKind=PARTY>>, open the [[Split Sam]] $300.00 contribution.",
+    "d": "<</payments/new>>: donor {{Audra Trail}}, Amount {{500}}, Received on {{2025-03-16}}.",
     "s": [
-     "\"Split across 2 contributions:\" $300.00 Party, $200.00 riding 121 (agency)."
+     "The [[Accepted on]] hint reads \"blank = 2025-03-16\"; it can be set to a different day (as in row 30)."
     ]
-   },
-   {
-    "d": "Click the other [[Split Sam]] link in the split list.",
-    "s": [
-     "The $200.00 half, same $500.00 payment, its own receipt number."
-    ]
-   },
-   {
-    "d": "Live: <</payments/new>>, [[Not on file? Add a new contributor]]: {{Split}} {{Live}}, {{11}} {{Queen St}}, {{Toronto}}, ON, {{M5V 2T6}}, Reason {{Demo split}}. Amount {{500}}, Received on {{2025-03-16}}."
    },
    {
     "d": "Click [[Split across more contributions]]. Contribution 1: {{300}}, Party. Contribution 2: {{200}}, [[Constituency association]], Riding {{121}}.",
@@ -1275,9 +1479,15 @@ const CASES = [
     ]
    },
    {
+    "d": "In Contribution 2, switch Received by to [[Entity / subspace entry]], then back to GPO.",
+    "s": [
+     "The hint \"Agency contribution: GPO received it for another entity\" disappears and comes back. The flag is worked out, not typed (as in row 26)."
+    ]
+   },
+   {
     "d": "Reason {{Demo split}}, [[Save payment]].",
     "s": [
-     "\"The payment and its 2 contributions were recorded.\""
+     "\"The payment and its 2 contributions were recorded.\" ((row 28))"
     ]
    }
   ]
@@ -1289,9 +1499,9 @@ const CASES = [
    29
   ],
   "title": "Goods and services received",
-  "mins": "3 min",
+  "mins": "2 min",
   "who": [
-   "admin"
+   "cfo"
   ],
   "start": "/contributions",
   "ask": "Whether the donor received goods or services, and the non-deductible amount.",
@@ -1305,83 +1515,7 @@ const CASES = [
    {
     "d": "Open Goods Gita.",
     "s": [
-     "\"Donor received goods or services: Yes\", Non-deductible $20.00."
-    ]
-   },
-   {
-    "d": "On <</contributions>>, open [[Agency Alex]] for contrast.",
-    "s": [
-     "\"No\", $0.00."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "<</payments/new>>: Non-deductible ($) is disabled until you tick [[Donor received goods or services]]."
-   }
-  ]
- },
- {
-  "id": "r30",
-  "sec": "contributions",
-  "rows": [
-   30
-  ],
-  "title": "Date accepted",
-  "mins": "2 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/contributions",
-  "ask": "The day, month, and year the contribution was accepted.",
-  "steps": [
-   {
-    "d": "[[Contributions]] (<</contributions>>), find [[Agency Alex]].",
-    "s": [
-     "Date 3/1/2029."
-    ]
-   },
-   {
-    "d": "Open it.",
-    "s": [
-     "\"Accepted on\" 3/1/2029, and \"Received on\" on the payment."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "<</payments/new>>: Received on {{2025-03-15}}. The contribution's [[Accepted on]] hint reads \"blank = 2025-03-15\", and can be set to a different day."
-   }
-  ]
- },
- {
-  "id": "r31",
-  "sec": "contributions",
-  "rows": [
-   31
-  ],
-  "title": "Contribution period",
-  "mins": "2 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/contributions",
-  "ask": "The contribution period each contribution belongs to.",
-  "steps": [
-   {
-    "d": "[[Contributions]] (<</contributions>>), read the Period column.",
-    "s": [
-     "Agency Alex 9503, By-Election Donor 9501."
-    ]
-   },
-   {
-    "d": "On <</contributions>>, open Agency Alex, then By-Election Donor.",
-    "s": [
-     "Period names: \"Fixture — EO evaluation (not a real EO period)\" and \"Fixture by-election (not a real EO period)\"."
-    ]
-   },
-   {
-    "d": "Use the [[Period]] filter on the list.",
-    "s": [
-     "Only that period's rows remain."
+     "\"Donor received goods or services: Yes\", Non-deductible $20.00 ((row 29))."
     ]
    }
   ]
@@ -1390,15 +1524,16 @@ const CASES = [
   "id": "r32",
   "sec": "validation",
   "rows": [
-   32
+   32,
+   33
   ],
-  "title": "Ineligible contributors are flagged",
-  "mins": "3 min",
+  "title": "Ineligible contributors: flagged and resolved",
+  "mins": "6 min",
   "who": [
    "admin"
   ],
   "start": "/work-queue",
-  "ask": "The system identifies contributors who are not eligible.",
+  "ask": "The system identifies contributors who are not eligible (32), and a flagged contribution can be refunded or excepted, with a reason (33).",
   "steps": [
    {
     "d": "Open [[Work queue]] (<</work-queue>>). The Validation tab is open.",
@@ -1407,43 +1542,21 @@ const CASES = [
     ]
    },
    {
-    "d": "Find [[Out Of Province Donor]].",
+    "d": "Find [[Ineligible Refund]].",
     "s": [
-     "Rule \"Donor's address is out of province\" (B1), OPEN, with Resolve and Exception buttons. Do not click them."
+     "Rule \"Donor's address is out of province\" (B1) and a postal-code row (C3), both OPEN ((row 32))."
     ]
    },
    {
-    "d": "Click its [[Contribution]] link.",
+    "d": "Find a row for [[Anonymous]].",
     "s": [
-     "Address on file in Vancouver BC; Work items lists B1 OPEN."
+     "\"Donor is anonymous or unidentifiable\" (B3): a second kind of ineligible donor."
     ]
    },
-   {
-    "d": "Back in the queue, find a row for [[Anonymous]].",
-    "s": [
-     "\"Donor is anonymous or unidentifiable\" (B3)."
-    ]
-   }
-  ]
- },
- {
-  "id": "r33",
-  "sec": "validation",
-  "rows": [
-   33
-  ],
-  "title": "Resolving an ineligible contributor",
-  "mins": "5 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/contributors",
-  "ask": "An ineligible contribution can be refunded or excepted, with a reason.",
-  "steps": [
    {
     "d": "[[Contributors]] (<</contributors>>), search {{Ineligible Refund}}, open the $50.00 contribution.",
     "s": [
-     "Work items: B1 (out of province) and C3 (postal code), both OPEN."
+     "Address on file in BC. Work items: B1 and C3, both OPEN."
     ]
    },
    {
@@ -1461,7 +1574,8 @@ const CASES = [
    {
     "d": "[[Commit correction]], then close the dialog.",
     "s": [
-     "Banner: \"This contribution is REFUNDED; it is history, not the working record.\" B1 and C3 RESOLVED."
+     "Banner: \"This contribution is REFUNDED; it is history, not the working record.\" B1 and C3 RESOLVED ((row 33)).",
+     "The payment panel also reads \"$50.00 of this $50.00 payment is not attributed to any contribution\". That is the refunded money; leave it."
     ]
    },
    {
@@ -1473,14 +1587,7 @@ const CASES = [
    {
     "d": "Type {{Ontario resident studying at UBC}}, [[Record exception]].",
     "s": [
-     "Status EXCEPTION with that note. The C3 row is still OPEN; the exception covers only B1. An exception means the donor is confirmed to live in Ontario despite the address; a true non-resident is refunded, as above."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "Click [[Edit]] on the B1 row, add {{; home address in Ottawa confirmed by phone}}, Reason for the edit {{added how residency was confirmed}}, [[Save exception]].",
-    "s": [
-     "Still EXCEPTION, with the longer note. The edit is in the change log."
+     "Status EXCEPTION with that note ((row 33)). The C3 row is still OPEN; the exception covers only B1. An exception means the donor is confirmed to live in Ontario despite the address; a true non-resident is refunded, as above."
     ]
    }
   ]
@@ -1489,54 +1596,33 @@ const CASES = [
   "id": "r34",
   "sec": "validation",
   "rows": [
-   34
+   34,
+   35
   ],
-  "title": "Duplicate contributors are flagged",
-  "mins": "3 min",
+  "title": "Duplicate contributors: flagged and merged",
+  "mins": "5 min",
   "who": [
    "admin"
   ],
   "start": "/work-queue",
-  "ask": "The system identifies possible duplicate contributors.",
+  "ask": "The system identifies possible duplicate contributors (34), and duplicates can be merged (35).",
   "steps": [
    {
-    "d": "[[Work queue]] (<</work-queue>>), find [[Morgan Ellis]] and [[Morgan Elis]].",
+    "d": "[[Work queue]] (<</work-queue>>), find [[Dupone Merge]] and [[Duptwo Merge]].",
     "s": [
-     "Each has \"Possible duplicate donor record\" (B4), OPEN."
+     "Each has \"Possible duplicate donor record\" (B4), OPEN ((row 34))."
     ]
    },
    {
-    "d": "[[Contributors]] (<</contributors>>), search {{morgan.ellis@fixture.test}}.",
+    "d": "[[Contributors]] (<</contributors>>), search {{merge@demo.test}}.",
     "s": [
      "Two contributors sharing one email."
     ]
    },
    {
-    "d": "Live: <</payments/new>>, [[Not on file? Add a new contributor]], type Email {{morgan.ellis@fixture.test}} with any name.",
+    "d": "Live: <</payments/new>>, [[Not on file? Add a new contributor]]: First name {{Merge}}, Last name {{Test}}, Email {{merge@demo.test}}, Reason {{Demo duplicate check}}, click [[Add contributor]].",
     "s": [
-     "Warning: \"this may be a contributor already on file: ...\" and a checkbox \"This is a different person; add them anyway\". Click [[Cancel]]."
-    ]
-   }
-  ]
- },
- {
-  "id": "r35",
-  "sec": "validation",
-  "rows": [
-   35
-  ],
-  "title": "Merging duplicate contributors",
-  "mins": "4 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/work-queue",
-  "ask": "Duplicate contributors can be merged.",
-  "steps": [
-   {
-    "d": "[[Work queue]] (<</work-queue>>), find [[Dupone Merge]] and [[Duptwo Merge]].",
-    "s": [
-     "Each has \"Possible duplicate donor record\" (B4), OPEN."
+     "Warning: \"this may be a contributor already on file: ...\" and a checkbox \"This is a different person; add them anyway\" ((row 34)). Click [[Cancel]]."
     ]
    },
    {
@@ -1560,7 +1646,7 @@ const CASES = [
    {
     "d": "[[Contributors]] (<</contributors>>), open Dupone Merge.",
     "s": [
-     "Both contributions ($45.00 and $30.00), ACTIVE. Searching \"Duptwo\" finds nothing."
+     "Both contributions ($45.00 and $30.00), ACTIVE. Searching \"Duptwo\" finds nothing ((row 35))."
     ]
    },
    {
@@ -1575,43 +1661,16 @@ const CASES = [
   "id": "r36",
   "sec": "validation",
   "rows": [
-   36
-  ],
-  "title": "Duplicate contributions are flagged",
-  "mins": "3 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/work-queue",
-  "ask": "The system identifies possible duplicate contributions.",
-  "steps": [
-   {
-    "d": "[[Work queue]] (<</work-queue>>), find [[Double Dana]].",
-    "s": [
-     "Two rows, \"Possible duplicate contribution\" (A6), OPEN."
-    ]
-   },
-   {
-    "d": "Open each [[Contribution]] link.",
-    "s": [
-     "$50.00 Party on 5/1/2026 and $50.00 Party on 5/2/2026, from two different payments."
-    ]
-   }
-  ]
- },
- {
-  "id": "r37",
-  "sec": "validation",
-  "rows": [
+   36,
    37
   ],
-  "title": "Resolving a duplicate contribution",
-  "mins": "3 min",
+  "title": "Duplicate contributions: flagged and resolved",
+  "mins": "4 min",
   "who": [
    "admin"
   ],
   "start": "/work-queue",
-  "ask": "A duplicate contribution can be refunded, or marked as two genuine gifts.",
+  "ask": "The system identifies possible duplicate contributions (36), and a duplicate can be refunded or marked as two genuine gifts (37).",
   "steps": [
    {
     "d": "[[Work queue]] (<</work-queue>>), find [[Repeat Rowan]].",
@@ -1620,15 +1679,21 @@ const CASES = [
     ]
    },
    {
-    "d": "[[Contributors]] (<</contributors>>), open Repeat Rowan, open the 3/11/2025 contribution. [[Correct]], [[Refund]], Reason {{Duplicate gift refunded}}, [[Preview cascade]], [[Commit correction]].",
+    "d": "Open each [[Contribution]] link.",
     "s": [
-     "\"Correction committed\". Banner: REFUNDED."
+     "$50.00 on 3/10/2025 and $50.00 on 3/11/2025, from two different payments ((row 36))."
+    ]
+   },
+   {
+    "d": "On the 3/11/2025 contribution: [[Correct]], [[Refund]], Reason {{Duplicate gift refunded}}, [[Preview cascade]], [[Commit correction]].",
+    "s": [
+     "\"Correction committed\". Banner: REFUNDED. The payment shows $50.00 not attributed, as with Ineligible Refund."
     ]
    },
    {
     "d": "[[Work queue]] (<</work-queue>>), Repeat Rowan.",
     "s": [
-     "The refunded contribution's A6 row is RESOLVED, \"closed by a correction: ... is now REFUNDED\"."
+     "The refunded contribution's A6 row is RESOLVED, \"closed by a correction: ... is now REFUNDED\" ((row 37))."
     ]
    },
    {
@@ -1638,10 +1703,10 @@ const CASES = [
     ]
    },
    {
-    "opt": true,
-    "d": "Alternative, for two genuine gifts: click [[Exception]] on an A6 row, type {{distinct gifts}}, [[Record exception]].",
+    "d": "For row 39, while still admin: on <</contributors>> open Overlimit Olive's contribution, click [[Correct]], open the Action list, then close it.",
     "s": [
-     "Status EXCEPTION; nothing refunded."
+     "Work items: \"Donor is over a contribution limit\" (B2), OPEN.",
+     "No \"Reallocate\" option: only filers may reallocate. The next page picks this up as cfo."
     ]
    }
   ]
@@ -1650,15 +1715,17 @@ const CASES = [
   "id": "r38",
   "sec": "validation",
   "rows": [
-   38
+   38,
+   39,
+   40
   ],
-  "title": "Over-limit contributions are flagged",
-  "mins": "4 min",
+  "title": "Over-limit contributions: flagged and resolved, and every action recorded",
+  "mins": "8 min",
   "who": [
    "cfo"
   ],
   "start": "/work-queue",
-  "ask": "The system identifies contributions over the limit, and stops receipts until resolved.",
+  "ask": "The system identifies contributions over the limit and stops receipts until resolved (38), the excess can be reallocated or refunded (39), and how each problem was resolved is recorded (40).",
   "steps": [
    {
     "d": "[[Work queue]] (<</work-queue>>), find [[Blocked Blake]].",
@@ -1673,48 +1740,13 @@ const CASES = [
     ]
    },
    {
-    "d": "[[Correct]], Action [[Reallocate to another entity (over-limit)]], [[Show over-limit proposal]]. Do not commit; press Escape.",
-    "s": [
-     "\"Over the CA limit by $75.00 ($3500.00 against $3425.00).\" and an offer to move $75.00 to PARTY."
-    ]
-   },
-   {
     "d": "Open <</spaces/67/CA/issue?ridingNumber=121>>.",
     "s": [
-     "\"open work item(s) block issuance for this space\", listing Blocked Blake and other donors. [[Next: generate]] is disabled."
-    ]
-   }
-  ]
- },
- {
-  "id": "r39",
-  "sec": "validation",
-  "rows": [
-   39
-  ],
-  "title": "Resolving an over-limit contribution",
-  "mins": "5 min",
-  "who": [
-   "admin",
-   "cfo"
-  ],
-  "start": "/contributors",
-  "ask": "The excess can be reallocated to another entity or refunded.",
-  "steps": [
-   {
-    "d": "As admin, [[Contributors]] (<</contributors>>), open Overlimit Olive's contribution.",
-    "s": [
-     "Work items: \"Donor is over a contribution limit\" (B2), OPEN."
+     "\"open work item(s) block issuance for this space\", listing Blocked Blake and other donors. [[Next: generate]] is disabled ((row 38))."
     ]
    },
    {
-    "d": "Click [[Correct]], open the Action list. Close it.",
-    "s": [
-     "No \"Reallocate\" option: only filers may reallocate."
-    ]
-   },
-   {
-    "d": "Sign in as **cfo**, on <</contributors>> open Overlimit Olive's contribution, [[Correct]], [[Reallocate to another entity (over-limit)]].",
+    "d": "On <</contributors>> open Overlimit Olive's contribution, [[Correct]], [[Reallocate to another entity (over-limit)]].",
     "s": [
      "Part 1: $6000, \"Parts total $6000.00 of $6000.00\"."
     ]
@@ -1734,48 +1766,19 @@ const CASES = [
    {
     "d": "[[Preview cascade]], then [[Commit correction]].",
     "s": [
-     "\"Correction committed\", 2 contributions created."
+     "\"Correction committed\", 2 contributions created ((row 39))."
     ]
    },
    {
-    "d": "[[Work queue]] (<</work-queue>>), Overlimit Olive.",
+    "d": "[[Work queue]] (<</work-queue>>): read the Resolution column for this section's donors.",
     "s": [
-     "B2 RESOLVED, \"closed by a correction: ... is now SUPERSEDED\"."
-    ]
-   }
-  ]
- },
- {
-  "id": "r40",
-  "sec": "validation",
-  "rows": [
-   40
-  ],
-  "title": "The action taken is recorded",
-  "mins": "4 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/work-queue",
-  "ask": "How each problem was resolved is recorded.",
-  "steps": [
-   {
-    "d": "[[Work queue]] (<</work-queue>>), look at the resolved rows from earlier.",
-    "s": [
-     "Resolution: \"closed by a correction: ... is now REFUNDED\" or the exception note typed in."
+     "Overlimit Olive and Duptwo Merge: \"closed by a correction: ... is now SUPERSEDED\". Ineligible Refund and Repeat Rowan: \"... is now REFUNDED\". Ineligible Except: the exception note ((row 40))."
     ]
    },
    {
     "d": "On <</contributors>>, search {{Ineligible Refund}}, open the $50.00 contribution, copy its id from the address bar. [[Change log]] (<</admin/change-log>>), [[Subject id]] = that id.",
     "s": [
-     "The creation entry and the refund entry, each with its reason."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "New tab: <</api/change-log?subjectId=>> plus the id. Copy the refund entry's \"correlationId\", paste it into the [[Correlation id]] filter.",
-    "s": [
-     "Everything that one correction changed: the Contribution, the Payment, and the WorkItem, all with the same reason."
+     "The creation entry and the refund entry, each with its reason ((row 40))."
     ]
    }
   ]
@@ -1788,8 +1791,8 @@ const CASES = [
    46,
    47
   ],
-  "title": "Issue receipts from contributions",
-  "mins": "5 min",
+  "title": "Issue receipts from contributions, and email them",
+  "mins": "7 min",
   "who": [
    "cfo"
   ],
@@ -1804,7 +1807,7 @@ const CASES = [
     ]
    },
    {
-    "d": "Turn on [[One receipt per donor]] (row 46).",
+    "d": "Turn on [[One receipt per donor]] ((row 46)).",
     "s": [
      "Receipts 3. Iris's two cash gifts combine into one $80.00 receipt (2 contributions). Her goods-and-services gift stays separate at $80.00 ($100 less $20)."
     ]
@@ -1818,11 +1821,11 @@ const CASES = [
    {
     "d": "Reason {{EO demo issuance}}. Click [[Generate receipts]].",
     "s": [
-     "\"3 issued, 0 failed.\" Each row has a GPO-00###### number and a View PDF link."
+     "The page moves to the Deliver step: three receipts, each with a GPO-00###### number and a View PDF link, \"0 of 3 receipt(s) delivered\" ((row 41))."
     ]
    },
    {
-    "d": "Read the three receipt numbers aloud (row 47).",
+    "d": "Read the three receipt numbers aloud ((row 47)).",
     "s": [
      "Consecutive numbers."
     ]
@@ -1830,13 +1833,26 @@ const CASES = [
    {
     "d": "Click [[View PDF]] on Iris's combined receipt.",
     "s": [
-     "\"Received on: 2031-01-10 to 2031-01-20\", \"Eligible Amount: $80.00\"."
+     "\"Received on: 2031-01-10 to 2031-01-20\", \"Eligible Amount: $80.00\".",
+     "The PDF holds the receipt three times: the original and two copies watermarked \"Duplicate Copy\"."
     ]
    },
    {
-    "d": "Leave the Deliver step for row 64. Open a contribution from a result row.",
+    "d": "Open a contribution from a result row, then come back.",
     "s": [
      "Allocations & receipts shows the receipt, ISSUED. The contribution's [[Edit]] is now disabled: receipted data is frozen."
+    ]
+   },
+   {
+    "d": "Back on the Deliver step (if you left, open <</spaces/9601/PARTY/issue>> and click [[Go to delivery]]).",
+    "s": [
+     "Email \"Ready to send\" with the three receipts."
+    ]
+   },
+   {
+    "d": "Letter {{Thank you for your support.}}, Reason {{Send receipts}}, keep the subject. Click [[Send ... email(s)]].",
+    "s": [
+     "Ready to send drops; Sent rises within about 15 seconds. The Emails log is checked as sysadmin on the Cancellation notice page."
     ]
    }
   ]
@@ -1845,19 +1861,19 @@ const CASES = [
   "id": "r42",
   "sec": "issue",
   "rows": [
-   42
+   42,
+   63
   ],
-  "title": "The receipt record is a snapshot",
-  "mins": "5 min",
+  "title": "The receipt record is a snapshot, and reissuing it",
+  "mins": "4 min",
   "who": [
-   "cfo",
-   "admin"
+   "cfo"
   ],
   "start": "/contributors",
-  "ask": "The receipt keeps what it was issued with, even if the contributor changes later.",
+  "ask": "The receipt keeps what it was issued with, even if the contributor changes later (42), and a reissued receipt says which receipt it replaces (63).",
   "steps": [
    {
-    "d": "As cfo, [[Contributors]] (<</contributors>>), open Snapshot Sid, open his $50.00 contribution.",
+    "d": "[[Contributors]] (<</contributors>>), open Snapshot Sid, open his $50.00 contribution.",
     "s": [
      "Allocations & receipts: number, ISSUED, $50.00, View PDF. Address on file: 77 Maple Ave, Ottawa."
     ]
@@ -1869,24 +1885,24 @@ const CASES = [
     ]
    },
    {
-    "d": "Sign in as **admin**. On <</contributors>>, open Snapshot Sid, [[Edit contributor]]: Last name {{Smith}}, Street {{Elm Court}}, Reason {{Donor moved and changed name}}, save."
+    "d": "Click [[Snapshot Sid]] under Donor, [[Edit contributor]]: Last name {{Smith}}, Street {{Elm Court}}, Reason {{Donor moved and changed name}}, save."
    },
    {
     "d": "Open that receipt's [[View PDF]] again.",
     "s": [
-     "Unchanged: still SNAPSHOT SID, 77 MAPLE AVE. The stored PDF and its snapshot do not move."
+     "Unchanged: still SNAPSHOT SID, 77 MAPLE AVE. The stored PDF and its snapshot do not move ((row 42))."
     ]
    },
    {
-    "d": "Sign in as **cfo**. On <</contributors>>, open Snapshot Sid's contribution, [[Correct]] beside the receipt, [[Reissue this receipt]], Reason {{Reissue with new address}}, [[Confirm]].",
+    "d": "Open the $50.00 contribution again. [[Correct]] beside the receipt opens a menu: choose [[Reissue this receipt]], Reason {{Reissue with new address}}, [[Confirm]].",
     "s": [
-     "\"Reissued as GPO-00######.\" The old row CANCELLED, the new row ISSUED."
+     "The old row CANCELLED, a new row ISSUED with a new GPO-00###### number."
     ]
    },
    {
     "d": "[[View PDF]] on the new receipt.",
     "s": [
-     "SNAPSHOT SMITH, 77 ELM COURT, and \"This cancels and replaces receipt #...\"."
+     "SNAPSHOT SMITH, 77 ELM COURT, and \"This cancels and replaces receipt #\" with the cancelled number ((row 63))."
     ]
    }
   ]
@@ -1898,7 +1914,7 @@ const CASES = [
    43
   ],
   "title": "One receipt for several contributions",
-  "mins": "4 min",
+  "mins": "2 min",
   "who": [
    "cfo"
   ],
@@ -1906,33 +1922,15 @@ const CASES = [
   "ask": "An aggregated receipt records each contribution it covers.",
   "steps": [
    {
-    "d": "[[Contributors]] (<</contributors>>), search {{Consolidating}}, open Consolidating Chris.",
+    "d": "[[Contributors]] (<</contributors>>), open Iris Issue.",
     "s": [
-     "Two contributions in period 9504, $40.00 and $25.00, each \"Left to receipt\" $0.00."
+     "Three contributions, each \"Left to receipt\" $0.00."
     ]
    },
    {
-    "d": "Open each contribution.",
+    "d": "Open the $50.00 and the $30.00 contributions.",
     "s": [
-     "Both list the same receipt number: one allocates $40.00, the other $25.00."
-    ]
-   },
-   {
-    "d": "[[View PDF]].",
-    "s": [
-     "$65.00, \"Received on: 2030-03-05 to 2030-03-10\"."
-    ]
-   },
-   {
-    "d": "Live: [[Contributors]] (<</contributors>>), open {{Oscar Combine}}.",
-    "s": [
-     "\"Tick two or more contributions to issue one receipt for all of them.\""
-    ]
-   },
-   {
-    "d": "Tick both. Reason {{Combine for donor}}, [[Issue one receipt]].",
-    "s": [
-     "\"One receipt for 2 contributions, totalling $65.00.\" then \"Issued GPO-... for $65.00.\" with View PDF."
+     "Both list the same receipt number: one allocates $50.00, the other $30.00 ((row 43)). The $100.00 goods gift has its own receipt."
     ]
    }
   ]
@@ -1941,65 +1939,30 @@ const CASES = [
   "id": "r44",
   "sec": "issue",
   "rows": [
-   44
+   44,
+   45
   ],
-  "title": "Who issued the receipt",
-  "mins": "3 min",
+  "title": "Who issued the receipt, and when",
+  "mins": "4 min",
   "who": [
-   "cfo",
-   "sysadmin"
+   "cfo"
   ],
   "start": "/contributors",
-  "ask": "The user who generated each receipt is recorded.",
+  "ask": "The user who generated each receipt (44), and the date and time it was generated (45), are recorded.",
   "steps": [
    {
-    "d": "On <</contributors>>, open Printed Paula, then her contribution. Right-click [[View PDF]], copy the link. The receipt id is between /receipts/ and /pdf."
+    "d": "On <</contributors>>, open Printed Paula, then her contribution.",
+    "s": [
+     "The receipt row shows the day it was issued, the day the demo data was loaded ((row 45))."
+    ]
+   },
+   {
+    "d": "Right-click [[View PDF]], copy the link. The receipt id is between /receipts/ and /pdf."
    },
    {
     "d": "[[Admin]] then [[Change log]] (<</admin/change-log>>): Subject type [[Receipt]], Subject id = that id.",
     "s": [
-     "Subject \"Receipt (<id>)\", Actor Party CFO, the issuing reason, After with the number and amount."
-    ]
-   },
-   {
-    "d": "Back on the contribution, [[Change history]], [[Show ... changes]].",
-    "s": [
-     "The issuance is listed with its reason."
-    ]
-   }
-  ]
- },
- {
-  "id": "r45",
-  "sec": "issue",
-  "rows": [
-   45
-  ],
-  "title": "When the receipt was generated",
-  "mins": "2 min",
-  "who": [
-   "cfo",
-   "sysadmin"
-  ],
-  "start": "/contributors",
-  "ask": "The date and time each receipt was generated.",
-  "steps": [
-   {
-    "d": "On <</contributors>>, open Printed Paula, then her contribution, and read the receipt row.",
-    "s": [
-     "The date it was issued (the day the demo data was loaded)."
-    ]
-   },
-   {
-    "d": "[[View PDF]].",
-    "s": [
-     "\"Issue Date:\" the same day."
-    ]
-   },
-   {
-    "d": "[[Change log]] (<</admin/change-log>>) for that receipt (as in row 44).",
-    "s": [
-     "The At column has the exact date and time."
+     "Subject \"Receipt (<id>)\", Actor Party CFO ((row 44)), At with the exact date and time ((row 45)), and the issuing reason."
     ]
    }
   ]
@@ -2016,6 +1979,7 @@ const CASES = [
    53,
    54,
    55,
+   56,
    57,
    58
   ],
@@ -2025,61 +1989,28 @@ const CASES = [
    "cfo"
   ],
   "start": "/contributors",
-  "ask": "One walk through the receipt PDF covers ten rows.",
+  "ask": "One walk through the receipt PDF covers eleven rows.",
   "steps": [
    {
     "d": "[[Contributors]] (<</contributors>>), open Printed Paula, open her contribution, [[View PDF]]. Point at each line:",
     "s": [
-     "48: \"This is your Official Receipt for income tax purposes.\"",
-     "49: \"Received By: Green Party of Ontario\" (a campaign receipt prints the campaign's name instead).",
-     "50: \"Received on: 2032-01-15\", the accepted date, not the 2032-01-12 payment date.",
-     "51: \"Issue Date:\" the day it was issued.",
-     "53: PRINTED PAULA, 20 BAY ST, TORONTO ON M5J2N8.",
-     "54: The signature and \"Authorized Signature\".",
-     "55: \"Receipt No: GPO-00######\".",
-     "57: \"Contribution Type: Monetary\".",
-     "58: \"Green Party of Ontario\"."
+     "\"This is your Official Receipt for income tax purposes.\" ((row 48))",
+     "\"Received By: Green Party of Ontario\" (a campaign receipt prints the campaign's name instead). ((row 49))",
+     "\"Received on: 2032-01-15\", the accepted date, not the 2032-01-12 payment date. ((row 50))",
+     "\"Issue Date:\" the day it was issued. ((row 51))",
+     "PRINTED PAULA, 20 BAY ST, TORONTO ON M5J2N8. ((row 53))",
+     "The signature and \"Authorized Signature\". ((row 54))",
+     "\"Receipt No: GPO-00######\". ((row 55))",
+     "\"Contributor Type: Individual\". ((row 56))",
+     "\"Contribution Type: Monetary\". ((row 57))",
+     "\"Green Party of Ontario\" ((row 58))."
     ]
    },
    {
     "d": "On <</contributors>>, open [[Goods Gita]], her contribution, then [[View PDF]].",
     "s": [
-     "52: \"Eligible Amount: $80.00\" for a $100 gift with $20 non-deductible.",
-     "57: \"Contribution Type: Goods and Services\"."
-    ]
-   }
-  ]
- },
- {
-  "id": "r56",
-  "sec": "issue",
-  "rows": [
-   56
-  ],
-  "title": "Contributor type on the receipt",
-  "mins": "2 min",
-  "who": [
-   "sysadmin"
-  ],
-  "start": "/contributors",
-  "ask": "The receipt shows the contributor type.",
-  "steps": [
-   {
-    "d": "On <</contributors>>, open Printed Paula, her contribution, then [[View PDF]].",
-    "s": [
-     "\"Contributor Type: Individual\"."
-    ]
-   },
-   {
-    "d": "As sysadmin, [[Admin]] then [[Receipt layout]] (<</admin/receipts>>).",
-    "s": [
-     "\"With contributor type\" selected (the demo seed set it). Changing it needs a reason and applies to receipts rendered from then on."
-    ]
-   },
-   {
-    "d": "[[Change log]] (<</admin/change-log>>), Subject type [[ReceiptSettings]].",
-    "s": [
-     "The switch, with its reason and Sys Admin as actor."
+     "\"Eligible Amount: $80.00\" for a $100 gift with $20 non-deductible. ((row 52))",
+     "\"Contribution Type: Goods and Services\". ((row 57))"
     ]
    }
   ]
@@ -2091,7 +2022,7 @@ const CASES = [
    59
   ],
   "title": "Marking a receipt lost",
-  "mins": "3 min",
+  "mins": "2 min",
   "who": [
    "cfo"
   ],
@@ -2099,13 +2030,7 @@ const CASES = [
   "ask": "A receipt can be set to lost.",
   "steps": [
    {
-    "d": "Fixture: on <</contributors>>, open [[Lost Lena]], then her contribution.",
-    "s": [
-     "Receipt ISSUED. A lost receipt stays valid."
-    ]
-   },
-   {
-    "d": "Live: [[Contributors]] (<</contributors>>), open {{Lost Liam}}, open his contribution. [[Correct receipt GPO-...]], [[Reprint as a lost-receipt copy]].",
+    "d": "[[Contributors]] (<</contributors>>), open {{Lost Liam}}, open his contribution. [[Correct receipt GPO-...]], [[Reprint as a lost-receipt copy]].",
     "s": [
      "Explains it reprints unaltered, stamped COPY; the receipt stays valid. Confirm is disabled until a reason is typed."
     ]
@@ -2113,14 +2038,7 @@ const CASES = [
    {
     "d": "Reason {{Donor lost the original}}, [[Confirm]].",
     "s": [
-     "\"Copy generated; the original is flagged lost.\" Still ISSUED."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "[[Change log]] (<</admin/change-log>>) for the receipt id.",
-    "s": [
-     "Before {\"lost\":false}, After {\"lost\":true}."
+     "\"Copy generated; the original is flagged lost.\" Still ISSUED ((row 59))."
     ]
    }
   ]
@@ -2151,7 +2069,7 @@ const CASES = [
    {
     "d": "New tab: <</api/receipts/>> + receipt id + {{/reprints/}} + reprint id + {{/pdf}}.",
     "s": [
-     "The receipt with a COPY stamp and the same receipt number."
+     "The receipt with a COPY stamp and the same receipt number ((row 60))."
     ]
    }
   ]
@@ -2185,14 +2103,7 @@ const CASES = [
    {
     "d": "Reason {{Issued in error}}, [[Confirm]].",
     "s": [
-     "Same number, now CANCELLED. [[Issue a receipt]] is enabled again."
-    ]
-   },
-   {
-    "opt": true,
-    "d": "[[Change log]] (<</admin/change-log>>) for the receipt id.",
-    "s": [
-     "Before {\"status\":\"ISSUED\"}, After {\"status\":\"CANCELLED\"}."
+     "Same number, now CANCELLED ((row 61)). [[Issue a receipt]] is enabled again."
     ]
    }
   ]
@@ -2201,21 +2112,22 @@ const CASES = [
   "id": "r62",
   "sec": "issue",
   "rows": [
-   62
+   62,
+   64
   ],
-  "title": "Cancellation notice",
+  "title": "Cancellation notice, and the email log",
   "mins": "4 min",
   "who": [
    "cfo",
    "sysadmin"
   ],
   "start": "/contributors",
-  "ask": "A cancelled receipt produces a notice that can be sent to the donor.",
+  "ask": "A cancelled receipt produces a notice that can be sent to the donor (62), and emailed receipts go out as PDF attachments (64).",
   "steps": [
    {
     "d": "On <</contributors>>, open Cancel Cara, then her contribution. Click [[Cancellation notice]].",
     "s": [
-     "The receipt watermarked CANCELLED."
+     "The receipt watermarked CANCELLED ((row 62))."
     ]
    },
    {
@@ -2235,143 +2147,11 @@ const CASES = [
     "s": [
      "Cara's email, SENT, SIMULATED. Open it: attached receipt PDF and the letter."
     ]
-   }
-  ]
- },
- {
-  "id": "r63",
-  "sec": "issue",
-  "rows": [
-   63
-  ],
-  "title": "Reissuing a receipt",
-  "mins": "3 min",
-  "who": [
-   "cfo"
-  ],
-  "start": "/contributors",
-  "ask": "A receipt can be reissued, and the new one says which receipt it replaces.",
-  "steps": [
-   {
-    "d": "Fixture: on <</contributors>>, open [[Reissued Rory]], then his contribution.",
-    "s": [
-     "Two rows: older number CANCELLED, newer number ISSUED, both $60.00."
-    ]
    },
    {
-    "d": "[[View PDF]] on the newer one.",
+    "d": "Kind [[Receipt]].",
     "s": [
-     "\"This cancels and replaces receipt #\" and the cancelled number."
-    ]
-   },
-   {
-    "d": "Live: [[Contributors]] (<</contributors>>), open {{Reissue Rhys}}, open his contribution. [[Correct]], [[Reissue this receipt]], Reason {{Reissue requested by donor}}, [[Confirm]].",
-    "s": [
-     "\"Reissued as GPO-00######.\" The original CANCELLED, the new one ISSUED."
-    ]
-   },
-   {
-    "d": "[[View PDF]] on the new receipt.",
-    "s": [
-     "\"This cancels and replaces receipt #\" with the original number."
-    ]
-   }
-  ]
- },
- {
-  "id": "r64",
-  "sec": "issue",
-  "rows": [
-   64
-  ],
-  "title": "Emailing receipts",
-  "mins": "4 min",
-  "who": [
-   "cfo",
-   "sysadmin"
-  ],
-  "start": "/spaces/9601/PARTY/issue",
-  "ask": "Receipts can be emailed to contributors.",
-  "steps": [
-   {
-    "d": "As cfo open <</spaces/9601/PARTY/issue>>, click [[Go to delivery]].",
-    "s": [
-     "Email \"Ready to send\" with the receipts from row 41."
-    ]
-   },
-   {
-    "d": "Letter {{Thank you for your support.}}, Reason {{Send receipts}}, keep the subject. Click [[Send ... email(s)]].",
-    "s": [
-     "Ready to send drops; Sent rises after a few seconds."
-    ]
-   },
-   {
-    "d": "As sysadmin, [[Admin]] then [[Emails]] (<</admin/emails>>), Kind [[Receipt]].",
-    "s": [
-     "Iris and Devon's receipt emails, SENT, SIMULATED. Open one: \"Attached receipt PDF\" and the letter."
-    ]
-   }
-  ]
- },
- {
-  "id": "r65",
-  "sec": "issue",
-  "rows": [
-   65
-  ],
-  "title": "Contributor email on file",
-  "mins": "2 min",
-  "who": [
-   "admin"
-  ],
-  "start": "/contributors",
-  "ask": "The contributor's email is recorded and can be updated.",
-  "steps": [
-   {
-    "d": "[[Contributors]] (<</contributors>>), open [[Email Emma]].",
-    "s": [
-     "Email: email.emma@g4.fixture.test."
-    ]
-   },
-   {
-    "d": "On <</contributors>>, open Iris Issue, [[Edit contributor]], Email {{iris.new@demo.test}}, Reason {{Donor changed email}}, save.",
-    "s": [
-     "The new email shows on the record and in the list; Change history has the entry."
-    ]
-   }
-  ]
- },
- {
-  "id": "r66",
-  "sec": "reporting",
-  "rows": [
-   66
-  ],
-  "title": "Only privileged users get reports",
-  "mins": "4 min",
-  "who": [
-   "sysadmin",
-   "readonly"
-  ],
-  "start": "/spaces/9503/PARTY/entity-reports",
-  "ask": "Report access is limited to privileged users.",
-  "steps": [
-   {
-    "d": "As sysadmin open <</spaces/9503/PARTY/entity-reports>>.",
-    "s": [
-     "\"Entity reports\", \"Period 9503 · Party (province-wide)\". [[Generate]] disabled until a reason is typed."
-    ]
-   },
-   {
-    "d": "Reason {{EO demo ALL}}, [[Generate]].",
-    "s": [
-     "A new row: Kind ALL, Rows 9, with Download CSV and Mark sent."
-    ]
-   },
-   {
-    "d": "Private window: open <</spaces/9503/PARTY/entity-reports>> and sign in as **readonly**.",
-    "s": [
-     "\"Only the party CFO, a designate, bookkeeper, or filer may generate reports.\" and \"Your role cannot view generated reports.\" No list, no download."
+     "Iris and Devon's receipt emails from the issue run, SENT, SIMULATED. Open one: \"Attached receipt PDF\" and the letter ((row 64))."
     ]
    }
   ]
@@ -2380,24 +2160,32 @@ const CASES = [
   "id": "r67",
   "sec": "reporting",
   "rows": [
-   67
+   67,
+   68,
+   69
   ],
-  "title": "Reports come from stored records",
-  "mins": "3 min",
+  "title": "Reports from stored records, in EO's format",
+  "mins": "9 min",
   "who": [
    "sysadmin"
   ],
   "start": "/spaces/9503/PARTY/entity-reports",
-  "ask": "EO reports are generated from the contribution records in the system.",
+  "ask": "EO reports are generated from the contribution records in the system (67), and the ALL (68) and S2P2 (69) files match the Elections Ontario format.",
   "steps": [
    {
-    "d": "On <</spaces/9503/PARTY/entity-reports>> generate ALL (if not done in row 66).",
+    "d": "Open <</spaces/9503/PARTY/entity-reports>>.",
     "s": [
-     "Rows 9, Status Clean."
+     "\"Entity reports\", \"Period 9503 · Party (province-wide)\". [[Generate]] disabled until a reason is typed."
     ]
    },
    {
-    "d": "Report [[S2P2 (over-$200 contributor aggregate)]], Reason {{EO demo S2P2}}, [[Generate]].",
+    "d": "Report [[ALL]], Reason {{EO demo ALL}}, [[Generate]].",
+    "s": [
+     "A new row: Kind ALL, Rows 9, Status Clean, with Download CSV and Mark sent ((row 67))."
+    ]
+   },
+   {
+    "d": "On <</spaces/9503/PARTY/entity-reports>>, Report [[S2P2 (over-$200 contributor aggregate)]], Reason {{EO demo S2P2}}, [[Generate]].",
     "s": [
      "Rows 2, Status Clean."
     ]
@@ -2405,29 +2193,8 @@ const CASES = [
    {
     "d": "[[Download CSV]] on the ALL row and open it.",
     "s": [
-     "9 rows, each with a GPO- receipt number. Threshold Theo appears 3 times (100.00, 75.00, 50.00)."
-    ]
-   }
-  ]
- },
- {
-  "id": "r68",
-  "sec": "reporting",
-  "rows": [
-   68
-  ],
-  "title": "The ALL report meets the EO spec",
-  "mins": "5 min",
-  "who": [
-   "sysadmin"
-  ],
-  "start": "/spaces/9503/PARTY/entity-reports",
-  "ask": "The ALL contribution report matches the Elections Ontario file format.",
-  "steps": [
-   {
-    "d": "On <</spaces/9503/PARTY/entity-reports>>, [[Download CSV]] on the ALL row and open it.",
-    "s": [
-     "21 columns, from Party_ID to Contributor_Postal_Code.",
+     "9 rows, each with a GPO- receipt number. Threshold Theo appears 3 times (100.00, 75.00, 50.00) ((row 67)).",
+     "21 columns, from Party_ID to Contributor_Postal_Code ((row 68)).",
      "Receipt_Status: I issued, C cancelled (Reissued Rory's original), L lost (Lost Lena).",
      "Contribution_Type: GS for Goods Gita, MO for the rest.",
      "Acceptance_Date as MMDDYYYY (Split Sam: 03012029). Amounts with two decimals."
@@ -2436,41 +2203,13 @@ const CASES = [
    {
     "d": "Open <</spaces/9503/CA/entity-reports?ridingNumber=121>>. Label {{Riding 121 CA}}, Reason {{EO demo CA}}, [[Generate]], download.",
     "s": [
-     "3 rows, Political_Entity_Type A. Agency_Contribution Y for Agency Alex and Split Sam, N for Direct Dee."
+     "3 rows, Political_Entity_Type A. Agency_Contribution Y for Agency Alex and Split Sam, N for Direct Dee ((row 68))."
     ]
    },
    {
-    "opt": true,
-    "d": "<</spaces/9504/PARTY/entity-reports>>: generate and download.",
+    "d": "Back on <</spaces/9503/PARTY/entity-reports>>, [[Download CSV]] on the S2P2 row and open it.",
     "s": [
-     "One row for Consolidating Chris, 65.00: the combined receipt as one line."
-    ]
-   }
-  ]
- },
- {
-  "id": "r69",
-  "sec": "reporting",
-  "rows": [
-   69
-  ],
-  "title": "The S2P2 report meets the EO spec",
-  "mins": "3 min",
-  "who": [
-   "sysadmin"
-  ],
-  "start": "/spaces/9503/PARTY/entity-reports",
-  "ask": "The over-$200 contributor report matches the Elections Ontario format.",
-  "steps": [
-   {
-    "d": "On <</spaces/9503/PARTY/entity-reports>>, [[Download CSV]] on the S2P2 row (row 67).",
-    "s": [
-     "14 columns ending in Aggregate_Contribution_Amount."
-    ]
-   },
-   {
-    "d": "Read the rows.",
-    "s": [
+     "14 columns ending in Aggregate_Contribution_Amount ((row 69)).",
      "Split Sam 300.00.",
      "Threshold Theo 225.00: three smaller gifts (100 + 75 + 50) added together.",
      "No row for donors at $200 or less (Rory, Lena, Emma, Gita)."
@@ -2492,34 +2231,38 @@ function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').
 function fmt(s) {
   // tokenise before escaping so markup survives
   const parts = [];
-  const re = /\[\[(.+?)\]\]|\{\{(.+?)\}\}|<<(.*?)>>|\*\*(.+?)\*\*/g;
+  const re = /\[\[(.+?)\]\]|\{\{(.+?)\}\}|<<(.*?)>>|\*\*(.+?)\*\*|\s*\(\((rows? [^)]+)\)\)/g;
   let last = 0, m;
   while ((m = re.exec(s))) {
     parts.push(esc(s.slice(last, m.index)));
     if (m[1] != null) parts.push(`<span class="ui">${esc(m[1])}</span>`);
     else if (m[2] != null) parts.push(`<span class="val" role="button" tabindex="0" title="Tap to copy" data-copy="${esc(m[2])}">${esc(m[2])}</span>`);
     else if (m[3] != null) parts.push(`<span class="path">${esc(m[3])}</span>`);
-    else parts.push(`<b>${esc(m[4])}</b>`);
+    else if (m[4] != null) parts.push(`<b>${esc(m[4])}</b>`);
+    else parts.push(` <span class="proof" title="EO checklist row proven here">✓ ${esc(m[5].charAt(0).toUpperCase() + m[5].slice(1))}</span>`);
     last = re.lastIndex;
   }
   parts.push(esc(s.slice(last)));
   return parts.join('');
 }
+// every row, with runs of three or more shown as a range: 20–23, 65
+function rowList(r) {
+  const out = [];
+  for (let i = 0; i < r.length; ) {
+    let j = i;
+    while (j + 1 < r.length && r[j + 1] === r[j] + 1) j++;
+    if (j - i >= 2) out.push(r[i] + '–' + r[j]);
+    else for (let k = i; k <= j; k++) out.push(String(r[k]));
+    i = j + 1;
+  }
+  return out.join(', ');
+}
 function rowLabel(c) {
   if (!c.rows.length) return 'Setup';
-  const r = c.rows;
-  const contiguous = r.every((n, i) => i === 0 || n === r[i - 1] + 1);
-  if (r.length === 1) return 'Row ' + r[0];
-  if (contiguous) return 'Rows ' + r[0] + '–' + r[r.length - 1];
-  return 'Rows ' + r.join(', ');
+  return (c.rows.length === 1 ? 'Row ' : 'Rows ') + rowList(c.rows);
 }
 function shortRows(c) {
-  if (!c.rows.length) return '—';
-  const r = c.rows;
-  const contiguous = r.every((n, i) => i === 0 || n === r[i - 1] + 1);
-  if (r.length === 1) return String(r[0]);
-  if (contiguous) return r[0] + '–' + r[r.length - 1];
-  return r[0] + '…' + r[r.length - 1];
+  return c.rows.length ? rowList(c.rows) : '—';
 }
 function secName(id) { return (SECTIONS.find((s) => s[0] === id) || [, ''])[1]; }
 function allSteps(c) { return [...(c.prep || []), ...(c.steps || [])]; }
@@ -2567,14 +2310,24 @@ function stepHtml(cid, i, st) {
     <p class="do">${st.opt ? '<span class="optlabel">Optional</span>' : ''}${fmt(st.d)}</p>${see}</li>`;
 }
 
+function eoBox(c) {
+  const items = (c.rows || []).filter((n) => EO[n]).map((n) => {
+    const e = EO[n];
+    const ex = e.ex.length ? `<ul>${e.ex.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+    return `<div class="eo-row"><p><span class="eo-ref">Row ${n} · ${esc(e.ref)}</span> ${esc(e.q)}</p>${ex}</div>`;
+  });
+  return items.length ? `<details class="eo"><summary>EO checklist wording</summary>${items.join('')}</details>` : '';
+}
+
 function renderCase(c) {
   $('crumb').textContent = `${rowLabel(c)} · ${secName(c.sec)}`;
   let h = `<div class="eyebrow"><span class="rowpill">${esc(rowLabel(c))}</span><span>${esc(secName(c.sec))}</span></div>
   <h1 class="case">${esc(c.title)}</h1>
   <p class="ask">${fmt(c.ask || '')}</p>
+  ${eoBox(c)}
   <dl class="facts">
     <dt>Signed in as</dt><dd>${esc((c.who || []).join(', '))}</dd>
-    ${c.start ? `<dt>Start at</dt><dd>${fmt('<<' + c.start + '>>')}</dd>` : ''}
+    ${c.start ? `<dt>Start at</dt><dd><span class="path">${esc(c.start)}</span></dd>` : ''}
     ${c.mins ? `<dt>Time</dt><dd>${esc(c.mins)}</dd>` : ''}
   </dl>`;
   const prepN = (c.prep || []).length;
@@ -2625,11 +2378,11 @@ document.addEventListener('click', (e) => {
     li.classList.toggle('done', !!arr[i]); tick.setAttribute('aria-pressed', arr[i] ? 'true' : 'false');
     return;
   }
-  const v = e.target.closest('.val[data-copy]');
+  const v = e.target.closest('[data-copy]');
   if (v) copyVal(v);
 });
 document.addEventListener('keydown', (e) => {
-  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.val[data-copy]')) { e.preventDefault(); copyVal(e.target); }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-copy]')) { e.preventDefault(); copyVal(e.target); }
 });
 function copyVal(el) {
   const text = el.dataset.copy;
