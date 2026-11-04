@@ -243,3 +243,46 @@ This is presentation only; the API enforces each permission itself.
 - Qomon change dumps will arrive in an S3 bucket that does not exist yet; the
   "where incremental changes come from" boundary is abstracted behind
   `ChangeFeedSource`.
+
+## Qomon sweep paging
+
+The synchronous trigger uses `runPagedMirrorSweep` to drain the source in bounded ingestion pages
+(`limit`, default 2,000 transactions). It saves the feed-specific cursor only
+after a terminal page and successful reconciliation. Failures restart from
+the original cursor; imported transactions are reused on replay. The
+`emergencyCeiling` option defaults to 1,000,000 transactions and throws on
+overflow, without cursor advancement or deletion detection.
+
+Full sweeps mark observed links with a run identifier in PostgreSQL, then
+check absent links in bounded database batches only after the source drains.
+Links carry their feed kind so a riding scan cannot flag party links as
+deleted. Existing links default to the party feed; deployments with historic
+riding imports must correct their feed assignment before full reconciliation.
+No receipt data is deleted.
+
+The polling adapter uses newest-first offset pagination, not a source
+snapshot. Concurrent source edits can shift offsets and cause repeated or
+missed records during a scan. Paging alone cannot guarantee a consistent
+snapshot; periodic full reconciliation remains necessary. A cursor is never
+saved from an intermediate page or an incomplete scan.
+
+The original `runMirrorSweep` and `pull` entry points retain their capped,
+single-batch behaviour. Complete scans use `runPagedMirrorSweep` and `pages`
+explicitly.
+
+## Sweep target execution
+
+`api/src/sync/execute-target.ts` exposes `executeSweepTarget`: a mode and a
+party or riding identifier are sufficient to execute a complete sweep.
+It reads current database settings when called, including riding activity,
+credentials, and the riding URL override or party URL fallback. A disabled
+party space does not disable an independently configured riding space.
+Party and riding feed kinds retain separate durable cursors.
+
+The synchronous HTTP trigger delegates to this operation after its existing
+authentication and sysadmin checks. A worker can call the same operation
+without a Fastify request, session, or process lifecycle dependency.
+`SweepTargetError.code` identifies disabled, unknown, inactive, or missing-key
+targets. `SweepExecutionError` supplies a safe message and retryability flag
+without retaining the original error or response body. Contact warnings redact
+the resolved API key. Client factories remain injectable for offline tests.

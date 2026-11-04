@@ -218,7 +218,11 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   const qomon: QomonSource = fixedQomon
     ? () => Promise.resolve(fixedQomon)
     : qomonFromSettings(opts.prisma, opts.buildQomon);
-  await app.register(syncRoutes, { qomon, buildRidingQomon: opts.buildRidingQomon });
+  await app.register(syncRoutes, {
+    qomon: fixedQomon ? qomon : undefined,
+    buildQomon: opts.buildQomon,
+    buildRidingQomon: opts.buildRidingQomon,
+  });
   await app.register(contributionRoutes, { qomon });
   await app.register(contactRoutes, { qomon });
   await app.register(paymentRoutes);

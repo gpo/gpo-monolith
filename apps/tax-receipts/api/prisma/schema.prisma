@@ -339,6 +339,8 @@ model Payment {
 /// created from, and what the sweep last saw. Absent for MANUAL and
 /// LEGACY_IMPORT payments. Never read back as attribution.
 model QomonTransactionLink {
+  feedKind               String    @default("qomon-poll")
+  observedRun            String?
   id                     String    @id @default(cuid())
   paymentId              String    @unique
   qomonTransactionId     BigInt    @unique
