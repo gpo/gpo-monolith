@@ -399,6 +399,12 @@ export function ContributionDetailPage({ id }: { id: string }) {
               </>
             )}
             <Field label="Note">{detail.note ?? '—'}</Field>
+            {/* the record's unique id, otherwise only in the URL (EO evaluation row 24) */}
+            <Field label="Contribution id">
+              <Text size="sm" ff="monospace">
+                {detail.id}
+              </Text>
+            </Field>
           </SimpleGrid>
           <Field label="Address on file">
             {detail.contact.address ? (

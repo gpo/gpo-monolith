@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 import { signIn } from '../../helpers.js';
 
 test.describe('Contributions', () => {
-  test('Row 24: Each contribution has a unique id shown in its detail URL', async ({ page }) => {
+  test('Row 24: Each contribution has a unique id shown on its page and in its detail URL', async ({ page }) => {
     // 1. Sign in as admin.
     await signIn(page, 'admin');
     await page.goto('/contributions');
@@ -41,6 +41,7 @@ test.describe('Contributions', () => {
     await expect(page.getByRole('heading', { name: 'Contribution', level: 2 })).toBeVisible();
     await expect(page.getByText('Agency Alex').first()).toBeVisible();
     await expect(page.getByText(/Individual, contributor id T\d+/)).toBeVisible();
+    await expect(page.getByText('Contribution id', { exact: true }).locator('..')).toContainText(firstId);
 
     // 3. Click '← Back to list', then click the 'Direct Dee' link in the row with amount $120.00 and period 9503. Record the URL.
     await page.getByText('← Back to list').click();

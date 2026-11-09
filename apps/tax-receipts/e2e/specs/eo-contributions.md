@@ -10,7 +10,7 @@ Rows 24-31 of the Elections Ontario evaluation checklist for the GPO Tax Receipt
 
 **Seed:** `tests/seed.spec.ts`
 
-#### 1.1. Row 24: Each contribution has a unique id shown in its detail URL
+#### 1.1. Row 24: Each contribution has a unique id shown on its page and in its detail URL
 
 **File:** `tests/eo/contributions/row-24-unique-id.spec.ts`
 
@@ -20,6 +20,7 @@ Rows 24-31 of the Elections Ontario evaluation checklist for the GPO Tax Receipt
   2. In the table, click the 'Agency Alex' link in the row with amount $150.00 and period 9503. Record the URL.
     - expect: The URL matches /contributions/<id> where <id> is a non-empty token (a cuid such as cmve...).
     - expect: The page heading is 'Contribution' and the Contribution card shows Donor 'Agency Alex' with 'Individual, contributor id T<n>'.
+    - expect: The Contribution card's 'Contribution id' field shows the same id as the URL.
   3. Click '← Back to list', then click the 'Direct Dee' link in the row with amount $120.00 and period 9503. Record the URL.
     - expect: The URL is /contributions/<other-id>.
     - expect: The second id differs from the first id (two contributions have different ids).

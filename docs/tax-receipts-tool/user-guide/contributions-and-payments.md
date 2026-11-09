@@ -135,8 +135,9 @@ Click a contribution to see everything about it. The **Payment** and
   imported from Qomon is read-only.
 - **Contribution**: the donor, amount, recipient (with the derived agency
   flag), period, date accepted, received by, source code, goods and
-  services, non-deductible amount, note, and the donor's address on file.
-  **Edit** changes its details (see
+  services, non-deductible amount, note, the contribution id (its unique
+  identifier, the same one in the page address), and the donor's address
+  on file. **Edit** changes its details (see
   [Editing a contribution](#editing-a-contribution)), and **Correct** opens
   the [correction](corrections.md) dialog.
 - **Work items**: every problem the tool has found on it, open or closed.
