@@ -7,6 +7,9 @@ import { withChangeLog } from '../changelog/write.js';
 import { TerminalReceiptError } from '../receipts/errors.js';
 import { issueReceipt } from '../receipts/issue.js';
 import { createTestContribution, resetDb, seedBaseline, testPrisma, fixtureContact } from '../test/db.js';
+import { getContributionDetail } from '../contributions/detail.js';
+import { listContributions } from '../contributions/list.js';
+import { receiptDisplayStatus } from '../receipts/display-status.js';
 import { cancelReceipt } from './cancel.js';
 import { MaterialChangeError, ReprintNotAllowedError, isSpellingFix, reprintReceipt } from './reprint.js';
 
@@ -96,6 +99,22 @@ describe('reprint without cancelling: lost copy and spelling fix (corrections ac
     expect(rows[0]).toMatchObject({ kind: 'LOST_COPY', correctedName: null, reason: 'donor request' });
   });
 
+  it('a lost receipt reads LOST on the contribution and the contributions list, and stays ISSUED underneath', async () => {
+    const allocation = await prisma.receiptAllocation.findFirstOrThrow({ where: { receiptId } });
+    const listRow = async () =>
+      (await listContributions(prisma, { filters: {}, ridingScope: null })).data.find(
+        (r) => r.id === allocation.contributionId,
+      );
+    expect((await getContributionDetail(prisma, allocation.contributionId, null))?.allocations[0]?.receipt.lost).toBe(false);
+    expect((await listRow())?.hasLostReceipt).toBe(false);
+
+    await reprintReceipt({ prisma, storageDir }, { ...base(), kind: 'LOST_COPY' });
+
+    const receipt = (await getContributionDetail(prisma, allocation.contributionId, null))?.allocations[0]?.receipt;
+    expect(receipt).toMatchObject({ status: 'ISSUED', lost: true });
+    expect(await listRow()).toMatchObject({ hasReceipt: true, hasLostReceipt: true });
+  });
+
   it('can reprint a lost receipt again', async () => {
     await reprintReceipt({ prisma, storageDir }, { ...base(), kind: 'LOST_COPY' });
     await reprintReceipt({ prisma, storageDir }, { ...base(), kind: 'LOST_COPY' });
@@ -162,6 +181,15 @@ describe('reprint without cancelling: lost copy and spelling fix (corrections ac
     await expect(
       reprintReceipt({ prisma, storageDir }, { ...base(), receiptId: foreign.id, kind: 'LOST_COPY' }),
     ).rejects.toBeInstanceOf(ReprintNotAllowedError);
+  });
+});
+
+describe('receiptDisplayStatus', () => {
+  it('shows an issued lost receipt as LOST, and anything else as its status', () => {
+    expect(receiptDisplayStatus({ status: 'ISSUED', lost: false })).toBe('ISSUED');
+    expect(receiptDisplayStatus({ status: 'ISSUED', lost: true })).toBe('LOST');
+    expect(receiptDisplayStatus({ status: 'CANCELLED', lost: true })).toBe('CANCELLED');
+    expect(receiptDisplayStatus({ status: 'VOID', lost: false })).toBe('VOID');
   });
 });
 

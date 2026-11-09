@@ -278,24 +278,26 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
 
 **Seed:** `tests/seed.spec.ts`
 
-#### 3.1. Row 59: A receipt can be set to lost (Lost Lena read-only, plus a live lost reprint)
+#### 3.1. Row 59: A receipt can be set to LOST (Lost Lena read-only, plus a live lost reprint)
 
 **File:** `tests/eo/issue-tax-receipt/row-59-lost-status.spec.ts`
 
 **Steps:**
   1. Read-only fixture. As cfo open the contributor 'Lost Lena' (9503 PARTY, $45.00) and her contribution; take the receipt id from the 'View PDF' href.
-    - expect: One receipt row, status ISSUED (a lost receipt stays valid; this screen shows no separate 'lost' column).
+    - expect: One receipt row, status LOST (a lost receipt stays valid and keeps its number; it is ISSUED underneath with the lost flag set).
   2. As sysadmin open /admin/change-log, Subject type Receipt, Subject id <receipt id>.
     - expect: An entry whose Changes cell reads 'lost' and whose dialog shows Before 'false' and After 'true', and a reprint entry (Changes 'Created') whose dialog shows a 'kind' of LOST_COPY.
   3. Live. Recipe R1 to R4 with one $50 payment (own data). On the contribution page open the receipt's 'Correct' button (its accessible name is 'Correct receipt GPO-...') and choose the menu item 'Reprint as a lost-receipt copy'.
-    - expect: A modal titled 'Reprint as a lost-receipt copy: GPO-...' explaining it reprints unaltered, stamped COPY, and that the receipt stays valid; Received-by label prefilled 'Green Party of Ontario'; Confirm disabled until a reason of 3 or more characters is filled.
+    - expect: A modal titled 'Reprint as a lost-receipt copy: GPO-...' explaining it reprints unaltered, stamped COPY, and that the receipt keeps its number, stays valid, and is not cancelled; Received-by label prefilled 'Green Party of Ontario'; Confirm disabled until a reason of 3 or more characters is filled.
   4. Fill reason 'E2E lost' and click Confirm.
-    - expect: The modal shows 'Copy generated; the original is flagged lost.'
-    - expect: After closing, the receipt row is still ISSUED and the 'Cancel' and 'Reissue' options remain available.
+    - expect: The modal shows 'Copy generated; the receipt is now LOST.'
+    - expect: After closing, the receipt row reads LOST with the same number, and the 'Cancel' and 'Reissue' options remain available.
+    - expect: On the contributor's page, the contribution's Receipts cell reads '<receipt number> LOST'.
+    - expect: On /contributions, filtered to the donor, the Receipt column reads 'lost'.
   5. As sysadmin check the change log for the receipt id.
     - expect: An entry reason 'E2E lost' whose Changes cell reads 'lost' and whose dialog shows Before 'false' and After 'true'.
 
-#### 3.2. Row 60: The lost-receipt reprint is stamped COPY
+#### 3.2. Row 60: The lost-receipt reprint is stamped COPY on every portion
 
 **File:** `tests/eo/issue-tax-receipt/row-60-lost-copy-stamp.spec.ts`
 
@@ -303,8 +305,9 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
   1. Recipe R1 to R4 with one payment, then the 'Reprint as a lost-receipt copy' action as in Row 59 (reason 'E2E lost copy'). Capture the POST /api/receipts/<id>/reprint response (the 201 body has reprintId) via page.waitForResponse registered before clicking Confirm. NOTE: the UI has no link to the reprint PDF, so it is read through the API.
     - expect: Response 201 with kind LOST_COPY and lost true.
   2. GET /api/receipts/<id>/reprints/<reprintId>/pdf with page.request and extract its text.
-    - expect: Text contains 'COPY' and the same receipt number as the original.
+    - expect: Text contains 'COPY' three times (one per portion) and the same receipt number as the original.
     - expect: The original receipt's own 'View PDF' text does NOT contain 'COPY'.
+    - expect: The reprint has one more 'Duplicate Copy' than the original: the template marks portions 2 and 3, and the reprint marks the top portion too.
   3. Read-only cross-check with Lost Lena (9503): take her receipt id from the 'View PDF' href, GET /api/receipts/<id>/reprints (JSON data array, first entry kind LOST_COPY), then GET its /pdf.
     - expect: The reprint text contains 'COPY'. Nothing is changed.
 

@@ -108,6 +108,8 @@ export interface ContributionListRow {
   sourceCode: string | null;
   nonDeductibleCents: number | null;
   hasReceipt: boolean;
+  /** an issued receipt on it is lost (EO status L; still valid) */
+  hasLostReceipt: boolean;
   openValidationCount: number;
   lastSyncedAt: string | null;
 }
@@ -225,6 +227,8 @@ export interface ContributionDetail {
       id: string;
       receiptNumber: string;
       status: string;
+      /** EO status L: still ISSUED and valid, shown as LOST (`receiptStatusLabel`) */
+      lost: boolean;
       issueDate: string;
       /** a cancelled receipt's notice (EO row 62); null when there is none */
       cancellationNotice: {
@@ -398,6 +402,8 @@ export interface ContactDetail extends ContactRecord {
     leadershipContestantId: string | null;
     /** what a new receipt could still cover */
     remainingCents: number;
+    /** every receipt that has covered it; status is as shown on screen (ISSUED, LOST, CANCELLED, VOID) */
+    receipts: Array<{ id: string; receiptNumber: string; status: string }>;
   }>;
   changeLog: Array<{
     id: string;

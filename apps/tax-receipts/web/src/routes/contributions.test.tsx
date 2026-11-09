@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
@@ -25,6 +25,7 @@ const PAGE = {
       sourceCode: 'subspace:84',
       nonDeductibleCents: 0,
       hasReceipt: false,
+      hasLostReceipt: false,
       openValidationCount: 1,
       lastSyncedAt: null,
     },
@@ -33,9 +34,11 @@ const PAGE = {
 };
 
 let calls: string[] = [];
+let page: typeof PAGE = PAGE;
 
 beforeEach(() => {
   calls = [];
+  page = PAGE;
   localStorage.clear();
   vi.stubGlobal(
     'fetch',
@@ -49,7 +52,7 @@ beforeEach(() => {
         );
       }
       if (String(url).includes('/contributions')) {
-        return new Response(JSON.stringify(PAGE), {
+        return new Response(JSON.stringify(page), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -83,6 +86,14 @@ test('lists contributions with their columns', async () => {
   expect(await screen.findByText('Dana Donor')).toBeInTheDocument();
   expect(screen.getByText('$50.00')).toBeInTheDocument();
   expect(screen.getByText('84')).toBeInTheDocument();
+});
+
+test("the Receipt column reads 'lost' for a contribution whose receipt is lost (EO row 59)", async () => {
+  page = { ...PAGE, data: PAGE.data.map((r) => ({ ...r, hasReceipt: true, hasLostReceipt: true })) };
+  renderPage();
+  const row = (await screen.findByText('Dana Donor')).closest('tr')!;
+  expect(within(row).getByText('lost')).toBeInTheDocument();
+  expect(within(row).queryByText('issued')).not.toBeInTheDocument();
 });
 
 test('a donor-search filter re-queries with the query param set', async () => {

@@ -103,7 +103,12 @@ const COLUMNS: Column[] = [
   {
     key: 'receipt',
     label: 'Receipt',
-    render: (r) => <Badge color={r.hasReceipt ? 'green' : 'gray'}>{r.hasReceipt ? 'issued' : 'none'}</Badge>,
+    render: (r) =>
+      r.hasLostReceipt ? (
+        <Badge color="orange">lost</Badge>
+      ) : (
+        <Badge color={r.hasReceipt ? 'green' : 'gray'}>{r.hasReceipt ? 'issued' : 'none'}</Badge>
+      ),
   },
   {
     key: 'validation',

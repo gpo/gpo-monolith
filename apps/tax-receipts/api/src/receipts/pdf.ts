@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib';
+import { degrees, PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { ReceiptLayout } from '../generated/prisma/index.js';
 
 /**
@@ -40,7 +40,10 @@ export interface ReceiptPdfData {
   /** set on a receipt that replaces a cancelled one; printed on every copy
    *  (corrections.md principle 4). */
   replacesReceiptNumber?: string | null;
-  /** stamps every copy "COPY" for a lost-receipt reprint (status L). */
+  /** marks a lost-receipt reprint (status L) as a copy on all three
+   *  portions: "COPY" on each, plus the template's diagonal "Duplicate Copy"
+   *  on the top portion, which the template leaves unmarked (EO evaluation
+   *  row 60). */
   isCopy?: boolean;
   /** which receipt layout to draw (ReceiptSettings); the caller reads the
    *  setting so every render path agrees */
@@ -179,6 +182,23 @@ function drawRowWithContributorType(
   }
 }
 
+/** The template prints a diagonal "Duplicate Copy" on its second and third
+ *  portions only, since the top one is normally the original. A lost-receipt
+ *  reprint has no original, so the top portion gets the same mark, drawn
+ *  where the template draws it on the portions below. */
+function drawTopDuplicateMark(page: PDFPage, font: PDFFont, height: number): void {
+  const text = 'Duplicate Copy';
+  const size = 25;
+  page.drawText(text, {
+    x: 236,
+    y: height - 138,
+    size,
+    font,
+    rotate: degrees(42),
+    color: rgb(0.62, 0.62, 0.62),
+  });
+}
+
 const ROW_RENDERERS: Record<ReceiptLayout, typeof drawRow> = {
   LEGACY: drawRow,
   CONTRIBUTOR_TYPE: drawRowWithContributorType,
@@ -212,6 +232,7 @@ export async function renderReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
   for (const position of [0, 255, 510]) {
     drawLayoutRow(position, copiedPage, font, data, width, height);
   }
+  if (data.isCopy) drawTopDuplicateMark(copiedPage, font, height);
 
   return Buffer.from(await pdfDoc.save());
 }

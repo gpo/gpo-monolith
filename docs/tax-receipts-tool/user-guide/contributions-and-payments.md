@@ -115,6 +115,9 @@ Click **Show advanced filters** for the rest:
 When the advanced filters are hidden, any you set still apply, and the link
 shows how many are active.
 
+The **Receipt** column reads *issued* when an issued receipt covers the
+contribution, *lost* when that receipt is lost, and *none* otherwise.
+
 Use the **column picker** to show or hide columns. Your column choices are
 kept in your browser only, so they do not follow you to another computer.
 

@@ -26,7 +26,7 @@ const EXPLANATION: Record<Kind, string> = {
   REISSUE:
     'Cancels this receipt and issues a replacement from current data, which says it cancels and replaces this one.',
   LOST_COPY:
-    'Reprints the receipt unaltered, stamped COPY, and flags the original lost. The receipt stays valid and is not cancelled.',
+    'Reprints the receipt unaltered, stamped COPY on every portion, and marks the original LOST. It keeps its number, stays valid, and is not cancelled.',
   CORRECTED:
     'Regenerates the receipt with the corrected spelling. Only a spelling fix of the same person qualifies; anything else is a reissue. The receipt is not cancelled.',
 };
@@ -61,7 +61,7 @@ export function ReceiptActions({
         }
         case 'LOST_COPY':
           await api.reprintReceipt(receipt.id, { kind, reason, politicalEntityLabel: label });
-          return 'Copy generated; the original is flagged lost.';
+          return 'Copy generated; the receipt is now LOST.';
         case 'CORRECTED':
           await api.reprintReceipt(receipt.id, { kind, reason, politicalEntityLabel: label, correctedName: name });
           return 'Reprint generated with the corrected spelling.';

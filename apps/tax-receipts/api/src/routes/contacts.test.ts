@@ -3,7 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { hashPassword } from '../auth/password.js';
-import { fixtureContact, resetDb, seedBaseline, testPrisma } from '../test/db.js';
+import { withChangeLog } from '../changelog/write.js';
+import { createTestContribution, fixtureContact, issueReceipt, resetDb, seedBaseline, testPrisma } from '../test/db.js';
 
 const prisma = testPrisma();
 const SECRET = 'test-session-secret-at-least-32-characters-long';
@@ -22,6 +23,7 @@ const NEW_DONOR = {
 describe('contributor routes (D13)', () => {
   let app: FastifyInstance;
   let qomon: InMemoryQomon | undefined;
+  let baseline: Awaited<ReturnType<typeof seedBaseline>>;
 
   async function start(withQomon: boolean) {
     qomon = withQomon ? new InMemoryQomon() : undefined;
@@ -31,7 +33,7 @@ describe('contributor routes (D13)', () => {
 
   beforeEach(async () => {
     await resetDb(prisma);
-    const baseline = await seedBaseline(prisma);
+    baseline = await seedBaseline(prisma);
     await prisma.user.update({
       where: { id: baseline.adminUserId },
       data: { passwordHash: await hashPassword(ADMIN[1]) },
@@ -80,6 +82,32 @@ describe('contributor routes (D13)', () => {
 
     const search = await call('GET', '/contacts?query=lovel', READONLY);
     expect(search.json().data).toEqual([expect.objectContaining({ id, name: 'Ada Lovelace', qomonContactId: null })]);
+  });
+
+  it("lists each contribution's receipts, with a lost one reading LOST (EO evaluation row 59)", async () => {
+    await start(false);
+    const contact = await fixtureContact(prisma, { data: { name: 'Lena Lost' } });
+    const contribution = await createTestContribution(prisma, {
+      contactId: contact.id,
+      amountCents: 4_500,
+      acceptedAt: new Date('2026-03-01T12:00:00Z'),
+    });
+    const receiptId = await issueReceipt(prisma, {
+      contactId: contact.id,
+      contributionId: contribution.id,
+      periodId: baseline.periodId,
+      amountCents: 4_500,
+      actorUserId: baseline.cfoUserId,
+    });
+    const receiptsOf = async () => (await call('GET', `/contacts/${contact.id}`, READONLY)).json().contributions[0].receipts;
+
+    expect(await receiptsOf()).toEqual([{ id: receiptId, receiptNumber: expect.any(String), status: 'ISSUED' }]);
+
+    await withChangeLog(prisma, { userId: baseline.cfoUserId, reason: 'donor lost it' }, async (ctx) => {
+      await ctx.tx.receipt.update({ where: { id: receiptId }, data: { lost: true } });
+      await ctx.log({ subjectType: 'Receipt', subjectId: receiptId, before: { lost: false }, after: { lost: true } });
+    });
+    expect(await receiptsOf()).toEqual([{ id: receiptId, receiptNumber: expect.any(String), status: 'LOST' }]);
   });
 
   it('with Qomon: creates the contributor in Qomon first and reports its Qomon id', async () => {

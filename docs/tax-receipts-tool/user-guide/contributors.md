@@ -22,8 +22,9 @@ email. Open a contributor to see:
   contributor is added and never changes: their Qomon contact id, or, for a
   contributor kept only in the tool, `T` and a number.
 - **Contributions**: everything they have given, with period, entity,
-  amount, status, and what is left to receipt. With *Issue receipts*, tick
-  two or more to issue one receipt for all of them (see
+  amount, status, what is left to receipt, and the receipts that cover each
+  one with their status (ISSUED, LOST, CANCELLED, or VOID). With *Issue
+  receipts*, tick two or more to issue one receipt for all of them (see
   [Combined receipts](issuing-receipts.md#combined-receipts)).
 - **Change history**: every change to their record; select an entry to
   see its before and after, field by field.

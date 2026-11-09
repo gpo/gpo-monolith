@@ -13,8 +13,10 @@ import { getReceiptSettings } from '../receipts/settings.js';
  * PDF for an issued receipt WITHOUT cancelling it.
  *
  *  - LOST_COPY: the donor lost the receipt. It is reprinted unaltered and
- *    stamped COPY, and the original is flagged `lost` (EO status L; the ALL
- *    report then files it as L, open-questions O41).
+ *    marked as a copy on all three portions, and the original is flagged
+ *    `lost` (EO status L; the ALL report then files it as L, open-questions
+ *    O41). It stays status ISSUED, since it is still valid, and screens show
+ *    it as LOST (`receipts/display-status.ts`).
  *  - CORRECTED: the donor's name was misspelled and nothing else is wrong. The
  *    receipt is regenerated with the corrected spelling. Only a non-material
  *    fix qualifies: anything that changes who the donor is, or the amount,

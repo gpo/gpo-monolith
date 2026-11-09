@@ -66,7 +66,7 @@ const DETAIL = {
     {
       id: 'a1',
       amountCents: 10_000,
-      receipt: { id: 'r1', receiptNumber: 'GPO-00402510', status: 'ISSUED', issueDate: '2026-03-02T00:00:00.000Z', cancellationNotice: null },
+      receipt: { id: 'r1', receiptNumber: 'GPO-00402510', status: 'ISSUED', lost: false, issueDate: '2026-03-02T00:00:00.000Z', cancellationNotice: null },
     },
   ],
   rtdInclusions: [],
@@ -261,7 +261,18 @@ test('reprints a receipt as a lost copy from the receipt menu', async () => {
     reason: 'donor lost it',
     politicalEntityLabel: 'Green Party of Ontario',
   });
-  expect(await screen.findByText('Copy generated; the original is flagged lost.')).toBeInTheDocument();
+  expect(await screen.findByText('Copy generated; the receipt is now LOST.')).toBeInTheDocument();
+});
+
+test('a lost receipt reads LOST in Allocations & receipts (EO row 59)', async () => {
+  detail = {
+    ...DETAIL,
+    allocations: DETAIL.allocations.map((a) => ({ ...a, receipt: { ...a.receipt, lost: true } })),
+  };
+  renderDetail();
+  const row = (await screen.findByText('GPO-00402510')).closest('tr')!;
+  expect(within(row).getByText('LOST')).toBeInTheDocument();
+  expect(within(row).queryByText('ISSUED')).not.toBeInTheDocument();
 });
 
 const MANUAL = {

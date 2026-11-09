@@ -89,6 +89,7 @@ export function ContributorContributions({
                   <Table.Th>Period</Table.Th>
                   <Table.Th>Status</Table.Th>
                   <Table.Th>Left to receipt</Table.Th>
+                  <Table.Th>Receipts</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -126,6 +127,15 @@ export function ContributorContributions({
                       <Table.Td>{k.periodId ?? '—'}</Table.Td>
                       <Table.Td>{k.status}</Table.Td>
                       <Table.Td>{k.status === 'ACTIVE' ? money(k.remainingCents) : '—'}</Table.Td>
+                      <Table.Td>
+                        {k.receipts.length === 0
+                          ? '—'
+                          : k.receipts.map((r) => (
+                              <Text key={r.id} size="sm">
+                                {r.receiptNumber} {r.status}
+                              </Text>
+                            ))}
+                      </Table.Td>
                     </Table.Tr>
                   );
                 })}

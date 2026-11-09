@@ -8,9 +8,11 @@ import { addContributor, addPayment, createPeriod, issueSpace, newSuffix, signOu
 // The template prints "Duplicate Copy" on parts 2 and 3 of every receipt, so compare the count of
 // the standalone upper-case stamp rather than a case-insensitive substring.
 const stampCount = (text: string) => (text.match(/\bCOPY\b/g) ?? []).length;
+// The template's own diagonal mark; a lost copy adds it to the top portion too.
+const duplicateMarks = (text: string) => (text.match(/Duplicate\s*Copy/g) ?? []).length;
 
 test.describe('Issue Tax Receipt: corrections', () => {
-  test('Row 60: The lost-receipt reprint is stamped COPY', async ({ page }) => {
+  test('Row 60: The lost-receipt reprint is stamped COPY on every portion', async ({ page }) => {
     const sfx = newSuffix();
 
     // 1. Recipe R1 to R4 with one payment, then 'Reprint as a lost-receipt copy' (reason 'E2E lost copy'),
@@ -53,18 +55,21 @@ test.describe('Issue Tax Receipt: corrections', () => {
     expect(JSON.stringify(body)).toMatch(/"lost":\s*true/);
     const reprintId: string = reprint.reprintId ?? reprint.id;
     expect(reprintId).toBeTruthy();
-    await expect(dialog.getByText('Copy generated; the original is flagged lost.')).toBeVisible();
+    await expect(dialog.getByText('Copy generated; the receipt is now LOST.')).toBeVisible();
 
     // 2. GET /api/receipts/<id>/reprints/<reprintId>/pdf and extract its text.
     const reprintPdf = await page.request.get(`/api/receipts/${receiptId}/reprints/${reprintId}/pdf`);
     expect(reprintPdf.status()).toBe(200);
     const reprintText = await pdfTextFromBuffer(await reprintPdf.body());
     expect(reprintText).toContain(receiptNumber);
-    expect(stampCount(reprintText)).toBeGreaterThan(0);
+    // COPY on all three portions
+    expect(stampCount(reprintText)).toBe(3);
     const originalPdf = await page.request.get(ownHref);
     const originalText = await pdfTextFromBuffer(await originalPdf.body());
     expect(originalText).toContain(receiptNumber);
     expect(stampCount(originalText)).toBe(0);
+    // the top portion, unmarked on the original, carries "Duplicate Copy" like the two below
+    expect(duplicateMarks(reprintText)).toBe(duplicateMarks(originalText) + 1);
 
     // 3. Read-only cross-check with Lost Lena (9503): her receipt's first reprint is a LOST_COPY.
     await page.goto('/contributors');
