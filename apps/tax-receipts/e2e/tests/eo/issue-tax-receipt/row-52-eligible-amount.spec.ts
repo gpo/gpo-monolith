@@ -16,7 +16,7 @@ test.describe('Issue Tax Receipt: issuance and receipt contents', () => {
     //    'Donor received goods or services' ticked and Non-deductible ($) 20 on 2024-01-20.
     //    (The plan had two $100 payments a day apart, which raises A6, a possible duplicate,
     //    and blocks the space; a different amount ten days apart does not.)
-    //    Issue both with 'One receipt per donor' OFF (R4).
+    //    Issue both with 'One receipt per donor' turned OFF (R4).
     await signIn(page, 'sysadmin');
     const periodId = await createPeriod(page, sfx);
     await signOut(page);

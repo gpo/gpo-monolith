@@ -176,14 +176,16 @@ test('generates receipts and shows per-row results', async () => {
   expect(screen.getByText('GPO-00402511')).toBeInTheDocument();
 });
 
-test('the one-receipt-per-donor toggle re-previews combined and generates combined', async () => {
+test('one receipt per donor starts on, and turning it off re-previews and generates uncombined', async () => {
   renderPage();
   await screen.findByText('Sam Supporter');
-  expect(calls.some((c) => c.url.includes('combinePerDonor'))).toBe(false);
+  const toggle = screen.getByRole('switch', { name: /One receipt per donor/ });
+  expect(toggle).toBeChecked();
+  expect(calls.some((c) => c.url.includes('/issuance-preview?combinePerDonor=true'))).toBe(true);
 
-  fireEvent.click(screen.getByRole('switch', { name: /One receipt per donor/ }));
+  fireEvent.click(toggle);
   await waitFor(() =>
-    expect(calls.some((c) => c.url.includes('/issuance-preview?combinePerDonor=true'))).toBe(true),
+    expect(calls.some((c) => c.url.endsWith('/spaces/67/PARTY/issuance-preview'))).toBe(true),
   );
 
   fireEvent.click(await screen.findByRole('button', { name: 'Next: generate' }));
@@ -194,7 +196,7 @@ test('the one-receipt-per-donor toggle re-previews combined and generates combin
 
   await waitFor(() => expect(calls.some((c) => c.url.includes('/spaces/67/PARTY/receipts'))).toBe(true));
   const call = calls.find((c) => c.url.includes('/spaces/67/PARTY/receipts'))!;
-  expect(JSON.parse(call.body!)).toMatchObject({ combinePerDonor: true });
+  expect(JSON.parse(call.body!)).toMatchObject({ combinePerDonor: false });
 });
 
 test('sends the donor pre-check for the space and shows the sent/skipped summary', async () => {

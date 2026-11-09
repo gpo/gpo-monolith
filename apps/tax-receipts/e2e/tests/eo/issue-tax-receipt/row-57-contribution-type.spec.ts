@@ -11,7 +11,7 @@ test.describe('Issue Tax Receipt: issuance and receipt contents', () => {
     const periodName = `E2E ${sfx}`;
 
     // 1. Recipe R1 and R2. R3 payment A $50 monetary; R3 payment B $100 goods and services with
-    //    Non-deductible ($) 20. Issue both (R4, 'One receipt per donor' OFF). Fetch both PDFs.
+    //    Non-deductible ($) 20. Issue both (R4, 'One receipt per donor' turned OFF). Fetch both PDFs.
     //    (Payment B is dated ten days after A, with a different amount, so rule A6 does not block the space.)
     await signIn(page, 'sysadmin');
     const periodId = await createPeriod(page, sfx);

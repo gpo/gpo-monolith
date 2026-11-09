@@ -33,10 +33,13 @@ test.describe('Issue Tax Receipt: issuance and receipt contents', () => {
     });
     await signOut(page);
 
-    // 2. Sign in as cfo, open /spaces/<periodId>/PARTY/issue. With the switch OFF (default), read the preview.
+    // 2. Sign in as cfo, open /spaces/<periodId>/PARTY/issue. The switch starts ON; turn it OFF and read the preview.
     await signIn(page, 'cfo');
     await page.goto(`/spaces/${periodId}/PARTY/issue`);
     await expect(page.getByText('Total amount', { exact: true })).toBeVisible();
+    await expect(page.getByRole('switch', { name: /One receipt per donor/ })).toBeChecked();
+    await page.getByText('One receipt per donor', { exact: true }).click();
+    await expect(page.getByRole('switch', { name: /One receipt per donor/ })).not.toBeChecked();
     const receiptsCount = page.getByText('Receipts', { exact: true }).locator('..');
     const totalAmount = page.getByText('Total amount', { exact: true }).locator('..');
     const donorRows = page.getByRole('row').filter({ has: page.getByRole('link', { name: donor.name }) });
@@ -46,7 +49,7 @@ test.describe('Issue Tax Receipt: issuance and receipt contents', () => {
       await expect(row.getByRole('cell').nth(1)).toHaveText('1');
     }
 
-    // 3. Turn the 'One receipt per donor' switch ON (click its label) and wait for the preview to refresh.
+    // 3. Turn the 'One receipt per donor' switch back ON (click its label) and wait for the preview to refresh.
     await page.getByText('One receipt per donor', { exact: true }).click();
     await expect(page.getByRole('switch', { name: /One receipt per donor/ })).toBeChecked();
     await expect(receiptsCount).toHaveText(/^Receipts\s*2$/);
