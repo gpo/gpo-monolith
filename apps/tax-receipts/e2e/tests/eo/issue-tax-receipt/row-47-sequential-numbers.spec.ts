@@ -10,7 +10,7 @@ test.describe('Issue Tax Receipt: issuance and receipt contents', () => {
     const sfx = newSuffix();
 
     // 1. Recipe R1 to R3 with TWO payments for one contributor ($50 on 2024-01-10, $30 on 2024-01-20).
-    //    In the wizard leave 'One receipt per donor' OFF and generate, so two receipts are issued in one run.
+    //    In the wizard turn 'One receipt per donor' OFF and generate, so two receipts are issued in one run.
     await signIn(page, 'sysadmin');
     const periodId = await createPeriod(page, sfx);
     await signOut(page);

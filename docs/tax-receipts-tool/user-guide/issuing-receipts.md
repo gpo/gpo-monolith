@@ -37,11 +37,13 @@ The tool checks the space's gate and shows a preview.
 - **If the space is clear**, you see exactly what would be issued: every
   receipt, its donor, and its amount, with totals. Nothing has been issued
   yet. This preview replaces the old "trial receipts."
-- **One receipt per donor** (off by default) combines each donor's
-  contributions in the space onto a single receipt, so a monthly donor
-  gets one receipt for the period rather than twelve. The preview updates
-  to show the combined receipts, with how many contributions each covers.
-  See [Combined receipts](#combined-receipts) for what can share one.
+- **One receipt per donor** (on by default, since combining is GPO's
+  normal practice) combines each donor's contributions in the space onto a
+  single receipt, so a monthly donor gets one receipt for the period rather
+  than twelve. The preview shows the combined receipts, with how many
+  contributions each covers; turn it off to issue one receipt per
+  contribution. See [Combined receipts](#combined-receipts) for what can
+  share one.
 
 The Review step also holds the **donor pre-check** card, for asking donors
 to confirm their address and delivery preference before anything is
@@ -113,7 +115,7 @@ contribution stays its own record, linked to the receipt by its own
 allocation, so the receipt still shows exactly which contributions it
 covers and for how much. There are two ways to issue one:
 
-- in the issuance wizard, turn on **One receipt per donor** (see
+- in the issuance wizard, leave **One receipt per donor** on (see
   [Review](#1-review));
 - on a [contributor's record](contributors.md), tick two or more
   contributions in **Contributions**, enter the received-by label and a

@@ -64,9 +64,10 @@ export function SpaceIssuancePage(params: SpaceIssuanceParams) {
   const { periodId, entityKind, ridingNumber } = params;
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  // One combined receipt per donor (EO evaluation rows 43, 46): opt-in, and
-  // the preview shows exactly what the toggle would issue.
-  const [combinePerDonor, setCombinePerDonor] = useState(false);
+  // One combined receipt per donor (EO evaluation rows 43, 46): on by
+  // default, since combining is GPO's normal practice (EO allows either),
+  // and the preview shows exactly what the toggle would issue.
+  const [combinePerDonor, setCombinePerDonor] = useState(true);
   const preview = useQuery({
     queryKey: ['space-issuance-preview', periodId, entityKind, ridingNumber, combinePerDonor],
     queryFn: () => api.previewSpaceIssuance(periodId, entityKind, ridingNumber, combinePerDonor),

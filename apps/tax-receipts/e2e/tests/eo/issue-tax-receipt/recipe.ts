@@ -139,10 +139,13 @@ export async function issueSpace(
   const query = entity === 'CAMPAIGN' ? `?ridingNumber=${opts.ridingNumber ?? 121}` : '';
   await page.goto(`/spaces/${periodId}/${entity}/issue${query}`);
   await expect(page.getByText('Total amount', { exact: true })).toBeVisible();
-  if (opts.oneReceiptPerDonor) {
+  // The switch starts on; these tests default it off so each contribution
+  // gets its own receipt unless a test asks for combining.
+  const combineSwitch = page.getByRole('switch', { name: /One receipt per donor/ });
+  if ((await combineSwitch.isChecked()) !== (opts.oneReceiptPerDonor ?? false)) {
     await page.getByText('One receipt per donor', { exact: true }).click();
-    await expect(page.getByRole('switch', { name: /One receipt per donor/ })).toBeChecked();
   }
+  await expect(combineSwitch).toBeChecked({ checked: opts.oneReceiptPerDonor ?? false });
   await page.getByRole('button', { name: 'Next: generate' }).click();
   if (opts.label !== undefined) {
     await page.getByRole('textbox', { name: 'Received-by label (as it should print on every receipt)' }).fill(opts.label);

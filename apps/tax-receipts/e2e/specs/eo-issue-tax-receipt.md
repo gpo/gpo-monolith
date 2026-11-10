@@ -25,7 +25,7 @@ Each scenario that says "Recipe R" runs this with its own suffix `S` (for exampl
 R1. As sysadmin, open /admin/periods. Fill Id (EO period id) with `96000 + random(0..999)` (retry with a new number if the id already appears in the table), Name `E2E <S>`, Kind ANNUAL (variant: GENERAL_ELECTION for campaign scenarios), Starts at (UTC) `2024-01-01T00:00`, Ends at (UTC) `2024-02-01T00:00` (the field is a datetime-local input, so a plain date is rejected as "Malformed value"), Reason `E2E period`. Save period is disabled until every field and the reason are filled; then click it and expect "Saved. Validation re-run against every mirrored contribution." and a new table row with the id.
 R2. As admin, open /contributors, choose "Add a contributor". Fill First name `Iris`, Last name `Issuer<S>`, Email `iris.<S>@e2e.test`, leave Contributor type Individual, and fill the address ALL-OR-NOTHING: Street number `77`, Street `Maple Ave`, City `Ottawa`, Province ON (select), Postal code `K1A 0B1`, Country `CA`, Reason `E2E contributor`. "Add contributor" stays disabled until the required fields and reason are filled. Submitting lands on /contributors/<id> showing "Address: 77 Maple Ave, Ottawa ON K1A 0B1, CA" and "Kept in: This tool" (Qomon is off, so every contributor is tool-owned and editable).
 R3. As admin, open /payments/new ("Add a payment"). Type the surname in "Donor who paid" and choose the "Iris Issuer<S> (email)" option, fill Amount ($) (for example 50), "Received on" `2024-01-10`, leave Method Cheque, choose the contribution's Period `E2E <S>` explicitly in the Period select (the "Derived from the date" default can pick a different period if another scenario's window overlaps), Reason `E2E payment`. "Save payment" is disabled until the reason is filled. Expect "Payment recorded". Use "Enter another payment" for more payments. The contribution section can set Recipient (Party, Constituency association, Campaign, Leadership contestant), Riding (a type-ahead, choose "121 . York-Simcoe"), "Accepted on", and the checkbox "Donor received goods or services" with "Non-deductible ($)".
-R4. As cfo, open `/spaces/<periodId>/PARTY/issue` (for a campaign: `/spaces/<periodId>/CAMPAIGN/issue?ridingNumber=121`). Review shows "Receipts", "Total amount", a donor table (Donor, Contributions, Amount, Delivery), and the switch "One receipt per donor". Choose "Next: generate". Received-by label is prefilled "Green Party of Ontario" for a party space (blank for a campaign; type it). Delivery override select has "Use each donor's preference", "Force mail for all", "Force email for all". Fill "Reason for this issuance run (required)" `E2E issue`; "Generate receipts" is disabled until then. Expect "1 issued, 0 failed." (count varies), the row's receipt number `GPO-00######`, the amount, and a "View PDF" link.
+R4. As cfo, open `/spaces/<periodId>/PARTY/issue` (for a campaign: `/spaces/<periodId>/CAMPAIGN/issue?ridingNumber=121`). Review shows "Receipts", "Total amount", a donor table (Donor, Contributions, Amount, Delivery), and the switch "One receipt per donor" (on by default). Choose "Next: generate". Received-by label is prefilled "Green Party of Ontario" for a party space (blank for a campaign; type it). Delivery override select has "Use each donor's preference", "Force mail for all", "Force email for all". Fill "Reason for this issuance run (required)" `E2E issue`; "Generate receipts" is disabled until then. Expect "1 issued, 0 failed." (count varies), the row's receipt number `GPO-00######`, the amount, and a "View PDF" link.
 
 Mutates for R as a whole: creates one period, one contributor, one to three payments and their receipts, all uniquely named. No seeded fixture is touched.
 
@@ -44,7 +44,7 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
     - expect: Heading 'Issue receipts' and 'Period 9502 . Party (province-wide)'.
     - expect: The Review preview lists donors Ready Rita ($50.00) and Partial Credit Priya (eligible amount below her $100 gift), and does not list Already Issued Ivy (already fully receipted).
     - expect: Nothing is issued by looking.
-  2. Create own data with Recipe R1 to R3: a period, one contributor, and TWO payments for that contributor ($50 on 2024-01-10 and $30 on 2024-01-20) so the run issues more than one row. Sign in as cfo and open /spaces/<periodId>/PARTY/issue (R4 up to the Review step).
+  2. Create own data with Recipe R1 to R3: a period, one contributor, and TWO payments for that contributor ($50 on 2024-01-10 and $30 on 2024-01-20) so the run issues more than one row. Sign in as cfo and open /spaces/<periodId>/PARTY/issue (R4 up to the Review step), and turn 'One receipt per donor' OFF.
     - expect: The own space is not blocked: no 'open work item(s) block issuance' message.
     - expect: Receipts count is 2, Total amount is $80.00, and the table has two rows for Iris Issuer<S>.
   3. Choose 'Next: generate', keep the label 'Green Party of Ontario', fill the run reason, click 'Generate receipts' (enabled once the reason is filled).
@@ -64,9 +64,9 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
 **Steps:**
   1. Recipe R1 and R2. Then R3 three times for the same contributor: $50 monetary on 2024-01-10, $30 monetary on 2024-01-20, and a goods-and-services payment of $100 on 2024-01-25 with 'Donor received goods or services' ticked and Non-deductible ($) 20 (the field is disabled until the checkbox is ticked).
     - expect: Three payments recorded.
-  2. Sign in as cfo, open /spaces/<periodId>/PARTY/issue. With the 'One receipt per donor' switch OFF (default), read the preview.
+  2. Sign in as cfo, open /spaces/<periodId>/PARTY/issue. The 'One receipt per donor' switch starts ON (default); turn it OFF and read the preview.
     - expect: Receipts is 3 and each row for Iris Issuer<S> has Contributions 1.
-  3. Turn the 'One receipt per donor' switch ON (click its label) and wait for the preview to refresh.
+  3. Turn the 'One receipt per donor' switch back ON (click its label) and wait for the preview to refresh.
     - expect: Receipts is 2 (monetary pair combined; goods and services separate).
     - expect: One row shows Contributions 2 with Amount $80.00 and another row shows Contributions 1 with Amount $80.00 (the $100 gift less $20 non-deductible).
     - expect: Total amount is $160.00.
@@ -83,7 +83,7 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
 **File:** `tests/eo/issue-tax-receipt/row-47-sequential-numbers.spec.ts`
 
 **Steps:**
-  1. Recipe R1 to R3 with TWO payments for one contributor ($50 on 2024-01-10, $30 on 2024-01-20). In the wizard leave 'One receipt per donor' OFF and generate, so two receipts are issued in one run.
+  1. Recipe R1 to R3 with TWO payments for one contributor ($50 on 2024-01-10, $30 on 2024-01-20). In the wizard turn 'One receipt per donor' OFF and generate, so two receipts are issued in one run.
     - expect: '2 issued, 0 failed.' with two receipt numbers.
   2. Read both numbers from the result rows, matching /^GPO-00\d{6}$/ each, and parse the digits as integers.
     - expect: Both match the GPO-00###### format.
@@ -160,7 +160,7 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
 **File:** `tests/eo/issue-tax-receipt/row-52-eligible-amount.spec.ts`
 
 **Steps:**
-  1. Recipe R1 and R2. R3 payment A: $100 monetary on 2024-01-10. R3 payment B: $100 with 'Donor received goods or services' ticked and Non-deductible ($) 20 on 2024-01-11. Issue both with 'One receipt per donor' OFF (R4).
+  1. Recipe R1 and R2. R3 payment A: $100 monetary on 2024-01-10. R3 payment B: $100 with 'Donor received goods or services' ticked and Non-deductible ($) 20 on 2024-01-11. Issue both with 'One receipt per donor' turned OFF (R4).
     - expect: '2 issued, 0 failed.'; the preview earlier showed one $100.00 and one $80.00 row.
   2. Fetch each PDF.
     - expect: Monetary receipt contains 'Eligible Amount: $100.00'.
@@ -216,7 +216,7 @@ Mutates for R as a whole: creates one period, one contributor, one to three paym
 **File:** `tests/eo/issue-tax-receipt/row-57-contribution-type.spec.ts`
 
 **Steps:**
-  1. Recipe R1 and R2. R3 payment A $50 monetary; R3 payment B $100 goods and services with Non-deductible ($) 20. Issue both (R4, 'One receipt per donor' OFF). Fetch both PDFs.
+  1. Recipe R1 and R2. R3 payment A $50 monetary; R3 payment B $100 goods and services with Non-deductible ($) 20. Issue both (R4, 'One receipt per donor' turned OFF). Fetch both PDFs.
     - expect: Receipt A contains 'Contribution Type: Monetary'.
     - expect: Receipt B contains 'Contribution Type: Goods and Services'.
 
