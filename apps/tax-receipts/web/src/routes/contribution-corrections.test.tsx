@@ -237,6 +237,12 @@ test('asks for a reason before it previews', async () => {
   expect(calls.some((c) => c.url.endsWith('/corrections/preview'))).toBe(false);
 });
 
+test('shows the contribution id', async () => {
+  renderDetail();
+  const label = await screen.findByText('Contribution id');
+  expect(label.parentElement).toHaveTextContent(/^Contribution idc1$/);
+});
+
 test('hides the correction action from someone who cannot correct contributions', async () => {
   me = { ...ME, can: { ...ME.can, correctContributions: false, correctReceipts: false } };
   renderDetail();
