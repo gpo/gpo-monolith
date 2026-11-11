@@ -14,6 +14,7 @@ import {
 import type { Contact } from '../generated/prisma/index.js';
 import type { SessionUser } from '../plugins/auth.js';
 import type { QomonSource } from '../qomon/settings.js';
+import { receiptDisplayStatus } from '../receipts/display-status.js';
 
 /**
  * Contributors (D13; EO evaluation rows 20 to 23): search, view, add, and
@@ -190,7 +191,15 @@ export async function contactRoutes(app: FastifyInstance, opts: { qomon: QomonSo
             goodsServices: true,
             receivedBy: true,
             leadershipContestantId: true,
-            allocations: { select: { receiptId: true, contributionId: true, amountCents: true, receipt: { select: { status: true } } } },
+            allocations: {
+              select: {
+                receiptId: true,
+                contributionId: true,
+                amountCents: true,
+                receipt: { select: { status: true, lost: true, receiptNumber: true, issueDate: true } },
+              },
+              orderBy: { receipt: { issueDate: 'asc' } },
+            },
           },
         }),
         app.prisma.changeLogEntry.findMany({
@@ -212,6 +221,12 @@ export async function contactRoutes(app: FastifyInstance, opts: { qomon: QomonSo
             { id: c.id, amountCents: c.amountCents, nonDeductibleCents },
             allocations.map((a) => ({ ...a, receiptStatus: a.receipt.status })),
           ),
+          // every receipt that has covered it, with its on-screen status (a lost one reads LOST)
+          receipts: allocations.map((a) => ({
+            id: a.receiptId,
+            receiptNumber: a.receipt.receiptNumber,
+            status: receiptDisplayStatus(a.receipt),
+          })),
         })),
         changeLog: changeLog.map((e) => ({
           id: e.id,

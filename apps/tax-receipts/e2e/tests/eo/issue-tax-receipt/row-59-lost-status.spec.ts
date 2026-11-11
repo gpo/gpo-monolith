@@ -6,7 +6,7 @@ import { changeField, openChangeEntry, signIn } from '../../helpers.js';
 import { addContributor, addPayment, createPeriod, issueSpace, newSuffix, signOut } from './recipe.js';
 
 test.describe('Issue Tax Receipt: corrections', () => {
-  test('Row 59: A receipt can be set to lost (Lost Lena read-only, plus a live lost reprint)', async ({
+  test('Row 59: A receipt can be set to LOST (Lost Lena read-only, plus a live lost reprint)', async ({
     page,
   }) => {
     const sfx = newSuffix();
@@ -23,8 +23,9 @@ test.describe('Issue Tax Receipt: corrections', () => {
     await expect(page).toHaveURL(/\/contributions\/[^/]+$/);
     const lenaReceiptRow = page.getByRole('row').filter({ hasText: /GPO-00\d{6}/ });
     await expect(lenaReceiptRow).toHaveCount(1);
-    // a lost receipt stays valid; this screen shows no separate 'lost' column
-    await expect(lenaReceiptRow).toContainText('ISSUED');
+    // a lost receipt stays valid and keeps its number; it reads LOST
+    await expect(lenaReceiptRow).toContainText('LOST');
+    await expect(lenaReceiptRow).not.toContainText('ISSUED');
     const lenaHref = (await lenaReceiptRow.getByRole('link', { name: 'View PDF' }).getAttribute('href'))!;
     const lenaMatch = lenaHref.match(/^\/api\/receipts\/([^/]+)\/pdf$/);
     expect(lenaMatch).not.toBeNull();
@@ -85,7 +86,7 @@ test.describe('Issue Tax Receipt: corrections', () => {
       dialog.getByRole('heading', { name: `Reprint as a lost-receipt copy: ${receiptNumber}` }),
     ).toBeVisible();
     await expect(dialog).toContainText('Reprints the receipt unaltered, stamped COPY');
-    await expect(dialog).toContainText('The receipt stays valid and is not cancelled.');
+    await expect(dialog).toContainText('It keeps its number, stays valid, and is not cancelled.');
     await expect(
       dialog.getByRole('textbox', { name: 'Received-by label (as it prints on the receipt)' }),
     ).toHaveValue('Green Party of Ontario');
@@ -96,15 +97,31 @@ test.describe('Issue Tax Receipt: corrections', () => {
     await dialog.getByRole('textbox', { name: 'Reason (required)' }).fill(`E2E lost ${sfx}`);
     await expect(confirm).toBeEnabled();
     await confirm.click();
-    await expect(dialog.getByText('Copy generated; the original is flagged lost.')).toBeVisible();
+    await expect(dialog.getByText('Copy generated; the receipt is now LOST.')).toBeVisible();
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(dialog).toBeHidden();
-    // the receipt row is still ISSUED and the Cancel / Reissue options remain available
-    await expect(page.getByRole('row').filter({ hasText: receiptNumber })).toContainText('ISSUED');
+    // the receipt row reads LOST with the same number, and the Cancel / Reissue options remain available
+    const contributionUrl = page.url();
+    const receiptRow = page.getByRole('row').filter({ hasText: receiptNumber });
+    await expect(receiptRow).toContainText('LOST');
+    await expect(receiptRow).not.toContainText('ISSUED');
     await correct.click();
     await expect(page.getByRole('menuitem', { name: 'Cancel this receipt' })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'Reissue this receipt' })).toBeVisible();
     await page.keyboard.press('Escape');
+
+    // the contributor's contributions list the receipt as LOST
+    await page.getByRole('link', { name: donor.name }).first().click();
+    await expect(page.getByRole('heading', { name: donor.name })).toBeVisible();
+    await expect(page.getByText(`${receiptNumber} LOST`)).toBeVisible();
+
+    // the contributions list's Receipt column reads 'lost'
+    await page.goto('/contributions');
+    await page.getByRole('textbox', { name: 'Donor (name or email)' }).fill(donor.name);
+    const listRow = page.getByRole('row').filter({ has: page.getByRole('link', { name: donor.name }) });
+    await expect(listRow).toHaveCount(1);
+    await expect(listRow.getByText('lost', { exact: true })).toBeVisible();
+    await page.goto(contributionUrl);
     await signOut(page);
 
     // 5. As sysadmin check the change log for the receipt id.

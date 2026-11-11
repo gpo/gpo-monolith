@@ -50,6 +50,8 @@ export interface ContributionListRow {
   sourceCode: string | null;
   nonDeductibleCents: number | null;
   hasReceipt: boolean;
+  /** an issued receipt on it is lost (EO status L; still valid) */
+  hasLostReceipt: boolean;
   openValidationCount: number;
   lastSyncedAt: string | null;
 }
@@ -152,7 +154,7 @@ export async function listContributions(
       contact: true,
       leadershipContestant: true,
       payment: { include: { qomonLink: true } },
-      allocations: { where: { receipt: { status: 'ISSUED' } }, select: { id: true } },
+      allocations: { where: { receipt: { status: 'ISSUED' } }, select: { id: true, receipt: { select: { lost: true } } } },
     },
     orderBy: [{ acceptedAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
@@ -198,6 +200,7 @@ export async function listContributions(
     sourceCode: r.periodId === null ? null : r.sourceCode,
     nonDeductibleCents: r.periodId === null ? null : r.nonDeductibleCents,
     hasReceipt: r.allocations.length > 0,
+    hasLostReceipt: r.allocations.some((a) => a.receipt.lost),
     openValidationCount: countBySubject.get(r.id) ?? 0,
     lastSyncedAt: r.payment.qomonLink?.lastSyncedAt ? r.payment.qomonLink.lastSyncedAt.toISOString() : null,
   }));

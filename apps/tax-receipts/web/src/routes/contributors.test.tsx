@@ -242,6 +242,7 @@ test('issues one receipt for two contributions that may share it (EO rows 43, 46
     receivedBy: 'GPO',
     leadershipContestantId: null,
     remainingCents: amountCents,
+    receipts: [] as Array<{ id: string; receiptNumber: string; status: string }>,
   });
   detail = {
     ...ADA,
@@ -271,4 +272,29 @@ test('issues one receipt for two contributions that may share it (EO rows 43, 46
     politicalEntityLabel: 'Green Party of Ontario',
   });
   expect(await screen.findByText(/Issued GPO-00402600/)).toBeTruthy();
+});
+
+test("lists each contribution's receipts with their status, a lost one reading LOST (EO row 59)", async () => {
+  detail = {
+    ...ADA,
+    contributions: [
+      {
+        id: 'k1',
+        amountCents: 4_500,
+        acceptedAt: '2026-03-01T12:00:00.000Z',
+        status: 'ACTIVE',
+        periodId: 67,
+        entityKind: 'PARTY',
+        ridingNumber: null,
+        goodsServices: false,
+        receivedBy: 'GPO',
+        leadershipContestantId: null,
+        remainingCents: 0,
+        receipts: [{ id: 'r1', receiptNumber: 'GPO-00402601', status: 'LOST' }],
+      },
+    ],
+  };
+  renderAt('/contributors/ct1');
+  expect(await screen.findByRole('columnheader', { name: 'Receipts' })).toBeTruthy();
+  expect(screen.getByText('GPO-00402601 LOST')).toBeTruthy();
 });

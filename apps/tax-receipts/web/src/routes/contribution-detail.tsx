@@ -28,6 +28,7 @@ import { AGENCY_HELP, describeRecipient, leadershipLabelNote } from '../entity-k
 import { PageHeader } from '../components/PageHeader.js';
 import { paymentMethodLabel, paymentReferenceLabel } from '../components/payment-reference.js';
 import { CancellationNoticeActions, ReceiptActions } from '../components/receipt-actions.js';
+import { receiptStatusLabel } from '../receipt-status.js';
 
 /**
  * Contribution detail (ticket 1.5, screens.md 3). The Payment and
@@ -477,7 +478,7 @@ export function ContributionDetailPage({ id }: { id: string }) {
                 {detail.allocations.map((a) => (
                   <Table.Tr key={a.id}>
                     <Table.Td>{a.receipt.receiptNumber}</Table.Td>
-                    <Table.Td>{a.receipt.status}</Table.Td>
+                    <Table.Td>{receiptStatusLabel(a.receipt)}</Table.Td>
                     <Table.Td>{money(a.amountCents)}</Table.Td>
                     <Table.Td>{dateOnly(a.receipt.issueDate)}</Table.Td>
                     <Table.Td>

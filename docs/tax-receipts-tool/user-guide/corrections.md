@@ -89,7 +89,7 @@ designates, and receipt administrators hold):
 |---|---|---|
 | **Cancel this receipt** | Cancels it and stores a watermarked cancellation notice. The amount can be receipted again. If it was RTD-reported, a DC-1A is queued. | Yes |
 | **Reissue this receipt** | Cancels it and issues a replacement from current data: the contributor's name and address as they are now on file (for example, after an address fix or a name change), marked as cancelling and replacing the original. The cancelled original keeps the name and address it was issued with. | Yes |
-| **Reprint as a lost-receipt copy** | Reprints the receipt unchanged, stamped COPY, and flags the original lost. The receipt stays valid. | No |
+| **Reprint as a lost-receipt copy** | Reprints the receipt unchanged, marked COPY and Duplicate Copy on all three portions, and changes its status from ISSUED to LOST. It keeps its number and stays valid, can still be cancelled or reissued, and files as `L` in the ALL report. | No |
 | **Fix the spelling of the donor name** | Regenerates the receipt with a corrected spelling. Only a small spelling fix of the same person qualifies (a few characters); anything bigger is a reissue. | No |
 
 Cancelling is allowed while the kill switch is engaged (so mistakes can

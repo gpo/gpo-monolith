@@ -99,9 +99,10 @@ limitations](limitations.md)).
 **Receipt.** An official tax receipt with a number from the GPO sequence
 (`GPO-` followed by digits), an issue date, the donor's name and address as
 they were at issuance, and a PDF in three copies (office, donor, and
-political entity). A receipt is *issued*, *cancelled*, or *void*, and can
-also be flagged *lost*. Once issued, a receipt's facts never change; a
-correction cancels it and issues a replacement.
+political entity). A receipt is *issued*, *lost*, *cancelled*, or *void*.
+A *lost* receipt is one the donor lost: it keeps its number and stays
+valid, and the ALL report files it as `L`. Once issued, a receipt's facts
+never change; a correction cancels it and issues a replacement.
 
 **Allocation.** The link between a receipt and the contribution(s) it
 covers, with an amount. A receipt's total is always the sum of its

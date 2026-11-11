@@ -92,6 +92,8 @@ export interface ContributionDetail {
       id: string;
       receiptNumber: string;
       status: string;
+      /** EO status L: still ISSUED and valid, shown as LOST (`receipts/display-status.ts`) */
+      lost: boolean;
       issueDate: string;
       /** a cancelled receipt's notice (EO row 62); null when there is none */
       cancellationNotice: {
@@ -275,6 +277,7 @@ export async function getContributionDetail(
         id: a.receipt.id,
         receiptNumber: a.receipt.receiptNumber,
         status: a.receipt.status,
+        lost: a.receipt.lost,
         issueDate: a.receipt.issueDate.toISOString(),
         cancellationNotice:
           a.receipt.eoForms.length === 0

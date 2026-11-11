@@ -698,9 +698,9 @@ const CASES = [
 { id: 'r59', sec: 'issue', rows: [59], title: 'Marking a receipt lost', mins: '3 min', who: ['cfo'],
   ask: 'A receipt can be set to lost.',
   steps: [
-    { d: 'Fixture: open [[Lost Lena]]\'s contribution.', s: ['Receipt ISSUED. A lost receipt stays valid.'] },
-    { d: 'Live: [[Contributors]], open {{Lost Liam}}, open his contribution. [[Correct receipt GPO-...]], [[Reprint as a lost-receipt copy]].', s: ['Explains it reprints unaltered, stamped COPY; the receipt stays valid. Confirm is disabled until a reason is typed.'] },
-    { d: 'Reason {{Donor lost the original}}, [[Confirm]].', s: ['"Copy generated; the original is flagged lost." Still ISSUED.'] },
+    { d: 'Fixture: open [[Lost Lena]]\'s contribution.', s: ['Receipt LOST, with its original number. A lost receipt stays valid.'] },
+    { d: 'Live: [[Contributors]], open {{Lost Liam}}, open his contribution. [[Correct receipt GPO-...]], [[Reprint as a lost-receipt copy]].', s: ['Explains it reprints unaltered, stamped COPY on every portion; the receipt keeps its number and stays valid. Confirm is disabled until a reason is typed.'] },
+    { d: 'Reason {{Donor lost the original}}, [[Confirm]].', s: ['"Copy generated; the receipt is now LOST." The receipt row reads LOST, same number.', 'Lost Liam\'s contributor page lists the receipt as LOST; the Contributions list shows "lost".'] },
     { opt: true, d: '[[Change log]] for the receipt id.', s: ['Before {"lost":false}, After {"lost":true}.'] },
   ],
 },
@@ -711,7 +711,7 @@ const CASES = [
   steps: [
     { d: 'Copy the receipt id from the [[View PDF]] link (between /receipts/ and /pdf).' },
     { d: 'New tab: <</api/receipts/>> + id + {{/reprints}}.', s: ['A list with kind LOST_COPY and its "id".'] },
-    { d: 'New tab: <</api/receipts/>> + receipt id + {{/reprints/}} + reprint id + {{/pdf}}.', s: ['The receipt with a COPY stamp and the same receipt number.'] },
+    { d: 'New tab: <</api/receipts/>> + receipt id + {{/reprints/}} + reprint id + {{/pdf}}.', s: ['The receipt with the same receipt number, stamped COPY and Duplicate Copy on all three portions, including the top one.'] },
   ],
 },
 { id: 'r61', sec: 'issue', rows: [61], title: 'Cancelling a receipt', mins: '3 min', who: ['cfo'],

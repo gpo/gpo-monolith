@@ -150,4 +150,12 @@ describe('renderReceiptPdf text extraction (ticket 3.4, F4)', () => {
     const text = await extractText(await renderReceiptPdf({ ...BASE_DATA, isCopy: true }));
     expect(text.split('COPY').length - 1).toBe(3);
   });
+
+  it('marks the top portion of a lost-receipt reprint "Duplicate Copy" like the two below (EO evaluation row 60)', async () => {
+    // the template prints the diagonal mark on portions 2 and 3 only
+    const duplicateMarks = (text: string) => (text.match(/Duplicate\s*Copy/g) ?? []).length;
+    const original = await extractText(await renderReceiptPdf(BASE_DATA));
+    const copy = await extractText(await renderReceiptPdf({ ...BASE_DATA, isCopy: true }));
+    expect(duplicateMarks(copy)).toBe(duplicateMarks(original) + 1);
+  });
 });
