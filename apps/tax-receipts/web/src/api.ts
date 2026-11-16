@@ -1057,7 +1057,26 @@ export interface SentRtdFiling {
   submittedAt: string;
 }
 
+export interface SweepRun {
+  id: string;
+  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'SUCCEEDED_WITH_WARNINGS' | 'FAILED';
+  target: { kind: 'party' };
+  mode: 'incremental' | 'full';
+  triggerSource: 'MANUAL';
+  requestedByUserId: string;
+  createdAt: string;
+  queuedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  result: SweepResult | null;
+  error: string | null;
+}
+
 export const api = {
+  queuePartySweep: () => request<SweepRun>('/admin/sweeps', {
+    method: 'POST', body: JSON.stringify({ target: { kind: 'party' }, mode: 'full' }),
+  }),
+  sweepRun: (id: string) => request<SweepRun>(`/admin/sweeps/${encodeURIComponent(id)}`),
   health: () => request<Health>('/health'),
   me: () => request<Me>('/auth/me'),
   login: (email: string, password: string) =>

@@ -1,3 +1,5 @@
+import type { PgBoss } from 'pg-boss';
+import { sweepRoutes } from './routes/sweeps.js';
 import type { QomonApi } from '@gpo/qomon-client';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import {
@@ -71,6 +73,7 @@ import { validationRoutes } from './routes/validation.js';
 import { workItemRoutes } from './routes/work-items.js';
 
 export interface BuildAppOptions {
+  sweepQueue?: PgBoss;
   prisma: PrismaClient;
   /** whether the app owns the client's lifecycle (disconnect on close). */
   ownsPrisma?: boolean;
@@ -218,6 +221,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   const qomon: QomonSource = fixedQomon
     ? () => Promise.resolve(fixedQomon)
     : qomonFromSettings(opts.prisma, opts.buildQomon);
+  await app.register(sweepRoutes, { queue: opts.sweepQueue });
   await app.register(syncRoutes, {
     qomon: fixedQomon ? qomon : undefined,
     buildQomon: opts.buildQomon,

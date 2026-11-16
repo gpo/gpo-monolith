@@ -36,7 +36,7 @@ The one-command way to run the tool locally, from the repo root:
 
 ```bash
 pnpm install
-pnpm dev    # dev Postgres up (waits for healthy), migrate:deploy, builds the
+pnpm dev    # dev Postgres up, Prisma + queue migrations, builds the
             # packages, then api (:3000) and web (:5173) in watch mode
 ```
 
@@ -293,3 +293,49 @@ without a Fastify request, session, or process lifecycle dependency.
 targets. `SweepExecutionError` supplies a safe message and retryability flag
 without retaining the original error or response body. Contact warnings redact
 the resolved API key. Client factories remain injectable for offline tests.
+
+## Asynchronous party sweeps
+
+The first asynchronous slice queues manual party full sweeps through
+`POST /admin/sweeps` (202), with durable status at `GET /admin/sweeps/:id`.
+Both endpoints require the existing sysadmin capability. Omitted mode defaults
+to incremental; the Admin button explicitly requests full mode. Disabled or
+missing-key party targets return 409 before creating work.
+
+`sweep_run` stores application history indefinitely, including the requesting
+user, lifecycle timestamps, result, and sanitized failure. A Prisma transaction
+creates the run and inserts its pg-boss job through the same transaction
+connection; neither remains if enqueueing fails. Job data contains only the
+run ID. Execution resolves current Qomon credentials through
+`executeSweepTarget`.
+
+pg-boss 12.38 owns the separate `pgboss` namespace. Its generated installation
+SQL and sweep queue creation are committed in the Prisma migration history,
+so `migrate:deploy` applies all database setup in one controlled step. The
+migration adopts an existing version-46 installation without deleting jobs and
+rejects incompatible versions. Future pg-boss upgrades need a new generated
+SQL migration; the library version is pinned. API and worker use
+`migrate: false` and verify schema compatibility and queue existence on startup.
+Only the worker registers a consumer. A singleton queue allows one active job
+globally; the initial worker has one consumer and one replica. Queue maintenance
+runs in the worker, with scheduling disabled.
+
+The existing API image can start either `dist/server.js` or
+`dist/sweeps/worker.js`. The worker needs only `DATABASE_URL`; it owns no HTTP
+server, session, or email dispatcher. SIGINT and SIGTERM stop consumption and
+allow 30 seconds for active work to finish. A handled sweep failure persists
+FAILED, fails the job, and stops the worker with a non-zero exit code.
+
+Finished pg-boss jobs are retained indefinitely (`deleteAfterSeconds: 0`),
+as is application run history. Unprocessed queued jobs expire after a fixed
+30 days. There is no job-retention environment setting.
+This slice does not yet implement retry/recovery, scheduling, cancellation,
+history browsing, riding queue targets, or heartbeat-based abandonment.
+An abrupt worker loss can leave a RUNNING record requiring investigation;
+automatic recovery is follow-up work. The synchronous trigger and Dev Tools
+remain available temporarily. Operators must avoid overlapping synchronous
+and queued sweeps.
+
+The queue integration follows the upstream
+[job transaction interface](https://pgboss.io/api/jobs) and
+[runtime schema checks](https://pgboss.io/api/ops), checked 2026-11-01.

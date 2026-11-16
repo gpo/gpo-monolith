@@ -29,6 +29,7 @@ import { IMPLEMENTED_RULE_REFS } from '@gpo/tax-receipts-core/validation/rules.j
 import { api, type AdminUserRow, type Me, type RidingImportRow, type RidingRow } from '../api.js';
 import { EmailsSection } from './admin-emails.js';
 import { LeadershipContestantsSection } from './admin-leadership.js';
+import { SweepSection } from './admin-sweep.js';
 import { QomonSettingsSection } from './admin-qomon.js';
 import { ReceiptSettingsSection } from './admin-receipts.js';
 import { RolesSection } from './admin-roles.js';
@@ -77,6 +78,7 @@ export const ADMIN_SECTIONS = [
     allowed: settings,
   },
   { slug: 'rtd-holidays', label: 'RTD holidays', component: () => <HolidaysSection />, devOnly: false, allowed: settings },
+  { slug: 'sweep', label: 'Sweep', component: () => <SweepSection />, devOnly: false, allowed: sysadmin },
   { slug: 'qomon', label: 'Qomon', component: () => <QomonSettingsSection />, devOnly: false, allowed: sysadmin },
   { slug: 'ridings', label: 'Ridings', component: () => <RidingsSection />, devOnly: false, allowed: settings },
   {
