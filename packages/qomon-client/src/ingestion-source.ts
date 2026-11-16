@@ -35,7 +35,14 @@ export interface ChangeBatch {
 
 export interface ChangeFeedSource {
   readonly kind: string;
-  pull(cursor: ChangeCursor | null, opts?: { limit?: number }): Promise<ChangeBatch>;
+  pages(
+    cursor: ChangeCursor | null,
+    opts?: { limit?: number },
+  ): AsyncIterable<ChangeBatch>;
+  pull(
+    cursor: ChangeCursor | null,
+    opts?: { limit?: number },
+  ): Promise<ChangeBatch>;
 }
 
 function bundleChangedAt(b: QomonBundle): string {
@@ -87,5 +94,37 @@ export class QomonPollChangeFeed implements ChangeFeedSource {
       cursor: { since: newest },
       hasMore,
     };
+  }
+
+  /** Stream bounded transaction batches through to the original cursor. */
+  async *pages(
+    cursor: ChangeCursor | null,
+    opts: { limit?: number } = {},
+  ): AsyncGenerator<ChangeBatch> {
+    const since = cursor?.since ? Date.parse(cursor.since) : null;
+    const limit = opts.limit ?? 2000;
+    if (!Number.isSafeInteger(limit) || limit < 1)
+      throw new Error('Invalid page size');
+    let changes: ChangedTransaction[] = [];
+    let newest = cursor?.since ?? null;
+    for await (const bundle of paginateBundles(this.api, {
+      pageSize: this.opts.pageSize,
+    })) {
+      const changedAt = bundleChangedAt(bundle);
+      const changedMs = Date.parse(changedAt);
+      if (!Number.isFinite(changedMs))
+        throw new Error('Invalid Qomon change timestamp');
+      if (since !== null && changedMs <= since) break;
+      for (const transaction of bundle.transactions) {
+        if (changes.length === limit) {
+          yield { changes, cursor: { since: newest }, hasMore: true };
+          changes = [];
+        }
+        if (newest === null || changedMs > Date.parse(newest))
+          newest = changedAt;
+        changes.push({ bundle, transaction, changedAt });
+      }
+    }
+    yield { changes, cursor: { since: newest }, hasMore: false };
   }
 }

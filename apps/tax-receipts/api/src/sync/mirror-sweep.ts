@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   computeContributionSyncHash,
   deriveIntakeDefaults,
@@ -547,4 +548,150 @@ export async function loadPeriods(prisma: PrismaClient): Promise<PeriodRow[]> {
     startsAt: p.startsAt,
     endsAt: p.endsAt,
   }));
+}
+
+
+/** Options for a complete sweep streamed through bounded ingestion pages. */
+export interface PagedMirrorSweepOptions {
+  mode?: 'incremental' | 'full';
+  /** Transactions per ingestion page (default 2000). */
+  limit?: number;
+  /** Fail rather than accept a partial scan (default 1,000,000). */
+  emergencyCeiling?: number;
+}
+
+/**
+ * Drain the source before committing its cursor or detecting deletions.
+ * Unlike runMirrorSweep, limit controls page size rather than total scan size.
+ */
+export async function runPagedMirrorSweep(
+  deps: MirrorSweepDeps,
+  opts: PagedMirrorSweepOptions = {},
+): Promise<MirrorSweepResult> {
+  const mode = opts.mode ?? 'incremental';
+  const { prisma, feed, qomon } = deps;
+
+  const cursor = mode === 'full' ? null : await loadCursor(prisma, feed.kind);
+  const limit = opts.limit ?? 2000;
+  const ceiling = opts.emergencyCeiling ?? 1_000_000;
+  if (
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    !Number.isSafeInteger(ceiling) ||
+    ceiling < 1
+  )
+    throw new Error('Invalid sweep bounds');
+  const observedRun = randomUUID();
+  let pulled = 0;
+  let terminalCursor: ChangeCursor | undefined;
+
+  const periods = await loadPeriods(prisma);
+  const statuses = await qomon.listTransactionStatuses();
+  const statusKindById = new Map(statuses.map((s) => [s.id, s.kind]));
+
+  let created = 0;
+  let backfilled = 0;
+  let changedInQomon = 0;
+  let unchanged = 0;
+  const contactFetchFailures: ContactFetchFailure[] = [];
+
+  for await (const batch of feed.pages(cursor, { limit })) {
+    if (batch.changes.length > limit)
+      throw new Error('Change feed exceeded page size');
+    pulled += batch.changes.length;
+    if (pulled > ceiling)
+      throw new Error('Qomon sweep emergency ceiling exceeded');
+    for (const change of batch.changes) {
+      try {
+        const outcome = await ingestChange(
+          prisma,
+          qomon,
+          periods,
+          statusKindById,
+          change,
+        );
+        // Mark this transaction as seen so a completed full scan can detect
+        // missing transactions without keeping every source ID in memory.
+        await prisma.qomonTransactionLink.update({
+          where: { qomonTransactionId: BigInt(change.transaction.id) },
+          data: { feedKind: feed.kind, observedRun },
+        });
+        if (outcome === 'created') created += 1;
+        else if (outcome === 'backfilled') backfilled += 1;
+        else if (outcome === 'changed-in-qomon') changedInQomon += 1;
+        else unchanged += 1;
+      } catch (err) {
+        // A dangling contact_id (Qomon 404s the contact a transaction points
+        // at) shouldn't take the whole batch down with it — every other
+        // change in this pull is still good. Skip and report; see
+        // ContactFetchFailure above for how this transaction gets retried.
+        if (err instanceof QomonNotFoundError) {
+          contactFetchFailures.push({
+            qomonTransactionId: String(change.transaction.id),
+            qomonContactId: change.transaction.contact_id,
+            message: err.message,
+          });
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (!batch.hasMore) {
+      terminalCursor = batch.cursor;
+      break;
+    }
+  }
+  if (!terminalCursor)
+    throw new Error('Qomon feed ended without a drained terminal page');
+  let syncIncidents = 0;
+  if (mode === 'full') {
+    syncIncidents = await detectPagedSweepDeletions(prisma, feed.kind, observedRun);
+  }
+  await saveCursor(prisma, feed.kind, terminalCursor);
+
+  return {
+    mode,
+    pulled,
+    created,
+    backfilled,
+    changedInQomon,
+    unchanged,
+    syncIncidents,
+    cursor: terminalCursor,
+    hasMore: false,
+    contactFetchFailures,
+  };
+}
+
+async function detectPagedSweepDeletions(
+  prisma: PrismaClient,
+  feedKind: string,
+  observedRun: string,
+): Promise<number> {
+  let count = 0;
+  for (;;) {
+    const missing = await prisma.qomonTransactionLink.findMany({
+      take: 500,
+      where: {
+        deletedInQomonAt: null,
+        feedKind,
+        OR: [{ observedRun: null }, { observedRun: { not: observedRun } }],
+      },
+      select: {
+        id: true,
+        qomonTransactionId: true,
+        payment: { select: { id: true, contactId: true } },
+      },
+    });
+    if (missing.length === 0) return count;
+
+    for (const l of missing) {
+      await prisma.qomonTransactionLink.update({
+        where: { id: l.id },
+        data: { deletedInQomonAt: new Date() },
+      });
+      await openSyncIncidentWorkItem(prisma, l.payment);
+    }
+    count += missing.length;
+  }
 }
