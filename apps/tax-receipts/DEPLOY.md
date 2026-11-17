@@ -30,11 +30,28 @@ docker build -f apps/tax-receipts/Dockerfile --target api-tools -t tax-receipts-
 docker build -f apps/tax-receipts/Dockerfile --target web       -t tax-receipts-web .
 ```
 
+Add `--build-arg GIT_SHA=$(git rev-parse --short HEAD)` to each build. It sets
+the image's `org.opencontainers.image.revision` label, and both containers
+report it at run time; without it they report `unknown`.
+
 | Target | Runs | Port | Notes |
 |---|---|---|---|
-| `api` | `node dist/server.js` | 3000 | Production deps only, runs as `node`. Health: `GET /health` (503 when the database is down). |
+| `api` | `node dist/server.js` | 3000 | Production deps only, runs as `node`. Health: `GET /health` (503 when the database is down). Build commit: `GET /version`. |
 | `api-tools` | `prisma migrate deploy` | none | One-off job. Needs only `DATABASE_URL`. Exits 0 when the schema is current. |
-| `web` | nginx | 8080 | Health: `GET /healthz`. Set `API_UPSTREAM` to the api's internal URL (default `http://api:3000`). |
+| `web` | nginx | 8080 | Health: `GET /healthz`. Build commit: `GET /version.json`. Set `API_UPSTREAM` to the api's internal URL (default `http://api:3000`). |
+
+To check which commit a deployment runs, from the outside:
+
+```bash
+curl https://<host>/api/version   # api
+curl https://<host>/version.json  # web (the SPA)
+```
+
+And for an image before deploying it:
+
+```bash
+docker buildx imagetools inspect <image> --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}'
+```
 
 ## Rollout order
 
