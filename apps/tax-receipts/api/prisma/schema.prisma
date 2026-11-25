@@ -847,6 +847,7 @@ model User {
   sessions             Session[]
   paymentsCreated      Payment[]
   contributionsCreated Contribution[]
+  sweepRuns SweepRun[]
 
   @@index([roleKey])
   @@map("app_user")
@@ -1109,4 +1110,32 @@ model PrintBatchItem {
   @@unique([printBatchId, receiptId])
   @@index([receiptId])
   @@map("print_batch_item")
+}
+
+
+enum SweepRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  SUCCEEDED_WITH_WARNINGS
+  FAILED
+}
+
+model SweepRun {
+  id                String         @id @default(uuid()) @db.Uuid
+  status            SweepRunStatus @default(QUEUED)
+  mode              String         @default("incremental")
+  target            String         @default("party")
+  triggerSource     String         @default("MANUAL")
+  requestedByUserId  String
+  requestedBy       User           @relation(fields: [requestedByUserId], references: [id])
+  createdAt         DateTime       @default(now())
+  queuedAt          DateTime       @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  result            Json?
+  error             String?
+
+  @@index([createdAt, id])
+  @@map("sweep_run")
 }

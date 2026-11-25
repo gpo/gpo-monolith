@@ -17,7 +17,7 @@ and is recorded in the [change log](change-log.md).
 | Periods, Contribution limits, RTD holidays, Ridings, Leadership contestants, Receipts, Emails | *Manage annual settings* |
 | Users, Roles | *Manage users and roles* |
 | Kill switch | *Operate the issuance kill switch* |
-| Qomon | System administrator only |
+| Qomon, Sweep | System administrator only |
 | Validation rules (reading only) | *Manage annual settings*, *Edit contribution details*, or *Correct contributions* |
 | Change log (reading only) | *Read all records*, *Manage annual settings*, or *Manage users and roles* |
 
@@ -133,3 +133,26 @@ See [Change log](change-log.md).
 
 Shown only in development builds. Includes a button to run the Qomon import
 sweep by hand.
+
+
+## Sweep
+
+**Admin > Sweep** lets a system administrator queue a party full sweep.
+Select **Queue party full sweep** to scan all Qomon transactions in the party space.
+Qomon must be enabled with a key under Admin > Qomon first.
+
+The page shows the selected run's target, mode, and status: Queued, Running,
+Succeeded, Succeeded with warnings, or Failed. A completed run shows its
+import summary and any contact warnings. A separate worker must be running
+for queued work to start.
+
+You can leave the page while work runs. Its URL includes the selected run,
+so reopening that URL or refreshing the browser reloads its status. Active
+status updates every 60 seconds and stops updating after completion.
+There is no separate Refresh button.
+
+The button explicitly queues a full party sweep. API requests default to
+incremental when no mode is supplied. Riding sweeps still use the existing
+synchronous controls. Scheduling, retries,
+cancellation, and a browsable run history are coming in later slices.
+Avoid starting a synchronous sweep while queued work is running.
