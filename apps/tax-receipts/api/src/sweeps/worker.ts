@@ -1,8 +1,9 @@
 import { PrismaClient } from '../generated/prisma/index.js';
 import { startSweepConsumer } from './consumer.js';
-import { openSweepQueue, queueEnvironment } from './queue.js';
+import { openSweepQueue, queueEnvironment, SWEEP_QUEUE } from './queue.js';
 
 async function main() {
+  console.log('Sweep worker starting', { queue: SWEEP_QUEUE, pid: process.pid });
   // Deliberately independent of the HTTP environment: no session or email settings.
   const env = queueEnvironment();
   const prisma = new PrismaClient();
@@ -10,11 +11,14 @@ async function main() {
   let stopping: Promise<void> | undefined;
   const stop = () =>
     (stopping ??= (async () => {
+      console.log('Sweep worker stopping');
       await queue.stop({ graceful: true, timeout: 30_000 });
       await prisma.$disconnect();
+      console.log('Sweep worker stopped');
     })());
   const signal = () => {
     void stop().catch(() => {
+      console.error('Sweep worker shutdown failed');
       process.exitCode = 1;
     });
   };
@@ -23,7 +27,6 @@ async function main() {
   try {
     await startSweepConsumer(queue, { prisma }, () => {
       process.exitCode = 1;
-      console.error('Qomon sweep execution failed');
       // Let pg-boss persist its failure before closing its pool.
       setImmediate(signal);
     });

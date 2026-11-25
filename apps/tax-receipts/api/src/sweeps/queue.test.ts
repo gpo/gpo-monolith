@@ -48,6 +48,7 @@ beforeEach(async () => {
   cookie = { [login.cookies[0]!.name]: login.cookies[0]!.value };
 });
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const child of children) {
     if (child.exitCode === null && child.signalCode === null) {
       const closed = once(child, 'close');
@@ -60,89 +61,109 @@ afterEach(async () => {
   await queue?.stop();
 });
 
-const create = () =>
+const create = (mode: 'incremental' | 'full' = 'incremental') =>
   app.inject({
     method: 'POST',
     url: '/admin/sweeps',
     cookies: cookie,
-    payload: { target: { kind: 'party' }, mode: 'full' },
+    payload: { target: { kind: 'party' }, mode },
   });
 
-it('queues a full scan that ignores the incremental cursor and exposes its durable result', async () => {
-  await prisma.syncCursor.create({
-    data: { feedKind: 'qomon-poll', since: '2099-01-01T00:00:00.000Z' },
-  });
-  qomon.seedContact({ id: 501, firstname: 'Async' });
-  qomon.seedBundle({
-    transactions: [
-      { contact_id: 501, amount: 100, date: '2026-03-01', status_id: 1 },
-    ],
-  });
-  const response = await create();
-  expect(response.statusCode).toBe(202);
-  const run = response.json();
-  expect(run).toMatchObject({
-    status: 'QUEUED',
-    target: { kind: 'party' },
-    mode: 'full',
-    triggerSource: 'MANUAL',
-  });
-  expect(await prisma.payment.count()).toBe(0);
-  expect(JSON.stringify(run)).not.toContain('private-key');
-  const [job] = await queue.findJobs<{ runId: string }>(SWEEP_QUEUE);
-  expect(job!.data).toEqual({ runId: run.id });
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const statuses = qomon.listTransactionStatuses.bind(qomon);
-  vi.spyOn(qomon, 'listTransactionStatuses').mockImplementation(async () => {
-    await gate;
-    return statuses();
-  });
-  try {
-    await startSweepConsumer(queue, { prisma, buildQomon: () => qomon });
+it.each(['incremental', 'full'] as const)(
+  'queues a %s scan and exposes its durable lifecycle and result',
+  async (mode) => {
+    await prisma.syncCursor.create({
+      data: { feedKind: 'qomon-poll', since: '2026-03-01T00:00:00.000Z' },
+    });
+    qomon.seedContact({ id: 501, firstname: 'Async' });
+    qomon.seedBundle({
+      CreatedAt: '2026-03-02T00:00:00.000Z',
+      UpdatedAt: '2026-03-02T00:00:00.000Z',
+      transactions: [
+        { contact_id: 501, amount: 100, date: '2026-03-01', status_id: 1 },
+      ],
+    });
+    qomon.seedBundle({
+      CreatedAt: '2026-02-01T00:00:00.000Z',
+      UpdatedAt: '2026-02-01T00:00:00.000Z',
+      transactions: [
+        { contact_id: 501, amount: 200, date: '2026-02-01', status_id: 1 },
+      ],
+    });
+    const response = await create(mode);
+    expect(response.statusCode).toBe(202);
+    const run = response.json();
+    expect(run).toMatchObject({
+      status: 'QUEUED',
+      target: { kind: 'party' },
+      mode,
+      triggerSource: 'MANUAL',
+    });
+    expect(await prisma.payment.count()).toBe(0);
+    expect(qomon.callCount).toBe(0);
+    const queued = await app.inject({
+      method: 'GET',
+      url: `/admin/sweeps/${run.id}`,
+      cookies: cookie,
+    });
+    expect(queued.json()).toMatchObject({ id: run.id, status: 'QUEUED', mode });
+    expect(JSON.stringify(run)).not.toContain('private-key');
+    const [job] = await queue.findJobs<{ runId: string }>(SWEEP_QUEUE);
+    expect(job!.data).toEqual({ runId: run.id });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const statuses = qomon.listTransactionStatuses.bind(qomon);
+    vi.spyOn(qomon, 'listTransactionStatuses').mockImplementation(async () => {
+      await gate;
+      return statuses();
+    });
+    try {
+      await startSweepConsumer(queue, { prisma, buildQomon: () => qomon });
+      await expect
+        .poll(
+          async () =>
+            (await prisma.sweepRun.findUniqueOrThrow({ where: { id: run.id } }))
+              .status,
+        )
+        .toBe('RUNNING');
+      const running = await app.inject({
+        method: 'GET',
+        url: `/admin/sweeps/${run.id}`,
+        cookies: cookie,
+      });
+      expect(running.json()).toMatchObject({
+        status: 'RUNNING',
+        startedAt: expect.any(String),
+      });
+    } finally {
+      release();
+    }
     await expect
       .poll(
         async () =>
           (await prisma.sweepRun.findUniqueOrThrow({ where: { id: run.id } }))
             .status,
       )
-      .toBe('RUNNING');
-    const running = await app.inject({
+      .toBe('SUCCEEDED');
+    await expect
+      .poll(async () => (await queue.findJobs(SWEEP_QUEUE))[0]?.state)
+      .toBe('completed');
+    const detail = await app.inject({
       method: 'GET',
       url: `/admin/sweeps/${run.id}`,
       cookies: cookie,
     });
-    expect(running.json()).toMatchObject({
-      status: 'RUNNING',
-      startedAt: expect.any(String),
+    expect(detail.json()).toMatchObject({
+      id: run.id,
+      status: 'SUCCEEDED',
+      completedAt: expect.any(String),
+      result: { mode, created: mode === 'full' ? 2 : 1, hasMore: false },
     });
-  } finally {
-    release();
-  }
-  await expect
-    .poll(
-      async () =>
-        (await prisma.sweepRun.findUniqueOrThrow({ where: { id: run.id } }))
-          .status,
-    )
-    .toBe('SUCCEEDED');
-  await expect
-    .poll(async () => (await queue.findJobs(SWEEP_QUEUE))[0]?.state)
-    .toBe('completed');
-  const detail = await app.inject({
-    method: 'GET',
-    url: `/admin/sweeps/${run.id}`,
-    cookies: cookie,
-  });
-  expect(detail.json()).toMatchObject({
-    id: run.id,
-    status: 'SUCCEEDED',
-    result: { mode: 'full', created: 1, hasMore: false },
-  });
-  expect(await prisma.payment.count()).toBe(1);
-});
+    expect(await prisma.payment.count()).toBe(mode === 'full' ? 2 : 1);
+  },
+);
 
 it('rejects unavailable targets and unauthorized callers without enqueueing', async () => {
   expect(
@@ -238,25 +259,42 @@ it('checks schema compatibility without running runtime migrations', async () =>
   }
 });
 
-it('retains finished jobs indefinitely, independently of application history', async () => {
-  const response = await create();
-  const [job] = await queue.findJobs(SWEEP_QUEUE);
-  expect(job!.deleteAfterSeconds).toBe(0);
-  expect((await queue.getQueue(SWEEP_QUEUE))?.deleteAfterSeconds).toBe(0);
-  // Make the job old enough that a finite retention policy would remove it.
-  const [claimed] = await queue.fetch(SWEEP_QUEUE);
-  await queue.complete(SWEEP_QUEUE, claimed!.id);
-  await prisma.$executeRaw`UPDATE pgboss.job SET completed_on = now() - interval '40 days' WHERE id = ${claimed!.id}::uuid`;
-  await queue.supervise(SWEEP_QUEUE);
-  expect((await queue.findJobs(SWEEP_QUEUE))[0]?.id).toBe(job!.id);
-  await queue.deleteAllJobs(SWEEP_QUEUE);
-  const detail = await app.inject({
-    method: 'GET',
-    url: `/admin/sweeps/${response.json().id}`,
-    cookies: cookie,
-  });
-  expect(detail.statusCode).toBe(200);
-});
+it.each([undefined, '7'])(
+  'cleans up finished jobs using retention %s without deleting application history',
+  async (days) => {
+    if (days === undefined) vi.stubEnv('SWEEP_JOB_RETENTION_DAYS', undefined);
+    else vi.stubEnv('SWEEP_JOB_RETENTION_DAYS', days);
+    const response = await create();
+    const [job] = await queue.findJobs(SWEEP_QUEUE);
+    const retentionDays = Number(days ?? 30);
+    expect(job!.deleteAfterSeconds).toBe(retentionDays * 86400);
+    const [claimed] = await queue.fetch(SWEEP_QUEUE);
+    await processSweepRun(
+      { prisma, buildQomon: () => qomon },
+      response.json().id,
+    );
+    await queue.complete(SWEEP_QUEUE, claimed!.id);
+    await prisma.$executeRaw`UPDATE pgboss.job SET completed_on = now() - (${retentionDays - 1} * interval '1 day') WHERE id = ${claimed!.id}::uuid`;
+    // Time travel also needs to make pg-boss's throttled maintenance pass due.
+    await prisma.$executeRaw`UPDATE pgboss.queue SET maintain_on = NULL WHERE name = ${SWEEP_QUEUE}`;
+    await queue.supervise(SWEEP_QUEUE);
+    expect((await queue.findJobs(SWEEP_QUEUE))[0]?.id).toBe(job!.id);
+    await prisma.$executeRaw`UPDATE pgboss.job SET completed_on = now() - (${retentionDays + 1} * interval '1 day') WHERE id = ${claimed!.id}::uuid`;
+    await prisma.$executeRaw`UPDATE pgboss.queue SET maintain_on = NULL WHERE name = ${SWEEP_QUEUE}`;
+    await queue.supervise(SWEEP_QUEUE);
+    expect(await queue.findJobs(SWEEP_QUEUE)).toEqual([]);
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/admin/sweeps/${response.json().id}`,
+      cookies: cookie,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({
+      status: 'SUCCEEDED',
+      result: { mode: 'incremental' },
+    });
+  },
+);
 
 function workerProcess() {
   const child = spawn(

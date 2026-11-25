@@ -4,11 +4,18 @@ import { z } from 'zod';
 export const SWEEP_QUEUE = 'qomon-sweep';
 export const QueueEnvSchema = z.object({
   DATABASE_URL: z.string().url(),
+  // pg-boss stores seconds in a PostgreSQL integer.
+  SWEEP_JOB_RETENTION_DAYS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(24855)
+    .default(30),
 });
 
 export function queueEnvironment(source: NodeJS.ProcessEnv = process.env) {
   const parsed = QueueEnvSchema.safeParse(source);
-  if (!parsed.success) throw new Error('DATABASE_URL is invalid');
+  if (!parsed.success) throw new Error('Sweep queue environment is invalid');
   return parsed.data;
 }
 

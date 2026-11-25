@@ -1074,7 +1074,7 @@ export interface SweepRun {
 
 export const api = {
   queuePartySweep: () => request<SweepRun>('/admin/sweeps', {
-    method: 'POST', body: JSON.stringify({ target: { kind: 'party' }, mode: 'full' }),
+    method: 'POST', body: JSON.stringify({ target: { kind: 'party' }, mode: 'incremental' }),
   }),
   sweepRun: (id: string) => request<SweepRun>(`/admin/sweeps/${encodeURIComponent(id)}`),
   health: () => request<Health>('/health'),

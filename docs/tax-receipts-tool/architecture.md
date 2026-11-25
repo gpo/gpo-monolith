@@ -296,10 +296,11 @@ the resolved API key. Client factories remain injectable for offline tests.
 
 ## Asynchronous party sweeps
 
-The first asynchronous slice queues manual party full sweeps through
+The first asynchronous slice queues manual party incremental sweeps through
 `POST /admin/sweeps` (202), with durable status at `GET /admin/sweeps/:id`.
 Both endpoints require the existing sysadmin capability. Omitted mode defaults
-to incremental; the Admin button explicitly requests full mode. Disabled or
+to incremental; the Admin button explicitly requests incremental mode. Full
+mode remains available through the API. Disabled or
 missing-key party targets return 409 before creating work.
 
 `sweep_run` stores application history indefinitely, including the requesting
@@ -326,9 +327,19 @@ server, session, or email dispatcher. SIGINT and SIGTERM stop consumption and
 allow 30 seconds for active work to finish. A handled sweep failure persists
 FAILED, fails the job, and stops the worker with a non-zero exit code.
 
-Finished pg-boss jobs are retained indefinitely (`deleteAfterSeconds: 0`),
-as is application run history. Unprocessed queued jobs expire after a fixed
-30 days. There is no job-retention environment setting.
+Worker logs report startup, readiness, and shutdown. Each job logs its start
+and finish or failure with the queue name, pg-boss job ID, application run ID,
+and elapsed milliseconds. Successful execution also logs its terminal status,
+mode, pulled and created counts, and contact-warning count. Logs exclude raw
+upstream errors, credentials, and contact details.
+
+Finished pg-boss jobs expire after 30 days by default. Set
+`SWEEP_JOB_RETENTION_DAYS` on the API to a positive whole number of days
+(at most 24,855) to change retention for newly queued jobs. The worker's queue
+maintenance removes expired internal jobs; application run history and results
+remain available indefinitely. Existing jobs retain the policy recorded when
+they were queued. Unprocessed queued jobs expire after a fixed 30 days,
+independently of finished-job retention.
 This slice does not yet implement retry/recovery, scheduling, cancellation,
 history browsing, riding queue targets, or heartbeat-based abandonment.
 An abrupt worker loss can leave a RUNNING record requiring investigation;
