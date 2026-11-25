@@ -154,9 +154,14 @@ running process after the `Sweep worker ready` message. Startup verifies
 database connectivity, pg-boss compatibility, and the installed queue.
 More detailed worker health and crash recovery are follow-up work.
 
-Finished queue jobs and application sweep results are retained indefinitely.
-Unprocessed queued jobs expire after a fixed 30 days. No retention environment
-variable is required.
+Finished queue jobs are retained for 30 days by default. Set
+`SWEEP_JOB_RETENTION_DAYS` on the API to a positive whole number of days
+(maximum 24,855) to change the policy for newly queued jobs. Invalid values
+fail runtime startup without exposing configuration values. Existing jobs keep
+their original retention policy. Worker queue maintenance removes expired
+internal jobs, while application sweep history and results remain permanent.
+Unprocessed queued jobs expire after a fixed 30 days independently of this
+setting.
 The worker disables scheduling. SIGINT or SIGTERM allows 30 seconds to drain;
 configure a termination grace period greater than 30 seconds. A sweep failure
 is recorded safely and stops the worker with exit code 1. Abrupt termination
@@ -171,7 +176,7 @@ pnpm --filter @gpo/tax-receipts-api worker:dev
 ```
 
 The API and Vite run separately using `pnpm dev`. Once both API and worker
-are running, queue a party full sweep under **Admin > Sweep**.
+are running, queue a party incremental sweep under **Admin > Sweep**.
 Riding queue targets, schedules, retries, and history browsing are
 follow-up slices; existing synchronous controls remain temporarily available.
 Avoid running synchronous sweeps while queued work is active.

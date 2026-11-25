@@ -1,6 +1,6 @@
 import type { PgBoss, Db } from 'pg-boss';
 import type { PrismaClient, SweepRun } from '../generated/prisma/index.js';
-import { SWEEP_QUEUE } from './queue.js';
+import { queueEnvironment, SWEEP_QUEUE } from './queue.js';
 
 export class PartySweepUnavailable extends Error {
   constructor() {
@@ -22,6 +22,7 @@ export async function queuePartySweep(
   userId: string,
   mode: 'incremental' | 'full' = 'incremental',
 ) {
+  const { SWEEP_JOB_RETENTION_DAYS } = queueEnvironment();
   return prisma.$transaction(async (tx) => {
     const settings = await tx.qomonSettings.findUnique({
       where: { id: 'singleton' },
@@ -49,8 +50,8 @@ export async function queuePartySweep(
         id: run.id,
         db,
         retryLimit: 0,
-        // Keep finished job history indefinitely. Queued work expires separately.
-        deleteAfterSeconds: 0,
+        // Only queue internals expire; application run history remains permanent.
+        deleteAfterSeconds: SWEEP_JOB_RETENTION_DAYS * 86400,
         retentionSeconds: 30 * 86400,
       },
     );

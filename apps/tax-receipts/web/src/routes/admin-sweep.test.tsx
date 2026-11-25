@@ -17,7 +17,7 @@ const run = {
   id,
   status: 'QUEUED',
   target: { kind: 'party' },
-  mode: 'full',
+  mode: 'incremental',
   triggerSource: 'MANUAL',
   createdAt: '2026-11-01T00:00:00Z',
   queuedAt: '2026-11-01T00:00:00Z',
@@ -83,11 +83,11 @@ function renderPage(path = '/admin/sweep') {
   return router;
 }
 
-test('queues party full work and keeps the selected run in the URL', async () => {
+test('queues party incremental work and keeps the selected run in the URL', async () => {
   const router = renderPage();
   fireEvent.click(
     await screen.findByRole('button', {
-      name: 'Queue party full sweep',
+      name: 'Queue party incremental sweep',
     }),
   );
   await waitFor(() => expect(router.state.location.searchStr).toContain(id));
@@ -95,7 +95,7 @@ test('queues party full work and keeps the selected run in the URL', async () =>
   const call = calls.find((c) => c.method === 'POST')!;
   expect(JSON.parse(call.body!)).toEqual({
     target: { kind: 'party' },
-    mode: 'full',
+    mode: 'incremental',
   });
   expect(
     screen.queryByRole('button', { name: /refresh/i }),
@@ -129,7 +129,7 @@ test('keeps configuration errors visible', async () => {
   renderPage();
   fireEvent.click(
     await screen.findByRole('button', {
-      name: 'Queue party full sweep',
+      name: 'Queue party incremental sweep',
     }),
   );
   expect(

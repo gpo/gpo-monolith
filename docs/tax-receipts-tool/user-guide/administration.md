@@ -137,8 +137,10 @@ sweep by hand.
 
 ## Sweep
 
-**Admin > Sweep** lets a system administrator queue a party full sweep.
-Select **Queue party full sweep** to scan all Qomon transactions in the party space.
+**Admin > Sweep** lets a system administrator queue a party incremental sweep.
+Select **Queue party incremental sweep** to import changes since the last
+successful sweep in the party space. The first run imports the available
+transactions when no previous cursor exists.
 Qomon must be enabled with a key under Admin > Qomon first.
 
 The page shows the selected run's target, mode, and status: Queued, Running,
@@ -151,8 +153,9 @@ so reopening that URL or refreshing the browser reloads its status. Active
 status updates every 60 seconds and stops updating after completion.
 There is no separate Refresh button.
 
-The button explicitly queues a full party sweep. API requests default to
-incremental when no mode is supplied. Riding sweeps still use the existing
+The button explicitly queues an incremental party sweep. API requests default
+to incremental when no mode is supplied; full sweeps remain available through
+the API. Riding sweeps still use the existing
 synchronous controls. Scheduling, retries,
 cancellation, and a browsable run history are coming in later slices.
 Avoid starting a synchronous sweep while queued work is running.

@@ -55,12 +55,12 @@ export function SweepSection() {
             loading={create.isPending}
             onClick={() => create.mutate()}
           >
-            Queue party full sweep
+            Queue party incremental sweep
           </Button>
         </Group>
         <Text size="sm">
-          Scan all transactions in the party Qomon space. You can leave this
-          page while the sweep runs.
+          Import changes since the last successful sweep in the party Qomon
+          space. You can leave this page while the sweep runs.
         </Text>
         {create.isError && <Alert color="red">{create.error.message}</Alert>}
         {run.isError && (
