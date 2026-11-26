@@ -291,21 +291,39 @@ authentication and sysadmin checks. A worker can call the same operation
 without a Fastify request, session, or process lifecycle dependency.
 `SweepTargetError.code` identifies disabled, unknown, inactive, or missing-key
 targets. `SweepExecutionError` supplies a safe message and retryability flag
-without retaining the original error or response body. Contact warnings redact
-the resolved API key. Client factories remain injectable for offline tests.
+without retaining the original error or response body. Contact warnings retain transaction and contact identifiers with a fixed safe
+explanation, excluding upstream response text. History reads also sanitize
+warning messages retained by older worker versions. Client factories remain
+injectable for offline tests.
 
-## Asynchronous party sweeps
+## Asynchronous sweeps
 
-The first asynchronous slice queues manual party incremental sweeps through
-`POST /admin/sweeps` (202), with durable status at `GET /admin/sweeps/:id`.
-Both endpoints require the existing sysadmin capability. Omitted mode defaults
-to incremental; the Admin button explicitly requests incremental mode. Full
-mode remains available through the API. Disabled or
-missing-key party targets return 409 before creating work.
+Manual incremental and full sweeps for the party or a configured active riding
+are queued through `POST /admin/sweeps` (202). Omitted mode defaults to
+incremental. Target identity is `{kind: "party"}` or
+`{kind: "riding", ridingNumber: 7}`. Unknown or inactive ridings, disabled
+party settings, and missing keys return 409 before creating a run or job.
+Ridings remain independently available when the party space is disabled.
+
+`GET /admin/sweeps` returns newest-first history with keyset pagination over
+creation time and ID. The default page size is 25 (maximum 100); pass the
+returned `nextCursor` as `cursor` for the next page. Optional `status`, `mode`,
+`triggerSource`, and `target` filters combine; target is `party` or
+`riding:<number>`. `GET /admin/sweeps/:id` returns the complete retained result
+and operational timestamps. All sweep endpoints require `manage all`.
+The Admin page selects mode and target in a New sweep modal, browses filtered
+history, and links to a standalone run page at `/admin/sweep/:id`. The page
+uses the shared record-page back link to return to `/admin/sweep`. Legacy
+`/admin/sweep?runId=...` links redirect to the run page. Displayed active history
+and active run details poll every 60 seconds; terminal views stop polling.
 
 `sweep_run` stores application history indefinitely, including the requesting
-user, lifecycle timestamps, result, and sanitized failure. A Prisma transaction
-creates the run and inserts its pg-boss job through the same transaction
+user, target identity, mode, trigger, lifecycle timestamps, attempt count,
+duration in milliseconds, complete result, and sanitized failure. Completion
+with contact-fetch failures is SUCCEEDED_WITH_WARNINGS; otherwise it is
+SUCCEEDED. Authentication rejection is a non-retryable execution failure.
+Application history has no automatic deletion or archival path. A Prisma
+transaction creates the run and inserts its pg-boss job through the same transaction
 connection; neither remains if enqueueing fails. Job data contains only the
 run ID. Execution resolves current Qomon credentials through
 `executeSweepTarget`.
@@ -341,7 +359,7 @@ remain available indefinitely. Existing jobs retain the policy recorded when
 they were queued. Unprocessed queued jobs expire after a fixed 30 days,
 independently of finished-job retention.
 This slice does not yet implement retry/recovery, scheduling, cancellation,
-history browsing, riding queue targets, or heartbeat-based abandonment.
+or heartbeat-based abandonment.
 An abrupt worker loss can leave a RUNNING record requiring investigation;
 automatic recovery is follow-up work. The synchronous trigger and Dev Tools
 remain available temporarily. Operators must avoid overlapping synchronous

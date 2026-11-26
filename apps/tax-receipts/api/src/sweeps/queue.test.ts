@@ -1,3 +1,4 @@
+import { QomonAuthError } from '@gpo/qomon-client';
 import { readFileSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -454,4 +455,199 @@ it('defaults new API requests and database records to incremental', async () => 
     RETURNING mode
   `;
   expect(row!.mode).toBe('incremental');
+});
+
+it.each(['incremental', 'full'] as const)(
+  'queues a riding %s sweep with current credentials and complete history',
+  async (mode) => {
+    await prisma.riding.create({
+      data: { ridingNumber: 7, name: 'Seven', qomonApiKey: 'old-key' },
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/admin/sweeps',
+      cookies: cookie,
+      payload: { target: { kind: 'riding', ridingNumber: 7 }, mode },
+    });
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      target: { kind: 'riding', ridingNumber: 7 },
+      attemptCount: 0,
+      durationMs: null,
+    });
+    await prisma.riding.update({
+      where: { ridingNumber: 7 },
+      data: { qomonApiKey: 'rotated-key' },
+    });
+    const buildQomon = vi.fn(() => qomon);
+    await processSweepRun({ prisma, buildQomon }, response.json().id);
+    expect(buildQomon).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: 'rotated-key' }),
+    );
+    const detail = await app.inject({
+      url: `/admin/sweeps/${response.json().id}`,
+      cookies: cookie,
+    });
+    expect(detail.json()).toMatchObject({
+      status: 'SUCCEEDED',
+      attemptCount: 1,
+      durationMs: expect.any(Number),
+      startedAt: expect.any(String),
+      completedAt: expect.any(String),
+      requestedByUserId: expect.any(String),
+      result: {
+        mode,
+        pulled: 0,
+        created: 0,
+        backfilled: 0,
+        changedInQomon: 0,
+        unchanged: 0,
+        syncIncidents: 0,
+        hasMore: false,
+        contactFetchFailures: [],
+      },
+    });
+    expect(detail.body).not.toContain('rotated-key');
+    expect((await queue.findJobs(SWEEP_QUEUE))[0]!.data).toEqual({
+      runId: response.json().id,
+    });
+  },
+);
+
+it('rejects unknown, inactive, and unconfigured riding targets before creating work', async () => {
+  for (const state of ['unknown', 'inactive', 'missing-key']) {
+    if (state !== 'unknown')
+      await prisma.riding.upsert({
+        where: { ridingNumber: 7 },
+        create: {
+          ridingNumber: 7,
+          name: 'Seven',
+          active: false,
+          qomonApiKey: 'key',
+        },
+        update: { active: true, qomonApiKey: '  ' },
+      });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/admin/sweeps',
+      cookies: cookie,
+      payload: { target: { kind: 'riding', ridingNumber: 7 }, mode: 'full' },
+    });
+    expect(response.statusCode).toBe(409);
+  }
+  await prisma.qomonSettings.update({
+    where: { id: 'singleton' },
+    data: { apiKey: ' ' },
+  });
+  expect((await create()).statusCode).toBe(409);
+  expect(await prisma.sweepRun.count()).toBe(0);
+  expect(await queue.findJobs(SWEEP_QUEUE)).toEqual([]);
+});
+
+it('records remote authentication rejection as a sanitized non-retryable failure', async () => {
+  const response = await create();
+  const error = new QomonAuthError('private-key confidential-body', {
+    method: 'GET',
+    path: '/',
+    attempt: 1,
+    httpStatus: 401,
+  });
+  await expect(
+    processSweepRun(
+      {
+        prisma,
+        buildQomon: () => {
+          throw error;
+        },
+      },
+      response.json().id,
+    ),
+  ).rejects.toMatchObject({ retryable: false });
+  const detail = await app.inject({
+    url: `/admin/sweeps/${response.json().id}`,
+    cookies: cookie,
+  });
+  expect(detail.json()).toMatchObject({
+    status: 'FAILED',
+    attemptCount: 1,
+    durationMs: expect.any(Number),
+    error: 'Qomon sweep execution failed',
+  });
+  expect(detail.body).not.toMatch(/private-key|confidential-body/);
+});
+
+it('browses newest-first history with stable pagination and all filters', async () => {
+  const first = (await create('full')).json();
+  const second = (await create()).json();
+  await prisma.sweepRun.update({
+    where: { id: first.id },
+    data: { status: 'FAILED' },
+  });
+  const get = (query = '') =>
+    app.inject({ url: `/admin/sweeps${query}`, cookies: cookie });
+  const page = (await get('?limit=1')).json();
+  expect(page.data.map((r: { id: string }) => r.id)).toEqual([second.id]);
+  expect(page.nextCursor).toEqual(expect.any(String));
+  const next = (
+    await get(`?limit=1&cursor=${encodeURIComponent(page.nextCursor)}`)
+  ).json();
+  expect(next.data.map((r: { id: string }) => r.id)).toEqual([first.id]);
+  expect(next.nextCursor).toBeNull();
+  expect(
+    (
+      await get('?status=FAILED&mode=full&triggerSource=MANUAL&target=party')
+    ).json().data,
+  ).toHaveLength(1);
+  expect((await get('?target=riding:7')).json().data).toHaveLength(0);
+  expect((await get('?triggerSource=SCHEDULED')).json().data).toHaveLength(0);
+  expect((await get('?cursor=invalid')).statusCode).toBe(400);
+  await prisma.sweepRun.createMany({
+    data: Array.from({ length: 26 }, () => ({
+      requestedByUserId: first.requestedByUserId,
+    })),
+  });
+  expect((await get()).json().data).toHaveLength(25);
+  expect((await app.inject({ url: '/admin/sweeps' })).statusCode).toBe(401);
+  await prisma.user.update({
+    where: { email: 'queue@gpo.test' },
+    data: { roleKey: 'readonly' },
+  });
+  expect((await get()).statusCode).toBe(403);
+});
+
+it('sanitizes warning text retained by older workers in both history and details', async () => {
+  const response = await create();
+  await prisma.sweepRun.update({
+    where: { id: response.json().id },
+    data: {
+      status: 'SUCCEEDED_WITH_WARNINGS',
+      result: {
+        mode: 'incremental',
+        pulled: 1,
+        created: 0,
+        backfilled: 0,
+        changedInQomon: 0,
+        unchanged: 0,
+        syncIncidents: 0,
+        cursor: {},
+        hasMore: false,
+        contactFetchFailures: [
+          {
+            qomonTransactionId: '123',
+            qomonContactId: 999,
+            message: 'private-key confidential-response-body',
+          },
+        ],
+      },
+    },
+  });
+  for (const url of ['/admin/sweeps', `/admin/sweeps/${response.json().id}`]) {
+    const detail = await app.inject({ url, cookies: cookie });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.body).not.toMatch(/private-key|confidential-response-body/);
+    expect(detail.body).toContain(
+      'Qomon contact was not found; transaction skipped',
+    );
+    expect(detail.body).toContain('123');
+  }
 });

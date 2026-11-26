@@ -30,6 +30,7 @@ import gpoLogo from './assets/gpo-logo-EN-horizontal-green.svg';
 import { api } from './api.js';
 import { ChangePasswordModal } from './components/change-password-modal.js';
 import { ProfileModal } from './components/profile-modal.js';
+import { SweepDetailPage } from './routes/admin-sweep.js';
 import { AdminLayout, adminSectionsFor, visibleAdminSections } from './routes/admin.js';
 import { AttributePaymentPage, NewPaymentPage } from './routes/payment-entry.js';
 import { ContributionDetailPage } from './routes/contribution-detail.js';
@@ -304,6 +305,15 @@ const rtdFilingsRoute = createRoute({
   component: RtdFilingsPage,
 });
 
+const sweepDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/sweep/$id',
+  component: () => {
+    const { id } = useParams({ from: '/admin/sweep/$id' });
+    return <SweepDetailPage id={id} />;
+  },
+});
+
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin',
@@ -343,6 +353,7 @@ const routeTree = rootRoute.addChildren([
   entityReportsRoute,
   rtdFilingsRoute,
   adminRouteWithChildren,
+  sweepDetailRoute,
 ]);
 
 export function makeRouter(history?: RouterHistory) {
