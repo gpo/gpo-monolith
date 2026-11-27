@@ -26,7 +26,7 @@ bumps `last-reviewed` so the freshness system knows it was done. See
    - **stale** → fix it (repo-verifiable claims: check the code, run the
      command; do not guess);
    - **unverifiable from the repo** → leave it, but if it looks doubtful, add
-     it to `open-questions.md` with what would confirm it.
+     it in your reply (or a GitHub issue) with what would confirm it.
    Claims are not independent: also compare them to each other. Two claims
    about the same fact (often an appended update sitting beside the sentence
    it should have replaced) are the failure this system exists to prevent,
@@ -35,7 +35,7 @@ bumps `last-reviewed` so the freshness system knows it was done. See
    reader would look for it; the as-of dates say which is newer. If you
    cannot tell whether the difference is a correction or a genuine change
    over time, keep the newer claim and move the question to
-   `open-questions.md`.
+   your reply (or a GitHub issue).
 4. **Look for the missing.** Scan the mapped code areas (and recent commits
    touching them, `git log --oneline -- <area>`) for things that exist but the
    doc does not mention. Add what a future reader would need. Unlinked
