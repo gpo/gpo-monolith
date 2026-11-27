@@ -43,8 +43,8 @@ describe('contact writes (D13)', () => {
         email: 'ada@example.org',
         contributorType: 'INDIVIDUAL',
       });
-      // a tool-owned contact's EO contributor id: `T` plus a sequence number
-      expect(contact.contributorId).toMatch(/^T\d{1,9}$/);
+      // every contact's EO contributor id is a tool-assigned number
+      expect(contact.contributorId).toMatch(/^\d{8,10}$/);
       expect(contact.addresses).toEqual([
         { housenumber: '12', street: 'Queen St', city: 'Guelph', state: 'ON', postalcode: 'N1H 1A1', country: 'CA' },
       ]);
@@ -147,8 +147,9 @@ describe('contact writes (D13)', () => {
       const contact = await createContact({ prisma, qomon }, { actorUserId, reason: 'new donor by phone', contact: ADA });
 
       expect(contact.qomonContactId).not.toBeNull();
-      // a Qomon contact's EO contributor id is its Qomon id
-      expect(contact.contributorId).toBe(String(contact.qomonContactId));
+      // the Qomon id is kept as a reference; the EO contributor id is the tool's own (#170)
+      expect(contact.contributorId).toMatch(/^\d{8,10}$/);
+      expect(contact.contributorId).not.toBe(String(contact.qomonContactId));
       const inQomon = await qomon.getContact(Number(contact.qomonContactId));
       expect(inQomon).toMatchObject({ firstname: 'Ada', surname: 'Lovelace', mail: 'ada@example.org' });
       expect(inQomon.address).toMatchObject({ street: 'Queen St', postalcode: 'N1H 1A1' });
@@ -217,16 +218,26 @@ describe('contact writes (D13)', () => {
     const tool = await fixtureContact(prisma, { data: { name: 'Tess' } });
     const other = await fixtureContact(prisma, { data: { name: 'Toby' } });
     const qomon = await fixtureContact(prisma, { data: { name: 'Quinn', qomonContactId: 12515n } });
-    expect(tool.contributorId).toMatch(/^T\d+$/);
-    expect(other.contributorId).not.toBe(tool.contributorId);
-    expect(qomon.contributorId).toBe('12515');
+    // one format for every contact, Qomon-linked or not (#170): a number
+    // from 10,000,000 up, the range below being reserved for CiviCRM ids
+    for (const c of [tool, other, qomon]) {
+      expect(Number(c.contributorId)).toBeGreaterThanOrEqual(10_000_000);
+      expect(c.contributorId).toMatch(/^\d{8,10}$/);
+    }
+    expect(new Set([tool, other, qomon].map((c) => c.contributorId)).size).toBe(3);
+    expect(qomon.contributorId).not.toBe('12515');
 
     await expect(
-      fixtureWrite(prisma, (tx) => tx.contact.update({ where: { id: tool.id }, data: { contributorId: 'X1' } })),
+      fixtureWrite(prisma, (tx) => tx.contact.update({ where: { id: tool.id }, data: { contributorId: '1' } })),
     ).rejects.toThrow(/never changed/);
-    // EO allows at most 10 characters
-    await expect(fixtureContact(prisma, { data: { name: 'Huge', qomonContactId: 12_345_678_901n } })).rejects.toThrow(
-      /10 characters/,
+  });
+
+  it('a contact can keep an explicit contributor id (a CiviCRM import), which must be a plain number', async () => {
+    const civi = await fixtureContact(prisma, { data: { name: 'Cora', contributorId: '48213' } });
+    expect(civi.contributorId).toBe('48213');
+    await expect(fixtureContact(prisma, { data: { name: 'Twin', contributorId: '48213' } })).rejects.toThrow();
+    await expect(fixtureContact(prisma, { data: { name: 'Tee', contributorId: 'T48214' } })).rejects.toThrow(
+      /contact_contributorId_numeric/,
     );
   });
 

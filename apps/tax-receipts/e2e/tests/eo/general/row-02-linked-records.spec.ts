@@ -36,7 +36,7 @@ test.describe('General', () => {
     await expect(splitRows.filter({ hasText: 'agency' })).toContainText('Constituency association, riding 121');
     await expect(splitRows.filter({ hasText: 'agency' }).getByRole('link', { name: 'Split Sam' })).toBeVisible();
 
-    await expect(page.getByText('Individual, contributor id T33')).toBeVisible();
+    await expect(page.getByText('Individual, contributor id 10000032')).toBeVisible();
     await expect(page.getByText('$300.00').first()).toBeVisible();
     await expect(page.getByText('Party (province-wide)').first()).toBeVisible();
     const receiptRow = page.getByRole('row').filter({ hasText: /GPO-\d+/ });
@@ -46,14 +46,14 @@ test.describe('General', () => {
     // 3. Click the 'Split Sam' link under 'Donor' in the Contribution panel
     const donorLink = page
       .locator('div')
-      .filter({ has: page.getByText('Individual, contributor id T33') })
+      .filter({ has: page.getByText('Individual, contributor id 10000032') })
       .getByRole('link', { name: 'Split Sam' })
       .last();
     await donorLink.click();
     await expect(page).toHaveURL(/\/contributors\/[^/]+$/);
     await expect(page.getByRole('heading', { name: 'Split Sam', level: 2 })).toBeVisible();
     await expect(page.getByText('Email: split.sam@g4.fixture.test')).toBeVisible();
-    await expect(page.getByText('Contributor id: T33')).toBeVisible();
+    await expect(page.getByText('Contributor id: 10000032')).toBeVisible();
 
     const partyRow = page.getByRole('row').filter({ hasText: '$300.00' }).filter({ hasText: 'PARTY' });
     await expect(partyRow).toContainText('9503');

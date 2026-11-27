@@ -19,8 +19,9 @@ email. Open a contributor to see:
   Individual: Ontario accepts contributions from individuals only), and
   contributor id. The contributor id is what the RTD, ALL, and S2P2 files
   and the receipt carry as EO's `Contributor ID`. It is set when the
-  contributor is added and never changes: their Qomon contact id, or, for a
-  contributor kept only in the tool, `T` and a number.
+  contributor is added and never changes. It is always a number: the
+  contributor's CiviCRM id if they came from CiviCRM, otherwise a number the
+  tool assigns (10,000,000 and up). It is not the Qomon contact id.
 - **Contributions**: everything they have given, with period, entity,
   amount, status, what is left to receipt, and the receipts that cover each
   one with their status (ISSUED, LOST, CANCELLED, or VOID). With *Issue

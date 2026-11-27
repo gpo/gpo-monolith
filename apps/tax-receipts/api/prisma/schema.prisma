@@ -232,16 +232,17 @@ enum ChangeLogSubjectType {
 /// inside a change-logged transaction (contacts/write.ts, D13).
 model Contact {
   id              String          @id @default(cuid())
-  /// the Qomon contact this mirrors (D13). Null for a tool-owned contact: one
+  /// the Qomon contact this mirrors (D13), an external reference only (it is
+  /// not the contributor id). Null for a tool-owned contact: one
   /// added in the tool while no Qomon space is configured, or a fixture.
   qomonContactId  BigInt?         @unique
   /// the contributor's id on EO filings (RTD, ALL, S2P2 `Contributor ID`:
-  /// alphanumeric, at most 10 characters). Assigned by the database at
-  /// insert and never changed after: the Qomon contact id when there is one,
-  /// otherwise `T` plus a sequence number for a tool-owned contact (the
-  /// prefix keeps the two from ever colliding). See the
-  /// contact_contributor_id migration.
-  contributorId   String          @unique @default(dbgenerated("('T'::text || nextval('contact_contributor_id_seq'::regclass))")) @db.VarChar(10)
+  /// alphanumeric, at most 10 characters). A plain number, assigned by the
+  /// database at insert from a sequence starting at 10,000,000, and never
+  /// changed after. Numbers below that are reserved for the CiviCRM contact
+  /// ids EO already holds, which a CiviCRM import sets explicitly. Not the
+  /// Qomon contact id (#170). See the contributor_id_one_format migration.
+  contributorId   String          @unique @default(dbgenerated("(nextval('contact_contributor_id_seq'::regclass))::text")) @db.VarChar(10)
   name            String
   /// separate first and last name (ticket 4.1: the ALL/S2P2 EO reports
   /// need first and last name as distinct columns, which `name` cannot supply

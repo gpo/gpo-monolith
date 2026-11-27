@@ -65,8 +65,8 @@ describe('ALL report generator (ticket 4.1)', () => {
     ridingNumber?: number | null;
     receivedBy?: 'GPO' | 'ENTITY';
     goodsServices?: boolean;
-    /** the contact's Qomon id, and so its EO contributor id */
-    qomonContactId?: bigint;
+    /** an explicit EO contributor id (a CiviCRM-imported contact) */
+    contributorId?: string;
     status?: 'ISSUED' | 'CANCELLED' | 'VOID';
     contactFirstName?: string;
     contactLastName?: string;
@@ -78,7 +78,8 @@ describe('ALL report generator (ticket 4.1)', () => {
     // A caller supplying contactName (an org-only-style contact) means "no
     // name split" — don't fall back to the Dana Donor default in that case.
     const { contactId, contributionId } = await makeContribution(prisma, {
-      qomonContactId: opts.qomonContactId ?? nextContactId++,
+      qomonContactId: nextContactId++,
+      contributorId: opts.contributorId,
       qomonTransactionId: nextTxId++,
       amountCents,
       contactFirstName: opts.contactName ? opts.contactFirstName : opts.contactFirstName ?? 'Dana',
@@ -109,7 +110,7 @@ describe('ALL report generator (ticket 4.1)', () => {
     space.entityKind === 'PARTY' ? 'Green Party of Ontario' : `084 Parry Sound Muskoka (${space.entityKind})`;
 
   it('generates a per-entity PARTY file with the expected CSV row', async () => {
-    await seedReportableReceipt({ amountCents: 342_500, qomonContactId: 198176n });
+    await seedReportableReceipt({ amountCents: 342_500, contributorId: '198176' });
 
     const result = await generateAllReport(
       { prisma, storageDir },

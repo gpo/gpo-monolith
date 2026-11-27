@@ -165,6 +165,9 @@ export async function makeContribution(
   prisma: PrismaClient,
   opts: {
     qomonContactId?: bigint | null;
+    /** an explicit EO contributor id, as a CiviCRM import sets; otherwise
+     *  the database assigns one */
+    contributorId?: string;
     qomonTransactionId?: bigint | null;
     amountCents: number;
     acceptedAt?: Date;
@@ -184,6 +187,7 @@ export async function makeContribution(
       await fixtureContact(prisma, {
         data: {
           qomonContactId: opts.qomonContactId ?? null,
+          contributorId: opts.contributorId,
           name: opts.contactName ?? 'Dana Donor',
           firstName: opts.contactFirstName,
           lastName: opts.contactLastName,

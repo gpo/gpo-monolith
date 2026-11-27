@@ -50,16 +50,16 @@ Elections Ontario evaluation checklist, section General (rows 1-2). Row 1 shows 
 **File:** `tests/eo/general/row-02-linked-records.spec.ts`
 
 **Steps:**
-  1. Shared data: reads Group 4 fixture contributor 'Split Sam' (split.sam@g4.fixture.test, contributor id T33) in period 9503. Mutates: nothing (read-only; no edit, correct, or issue buttons are clicked). Call signIn(page, 'cfo') and go to /contributions?periodId=9503&entityKind=PARTY.
+  1. Shared data: reads Group 4 fixture contributor 'Split Sam' (split.sam@g4.fixture.test, contributor id 10000032) in period 9503. Mutates: nothing (read-only; no edit, correct, or issue buttons are clicked). Call signIn(page, 'cfo') and go to /contributions?periodId=9503&entityKind=PARTY.
     - expect: The contributions table lists a row with Donor 'Split Sam', amount $300.00, Period 9503, Entity PARTY, Receipt ISSUED
   2. Click the 'Split Sam' donor link in that row.
     - expect: URL matches /contributions/<id>, heading 'Contribution' is visible
     - expect: The 'Payment' panel shows no 'Qomon' badge (manual entry), Amount $500.00, Method 'Cheque', Note 'fixture-g4-3', and a 'Donor who paid' link 'Split Sam'
     - expect: The panel text 'Split across 2 contributions:' is shown with a table: 'this contribution' $300.00 'Party (province-wide)', and a linked row $200.00 'Constituency association, riding 121' marked 'agency'. The two amounts sum to the payment's $500.00
-    - expect: The 'Contribution' panel shows Donor link 'Split Sam' with 'Individual, contributor id T33', Amount $300.00, Recipient 'Party (province-wide)'
+    - expect: The 'Contribution' panel shows Donor link 'Split Sam' with 'Individual, contributor id 10000032', Amount $300.00, Recipient 'Party (province-wide)'
     - expect: The 'Allocations & receipts' table lists a receipt number starting 'GPO-' with status ISSUED and $300.00
   3. Click the 'Split Sam' link under 'Donor' in the Contribution panel.
-    - expect: URL matches /contributors/<id>, heading 'Split Sam' is visible, details show 'Email: split.sam@g4.fixture.test' and 'Contributor id: T33'
+    - expect: URL matches /contributors/<id>, heading 'Split Sam' is visible, details show 'Email: split.sam@g4.fixture.test' and 'Contributor id: 10000032'
     - expect: The 'Contributions' table on the contributor page lists both related contributions: $300.00 PARTY 9503 ACTIVE and $200.00 'CA (riding 121)' 9503 ACTIVE
   4. Click the date link ('3/1/2029') of the $300.00 row in the contributor's Contributions table.
     - expect: The app returns to the same contribution detail page (heading 'Contribution', amount $300.00), showing the link is two-way

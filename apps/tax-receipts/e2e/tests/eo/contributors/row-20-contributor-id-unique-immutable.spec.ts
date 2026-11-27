@@ -16,8 +16,8 @@ async function addContributor(page: Page, lastName: string, reason: string) {
 }
 
 async function readContributorId(page: Page): Promise<string> {
-  const text = await page.getByText(/^Contributor id: T\d+$/).textContent();
-  const match = /^Contributor id: (T\d+)$/.exec(text ?? '');
+  const text = await page.getByText(/^Contributor id: \d{8,10}$/).textContent();
+  const match = /^Contributor id: (\d{8,10})$/.exec(text ?? '');
   expect(match).not.toBeNull();
   return match![1]!;
 }
