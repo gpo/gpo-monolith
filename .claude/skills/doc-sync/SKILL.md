@@ -23,21 +23,24 @@ what a future session would otherwise have to rediscover.
    - open questions resolved, or new risks discovered.
    A pure refactor with no behaviour change usually needs no doc edit; in that
    case stop here and say so.
-3. **Route each fact to the right doc.** For the tax-receipts area:
-   - architecture, phases, and domain model → `DESIGN.md`;
-   - Qomon or warehouse facts → `integrations.md`;
-   - Elections Ontario rules → `compliance.md`;
-   - decisions → `decisions.md` (append a new `D<n>`; never rewrite an
-     accepted decision, see step 5);
-   - risks and unknowns → `open-questions.md` (mark resolved items ✅ with the
-     answer inline).
+3. **Route each fact to the right doc.** For the tax-receipts area
+   (`docs/tax-receipts-tool/`):
+   - mechanisms, constraints, invariants, decisions and their why, Qomon or
+     warehouse facts, and Elections Ontario rules as the code applies them →
+     `architecture.md`, in the section for that area;
+   - anything a user would notice → the matching page in `user-guide/`;
+   - web list-screen conventions → `ui-patterns.md`;
+   - risks and unknowns → a GitHub issue, linked from the doc if a reader
+     needs to know.
+   Elections Ontario rules come from EO's own published requirements; cite
+   the source and date. Keep confidential material out: this repo is public.
 4. **Edit surgically.** Update or delete the sentences the change invalidates;
    add the new facts where a reader would look for them. Do not append
    changelog-style notes to the bottom of a doc.
 5. **Contradictions are decisions, not edits.** If your change conflicts with
-   an accepted entry in `decisions.md`, do not silently rewrite the decision.
-   Add the conflict to `open-questions.md` and flag it in your reply; the
-   decision log only changes with explicit sign-off.
+   a documented decision or a hard rule in `CLAUDE.md`, do not silently
+   rewrite it. Flag the conflict in your reply; documented decisions only
+   change with explicit sign-off.
 6. **Leave `last-reviewed` alone.** A targeted sync is not a full review; only
    the doc-review skill bumps the frontmatter.
 7. **Commit docs with the code.** Doc edits ride in the same commit or PR as

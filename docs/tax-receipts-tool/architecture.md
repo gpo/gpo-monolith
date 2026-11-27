@@ -5,10 +5,9 @@ review-interval-days: 60
 
 # Tax Receipts tool: code layout and how to run it
 
-Public, non-confidential companion to the private knowledge base (see
-[`README.md`](README.md)). Covers only what the code in this repo is and how
-to build it. Design rationale, Elections Ontario rules, and Qomon specifics
-live in the private `gpo/qomon-migration-documents` repo.
+What the code in this repo is, how to build and run it, and how its main
+mechanisms work. See [`README.md`](README.md) for the other docs on the
+tool.
 
 ## Where the code lives
 
