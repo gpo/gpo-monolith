@@ -2,17 +2,21 @@
 
 ## What this repo is, and where it's going
 
-The `gpo-monolith` is the Green Party of Ontario's backend code repo. The legacy
-NestJS + MySQL application that used to live in `src/` was **removed in #89**;
-what remains today is the tax-receipt tooling that survives it (the receipt-PDF
-generation script in `scripts/`, the Apps Scripts in
-`google-workspace/` (EO reports, plus small Gmail, Docs, and Sheets
-utilities), and the Cypress e2e tests in `gpoAutoTests/`) plus the
-doc-memory system in `docs/`. This repo is the source of truth for the
-tax-receipts tool (see below).
+The `gpo-monolith` is the Green Party of Ontario's backend code repo. Its main
+project is the **Tax Receipts & Contributions tool**, a pnpm + Turborepo
+workspace:
 
-New work is a **go-forward stack** tool, starting with the **Tax Receipts &
-Contributions tool** under `apps/tax-receipts/` (not yet scaffolded).
+- `apps/tax-receipts/api` (Fastify api, plus the Qomon sweep worker),
+  `apps/tax-receipts/web` (React app), and `apps/tax-receipts/e2e`
+  (Playwright tests);
+- `packages/` (`tax-receipts-core`, `qomon-client`, `warehouse-client`).
+
+[`docs/tax-receipts-tool/architecture.md`](docs/tax-receipts-tool/architecture.md)
+has the full layout. Older tooling remains alongside it: the receipt-PDF
+script in `scripts/`, the Apps Scripts in `google-workspace/` (EO reports,
+plus small Gmail, Docs, and Sheets utilities), and the legacy Cypress tests
+in `gpoAutoTests/`. The legacy NestJS + MySQL app was removed in #89. This
+repo is the source of truth for the tax-receipts tool (see below).
 
 ## Go-forward stack (all new work)
 
@@ -20,21 +24,25 @@ Contributions tool** under `apps/tax-receipts/` (not yet scaffolded).
 - **Frontend:** Vite + React + Mantine + Tanstack Router/Query.
   UI conventions for tables, modals, and buttons:
   [`docs/tax-receipts-tool/ui-patterns.md`](docs/tax-receipts-tool/ui-patterns.md).
-- **Tooling:** Turborepo + pnpm, SWC, ESLint, Vitest.
+- **Tooling:** Turborepo + pnpm, tsx, ESLint, Vitest, Playwright.
 - **Auth:** Passport + bcrypt, stateful sessions; authorization at the query layer
   (CASL + Prisma).
 
 ## Commands
 
-There is no root build: the legacy NestJS app and its `package.json` are gone.
-The go-forward tool will define its own pnpm/turbo scripts once scaffolded under
-`apps/`. Today's runnable pieces:
+Run from the repo root (`architecture.md` has the details, including
+environment files and the worker):
 
 ```bash
-node scripts/generate_tax_receipt_pdfs/generate.mjs   # stamp receipt PDFs from template
-cd gpoAutoTests && npx cypress run                    # e2e autotests (see its README)
-scripts/check-doc-sync.sh [<base>]                    # did mapped code change without its docs?
-scripts/check-doc-freshness.sh                        # list overdue memory-doc reviews
+pnpm install
+pnpm build                                      # generate the Prisma client, build packages
+pnpm dev                                        # dev Postgres, migrate, api + web
+pnpm check                                      # lint, typecheck, and unit tests
+pnpm db:test:up                                 # Postgres for api tests (then export DATABASE_URL)
+pnpm --filter @gpo/tax-receipts-e2e e2e         # Playwright e2e (see apps/tax-receipts/e2e/README.md)
+scripts/check-doc-sync.sh [<base>]              # did mapped code change without its docs?
+scripts/check-doc-freshness.sh                  # list overdue memory-doc reviews
+node scripts/generate_tax_receipt_pdfs/generate.mjs   # legacy: stamp receipt PDFs from template
 ```
 
 ## Docs are shared memory
