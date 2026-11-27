@@ -112,6 +112,12 @@ environment variables, rollout order, and the single-instance constraint
 the generated Prisma client into `dist/`, so `node dist/server.js` runs on
 its own.
 
+On SIGTERM or SIGINT the api closes Fastify (in-flight requests finish, then
+the email dispatcher, sweep queue, and Prisma stop) and exits 0. It handles
+the signal itself because Node runs as PID 1 in the container, where an
+unhandled SIGTERM is ignored. A shutdown still running after 25 seconds, or a
+second signal, exits 1 at once.
+
 Note: this setup makes use of [multi platform builds](https://docs.docker.com/build/building/multi-platform/)
 which require some [specific prerequisites](https://docs.docker.com/build/building/multi-platform/#prerequisites)
 to leverage. Namely: Docker Engine > v29.0 and ensure that the option

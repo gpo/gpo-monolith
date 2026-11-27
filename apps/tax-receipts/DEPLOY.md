@@ -65,6 +65,9 @@ Migrations are forward-only and must run before the api that needs them.
   (`ARTIFACT_STORAGE_DIR`, default `/data/artifacts`), and the email
   dispatcher runs inside the api process. Object storage and a separate
   worker are later work.
+- **SIGTERM shuts the api down gracefully.** In-flight requests and any
+  running email dispatch pass finish first; the process exits within 25
+  seconds, inside Kubernetes' default 30 second termination grace period.
 - **`/data` must be a persistent volume** and backed up alongside the
   database. Losing it loses issued receipt PDFs, which the database still
   points at.

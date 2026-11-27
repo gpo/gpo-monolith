@@ -5,6 +5,10 @@ import { startEmailDispatcher } from './delivery/dispatcher.js';
 import { buildEmailProvider } from './delivery/provider-factory.js';
 import { loadEnv } from './env.js';
 
+/** Under Kubernetes' default 30 second termination grace period, so a stuck
+ *  close still ends in a clean exit rather than a SIGKILL. */
+const SHUTDOWN_TIMEOUT_MS = 25_000;
+
 async function main(): Promise<void> {
   const env = loadEnv();
   const prisma = getPrisma();
@@ -43,6 +47,36 @@ async function main(): Promise<void> {
     { ...emailDispatch, intervalMs: env.EMAIL_DISPATCH_INTERVAL_MS },
   );
   app.addHook('onClose', () => dispatcher.stop());
+
+  // Node runs as PID 1 in the container, where SIGTERM is ignored unless the
+  // process handles it. Close Fastify (in-flight requests finish, then the
+  // onClose hooks stop the dispatcher, the sweep queue, and Prisma) and exit.
+  // A second signal, or the timeout, exits at once.
+  let closing = false;
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (closing) {
+      app.log.warn({ signal }, 'second shutdown signal; exiting now');
+      process.exit(1);
+    }
+    closing = true;
+    app.log.info({ signal }, 'shutting down');
+    setTimeout(() => {
+      app.log.error('shutdown timed out; exiting');
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS).unref();
+    app.close().then(
+      () => {
+        app.log.info('shut down cleanly');
+        process.exit(0);
+      },
+      (err: unknown) => {
+        app.log.error({ err }, 'shutdown failed');
+        process.exit(1);
+      },
+    );
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 
   await app.listen({ host: env.HOST, port: env.PORT });
 }
