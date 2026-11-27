@@ -22,7 +22,10 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
-      command: 'pnpm exec tsx src/server.ts',
+      // migrate first: the api refuses to start without the sweep queue
+      // tables (sweeps/queue.ts), and Playwright starts the servers before
+      // globalSetup, which then resets the database from nothing
+      command: 'pnpm exec prisma migrate deploy && pnpm exec tsx src/server.ts',
       cwd: API_DIR,
       env: e2eEnv,
       // `/`, not `/health`: the database is reset by globalSetup, which

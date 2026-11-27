@@ -6,14 +6,17 @@ database.
 ## Running
 
 ```bash
+pnpm build                                      # once per fresh checkout
 pnpm db:dev:up                                  # the dev Postgres on :5434
 pnpm --filter @gpo/tax-receipts-e2e e2e         # headless, list reporter
 pnpm --filter @gpo/tax-receipts-e2e e2e:ui      # Playwright UI mode
 ```
 
-Before the tests start, Playwright starts its own api on :3100 and web app on
-:5174, and `global-setup.ts` rebuilds the `tax_receipts_e2e` database from
-nothing: migrate, `prisma/seed.ts`, then `prisma/seed-fixtures.ts`. It takes
+`pnpm build` generates the Prisma client and builds the workspace packages
+the api imports; the e2e run does neither. Before the tests start, Playwright
+migrates the `tax_receipts_e2e` database (the api will not start without its
+sweep queue tables), starts its own api on :3100 and web app on :5174, and
+then `global-setup.ts` rebuilds that database from nothing: migrate, `prisma/seed.ts`, then `prisma/seed-fixtures.ts`. It takes
 about 15 seconds. Your dev database on :5434 and dev servers on :3000 and
 :5173 are left alone. The environment is set in `e2e-env.ts`, not read from
 `api/.env`, and email stays on the `dev` adapter. Qomon is off because it is
