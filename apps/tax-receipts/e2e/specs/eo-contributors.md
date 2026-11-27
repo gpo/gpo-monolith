@@ -2,7 +2,7 @@
 
 ## Application Overview
 
-Covers EO checklist rows 20-23 (unique contributor id, name, address, and Individual type). Qomon is off in e2e, so contributors added in the tool are tool-owned (Kept in "This tool") and editable. Group 1 to 3 fixtures carry a Qomon contact id and are shown read-only. Group 4 fixtures (e.g. Email Emma, period 9503) are read only here. Every edit targets a contributor the scenario creates with a unique suffix. Use `const sfx = Date.now().toString(36)`. Sign in with `signIn(page, 'admin')` (admin has Add and edit contributors and can record payments; 'filer' sees no Add/Edit buttons). Contributor ids are assigned from a shared counter (T42, T43...), so never assert a literal T number; assert /^T\d+$/ and compare two ids. Dialogs: submit buttons stay [disabled] until required fields are valid and a reason is entered, so negative checks assert `toBeDisabled()` and never click. Address is all-or-nothing: street, city, province, postal code, and country together, or all blank (street number optional). Validation message: "Fill in the street, city, province, postal code, and country, or leave the address blank." Payments: every payment these scenarios record sets Received on to 2025-03-15 and the Contribution block's Period to '2025 General Election' (period 64, window 2025-01-27 to 2025-05-28, used by no fixture), so they never land in the 2026 Annual space other sections assert on and raise no A1 work item.
+Covers EO checklist rows 20-23 (unique contributor id, name, address, and Individual type). Qomon is off in e2e, so contributors added in the tool are tool-owned (Kept in "This tool") and editable. Group 1 to 3 fixtures carry a Qomon contact id and are shown read-only. Group 4 fixtures (e.g. Email Emma, period 9503) are read only here. Every edit targets a contributor the scenario creates with a unique suffix. Use `const sfx = Date.now().toString(36)`. Sign in with `signIn(page, 'admin')` (admin has Add and edit contributors and can record payments; 'filer' sees no Add/Edit buttons). Contributor ids are plain numbers assigned from a shared counter starting at 10000000 (10000041, 10000042...), so never assert a literal number; assert /^\d{8,10}$/ and compare two ids. Dialogs: submit buttons stay [disabled] until required fields are valid and a reason is entered, so negative checks assert `toBeDisabled()` and never click. Address is all-or-nothing: street, city, province, postal code, and country together, or all blank (street number optional). Validation message: "Fill in the street, city, province, postal code, and country, or leave the address blank." Payments: every payment these scenarios record sets Received on to 2025-03-15 and the Contribution block's Period to '2025 General Election' (period 64, window 2025-01-27 to 2025-05-28, used by no fixture), so they never land in the 2026 Annual space other sections assert on and raise no A1 work item.
 
 ## Test Scenarios
 
@@ -17,11 +17,11 @@ Covers EO checklist rows 20-23 (unique contributor id, name, address, and Indivi
 **Steps:**
   1. Mutates: nothing (reads fixtures Baseline Donor and Email Emma only). Sign in as admin. Go to /contributors. Click the link 'Baseline Donor' (row shows Kept in 'Qomon').
     - expect: Heading 'Baseline Donor' is shown
-    - expect: Text 'Contributor id: 800001' and 'Qomon contact: 800001' are shown (for a Qomon contact the id EO files carry is the Qomon contact id)
+    - expect: Text 'Qomon contact: 800001' is shown, and 'Contributor id: ' followed by 8 to 10 digits (the tool's own number, not the Qomon contact id; assert regex /^Contributor id: \d{8,10}$/)
     - expect: Banner 'This is a Qomon contact and Qomon is not connected here, so it cannot be edited in this tool.' is shown
     - expect: No 'Edit contributor' button exists on the page (read-only assertion allowed for Group 1-3 fixtures)
   2. Go to /contributors and click the link 'Email Emma' (Kept in 'This tool'). Do not edit.
-    - expect: 'Contributor id: ' followed by T and digits (currently T40; assert regex /Contributor id: T\d+/)
+    - expect: 'Contributor id: ' followed by 8 to 10 digits (assert regex /^Contributor id: \d{8,10}$/)
     - expect: 'Qomon contact: none (kept in this tool)'
 
 #### 1.2. Row 20: Contributor id is system-assigned, differs between two contributors added back to back, and cannot be edited

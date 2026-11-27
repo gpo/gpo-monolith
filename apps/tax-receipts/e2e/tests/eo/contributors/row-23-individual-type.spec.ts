@@ -31,8 +31,8 @@ test.describe('Contributors', () => {
     await addDialog.getByRole('button', { name: 'Add contributor' }).click();
     await expect(page.getByRole('heading', { name: fullName })).toBeVisible();
     await expect(page.getByText('Contributor type: Individual')).toBeVisible();
-    const idText = await page.getByText(/^Contributor id: T\d+$/).textContent();
-    const contributorId = /T\d+/.exec(idText ?? '')?.[0];
+    const idText = await page.getByText(/^Contributor id: \d{8,10}$/).textContent();
+    const contributorId = /\d{8,10}/.exec(idText ?? '')?.[0];
     expect(contributorId).toBeTruthy();
 
     // 3. Click 'Edit contributor'.

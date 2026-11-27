@@ -180,10 +180,16 @@ party-level base URL unless they set their own.
 
 Every contact has a `contributorId`: the `Contributor ID` on EO filings
 (RTD, ALL, S2P2, DC-1A) and receipts, at most 10 alphanumeric characters.
-The database assigns it at insert (migration `contact_contributor_id`): the
-Qomon contact id when there is one, otherwise `T` plus a sequence number, so
-the two never collide. A trigger refuses any later change. Contributions
-carry no id of their own; filings and receipts read it from the contact.
+It is always a plain number, so EO sees one scheme (#170). The database
+assigns it at insert from a sequence that starts at 10,000,000, whether or
+not the contact is linked to Qomon; the Qomon contact id is kept only as
+`qomonContactId`. Numbers below 10,000,000 are reserved for the CiviCRM
+contact ids EO already holds: the historical CiviCRM import sets
+`contributorId` explicitly to each contact's CiviCRM id. A check constraint
+refuses anything but digits, and a trigger refuses any later change
+(migrations `contact_contributor_id` and `contributor_id_one_format`).
+Contributions carry no id of their own; filings and receipts read it from
+the contact.
 
 The import sweep and the "refresh donor from Qomon" action write contacts
 through the same module (`mirrorQomonContact`), so every contact change has a

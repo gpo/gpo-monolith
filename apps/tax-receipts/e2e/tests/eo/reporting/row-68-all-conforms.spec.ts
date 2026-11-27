@@ -131,6 +131,7 @@ test.describe('Reporting', () => {
     expect(chris['Receipt_Status']).toBe('I');
     expect(chris['Contribution_Type']).toBe('MO');
     expect(chris['Contribution_Period_ID']).toBe('9504');
-    expect(chris['Contributor_ID']).toBe('910001');
+    // the tool's own number, not the Qomon contact id 910001 (#170)
+    expect(chris['Contributor_ID']).toMatch(/^\d{8,10}$/);
   });
 });

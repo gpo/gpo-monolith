@@ -98,7 +98,7 @@ Reads seeded data in periods 9503 and 9504 only; the only mutation anywhere in t
   3. Open /spaces/9504/PARTY/entity-reports, fill reason 'E2E row 68 9504 <suffix>', click Generate, and download the CSV.
     - expect: Newest row: Kind 'ALL', Rows '1'
     - expect: Header equals the ALL header
-    - expect: Exactly one data row: Contributor_Last_Name 'Consolidating Chris', Contributor_First_Name empty, Contribution_Amount 65.00, Acceptance_Date 03102030, Receipt_Status I, Contribution_Type MO, Contribution_Period_ID 9504, Contributor_ID 910001
+    - expect: Exactly one data row: Contributor_Last_Name 'Consolidating Chris', Contributor_First_Name empty, Contribution_Amount 65.00, Acceptance_Date 03102030, Receipt_Status I, Contribution_Type MO, Contribution_Period_ID 9504, Contributor_ID 8 to 10 digits (the tool's number, not the Qomon contact id 910001; assert /^\d{8,10}$/)
 
 #### 1.5. Row 69: S2P2 report conforms to the spec (over-$200 aggregate)
 

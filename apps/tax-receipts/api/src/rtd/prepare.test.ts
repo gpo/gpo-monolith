@@ -122,8 +122,8 @@ describe('RTD filing prepare, DB-backed (redesigned from tickets 2.3/2.6)', () =
       'Entity ID,CFO Name,Contribution Year,Contribution Period ID,Contributor Last Name,' +
         'Contributor First Name,Deposit Date,Contribution Amount,Aggregate Contribution Amount,Contributor ID',
     );
-    // the contact's Qomon id (1) is its contributor id
-    expect(lines[1]).toBe('8,Casey CFO,2026,67,Donor,Dana,03012026,200.01,200.01,1');
+    const { contributorId } = await prisma.contact.findUniqueOrThrow({ where: { id: a.contactId } });
+    expect(lines[1]).toBe(`8,Casey CFO,2026,67,Donor,Dana,03012026,200.01,200.01,${contributorId}`);
   });
 
   it('orders rows chronologically by acceptance date regardless of selection order', async () => {

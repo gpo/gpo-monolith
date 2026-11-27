@@ -54,8 +54,8 @@ describe('S2P2 report generator (ticket 4.2)', () => {
     amountCents?: number;
     entityKind?: EntityKind;
     ridingNumber?: number | null;
-    /** the contact's Qomon id, and so its EO contributor id */
-    qomonContactId?: bigint;
+    /** an explicit EO contributor id (a CiviCRM-imported contact) */
+    contributorId?: string;
     status?: 'ISSUED' | 'CANCELLED' | 'VOID';
     contactLastName?: string;
     /** reuse the same donor across several calls, to build up an aggregate. */
@@ -76,7 +76,8 @@ describe('S2P2 report generator (ticket 4.2)', () => {
       contributionId = contribution.id;
     } else {
       const made = await makeContribution(prisma, {
-        qomonContactId: opts.qomonContactId ?? nextContactId++,
+        qomonContactId: nextContactId++,
+        contributorId: opts.contributorId,
         qomonTransactionId: nextTxId++,
         amountCents,
         contactFirstName: 'Dana',
@@ -106,7 +107,7 @@ describe('S2P2 report generator (ticket 4.2)', () => {
     space.entityKind === 'PARTY' ? 'Green Party of Ontario' : `084 Parry Sound Muskoka (${space.entityKind})`;
 
   it('aggregates two receipts for the same donor into one row over $200', async () => {
-    const first = await seedReportableReceipt({ amountCents: 15_000, qomonContactId: 198176n });
+    const first = await seedReportableReceipt({ amountCents: 15_000, contributorId: '198176' });
     await seedReportableReceipt({ amountCents: 10_000, contributionSeed: { contactId: first.contactId } });
 
     const result = await generateS2p2Report(
