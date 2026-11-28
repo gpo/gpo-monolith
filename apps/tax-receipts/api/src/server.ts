@@ -32,6 +32,7 @@ async function main(): Promise<void> {
     emailDispatch,
     emailLiveSendingAllowed: env.EMAIL_LIVE_SENDING_ALLOWED,
     publicWebUrl: env.PUBLIC_WEB_URL,
+    gitSha: env.GIT_SHA,
   });
 
   app.addHook('onClose', () => sweepQueue.stop());
