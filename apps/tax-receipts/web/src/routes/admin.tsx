@@ -1095,9 +1095,12 @@ export function AdminLayout() {
   // pasted link): land on their first section, or home if they have none.
   // Only for paths under /admin: while navigating away, the location changes
   // before this layout unmounts, and redirecting then would bounce the user
-  // back into admin.
+  // back into admin. Allow detail paths within permitted sections too.
   const inAdmin = pathname === '/admin' || pathname.startsWith('/admin/');
-  if (inAdmin && !sections.some((s) => pathname === `/admin/${s.slug}`)) {
+  if (
+    inAdmin &&
+    !sections.some((s) => pathname === `/admin/${s.slug}` || pathname.startsWith(`/admin/${s.slug}/`))
+  ) {
     const first = sections[0];
     return <Navigate to={first ? `/admin/${first.slug}` : '/'} replace />;
   }

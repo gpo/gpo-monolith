@@ -137,25 +137,32 @@ sweep by hand.
 
 ## Sweep
 
-**Admin > Sweep** lets a system administrator queue a party incremental sweep.
-Select **Queue party incremental sweep** to import changes since the last
-successful sweep in the party space. The first run imports the available
-transactions when no previous cursor exists.
-Qomon must be enabled with a key under Admin > Qomon first.
+**Admin > Sweep** lets a system administrator queue incremental or full sweeps
+for the party or any active riding with a configured Qomon key. Select
+**New sweep**, choose the mode and target, and select **Queue sweep**.
+Incremental imports changes since the last successful sweep; the first run
+imports the available transactions when no cursor exists. Full examines every
+transaction in that space. Party work requires Qomon to be enabled with a key
+under Admin > Qomon. A riding uses its own configured key.
 
-The page shows the selected run's target, mode, and status: Queued, Running,
-Succeeded, Succeeded with warnings, or Failed. A completed run shows its
-import summary and any contact warnings. A separate worker must be running
-for queued work to start.
+The accepted queued run opens on its own details page. Use **Back to sweeps**
+to return to the history table. A separate worker must be running for work to
+start. You can leave the page while it runs, and its URL reopens that run
+directly when bookmarked or refreshed.
 
-You can leave the page while work runs. Its URL includes the selected run,
-so reopening that URL or refreshing the browser reloads its status. Active
-status updates every 60 seconds and stops updating after completion.
-There is no separate Refresh button.
+History is retained indefinitely and ordered newest first, 25 runs at a time.
+Use **Older** and **Newer** to browse it, and filter by status, mode, trigger,
+or target. The riding number filter also finds history for ridings that are
+no longer configured. Queued and running rows show status, target, and start time.
+Select **Details** to open a run on its own page with the requester,
+queue/start/completion times, duration, attempt count, and complete outcome. Successful results include the import
+counts, cursor, and whether more source work remains. **Succeeded with
+warnings** includes the transaction and contact identifiers for contact-fetch
+failures. **Failed** shows a sanitized error.
 
-The button explicitly queues an incremental party sweep. API requests default
-to incremental when no mode is supplied; full sweeps remain available through
-the API. Riding sweeps still use the existing
-synchronous controls. Scheduling, retries,
-cancellation, and a browsable run history are coming in later slices.
-Avoid starting a synchronous sweep while queued work is running.
+Displayed queued and running work updates every 60 seconds. Polling stops when
+no displayed work is active. There is no separate Refresh button; refresh the
+browser normally for an immediate update.
+
+Scheduling, retries, and cancellation are coming in later slices. Avoid
+starting a synchronous sweep while queued work is running.

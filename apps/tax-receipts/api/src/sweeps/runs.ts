@@ -1,36 +1,61 @@
 import type { PgBoss, Db } from 'pg-boss';
 import type { PrismaClient, SweepRun } from '../generated/prisma/index.js';
+import {
+  CONTACT_FETCH_WARNING,
+  resolveSweepTarget,
+  type SweepTarget,
+} from '../sync/execute-target.js';
 import { queueEnvironment, SWEEP_QUEUE } from './queue.js';
 
-export class PartySweepUnavailable extends Error {
-  constructor() {
-    super('Qomon party space is disabled or has no API key configured');
-  }
+export function sweepRunTarget(
+  run: Pick<SweepRun, 'target' | 'ridingNumber'>,
+): SweepTarget {
+  if (run.target === 'party') return { kind: 'party' };
+  if (run.target === 'riding' && run.ridingNumber !== null)
+    return { kind: 'riding', ridingNumber: run.ridingNumber };
+  throw new Error('Unsupported sweep target');
 }
 
 /** Public history is application-owned, independent of pg-boss retention. */
 export function sweepRunView(run: SweepRun) {
-  return {
-    ...run,
-    target: { kind: run.target },
-  };
+  // Older worker versions stored upstream warning text. Sanitize on every read,
+  // including history predating this UI, while preserving investigative IDs.
+  let result = run.result;
+  if (
+    result &&
+    typeof result === 'object' &&
+    !Array.isArray(result) &&
+    Array.isArray(result.contactFetchFailures)
+  ) {
+    result = {
+      ...result,
+      contactFetchFailures: result.contactFetchFailures.map((failure) =>
+        failure && typeof failure === 'object' && !Array.isArray(failure)
+          ? { ...failure, message: CONTACT_FETCH_WARNING }
+          : failure,
+      ),
+    };
+  }
+  return { ...run, result, target: sweepRunTarget(run) };
 }
 
-export async function queuePartySweep(
+export async function queueSweep(
   prisma: PrismaClient,
   boss: PgBoss,
   userId: string,
-  mode: 'incremental' | 'full' = 'incremental',
+  mode: 'incremental' | 'full',
+  target: SweepTarget,
 ) {
   const { SWEEP_JOB_RETENTION_DAYS } = queueEnvironment();
   return prisma.$transaction(async (tx) => {
-    const settings = await tx.qomonSettings.findUnique({
-      where: { id: 'singleton' },
-    });
-    if (!settings?.enabled || !settings.apiKey.trim())
-      throw new PartySweepUnavailable();
+    await resolveSweepTarget(tx, target);
     const run = await tx.sweepRun.create({
-      data: { requestedByUserId: userId, mode },
+      data: {
+        requestedByUserId: userId,
+        mode,
+        target: target.kind,
+        ridingNumber: target.kind === 'riding' ? target.ridingNumber : null,
+      },
     });
     // Prisma 6 uses its native engine. Only send's parameterized SQL goes
     // through this adapter, on the exact transaction that created the run.

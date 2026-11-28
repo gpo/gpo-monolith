@@ -221,7 +221,10 @@ describe('worker-safe sweep target execution', () => {
       created: 1,
       pulled: 2,
       contactFetchFailures: [
-        { qomonContactId: 999, message: 'contact missing: [redacted]' },
+        {
+          qomonContactId: 999,
+          message: 'Qomon contact was not found; transaction skipped',
+        },
       ],
     });
     expect(JSON.stringify(result)).not.toContain('secret-key');

@@ -4,7 +4,7 @@ import {
   QomonPollChangeFeed,
   type QomonApi,
 } from '@gpo/qomon-client';
-import type { PrismaClient } from '../generated/prisma/index.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/index.js';
 import {
   DEFAULT_QOMON_API_BASE,
   type BuildQomon,
@@ -46,6 +46,64 @@ export interface ExecuteSweepTargetDeps {
   }) => QomonApi;
 }
 
+export const CONTACT_FETCH_WARNING =
+  'Qomon contact was not found; transaction skipped';
+
+/** Shared eligibility checks at queue time and execution time; credentials stay local. */
+export async function resolveSweepTarget(
+  prisma: Pick<Prisma.TransactionClient, 'riding' | 'qomonSettings'>,
+  target: SweepTarget,
+) {
+  if (target.kind === 'party') {
+    const settings = await prisma.qomonSettings.findUnique({
+      where: { id: 'singleton' },
+    });
+    if (!settings?.enabled)
+      throw new SweepTargetError(
+        'QOMON_DISABLED',
+        'Qomon is not enabled (Admin > Qomon); cannot sweep',
+      );
+    if (!settings.apiKey.trim())
+      throw new SweepTargetError(
+        'MISSING_API_KEY',
+        'Qomon is not enabled (Admin > Qomon); cannot sweep',
+      );
+    return {
+      apiKey: settings.apiKey,
+      apiBase: settings.apiBase,
+      feedKind: 'qomon-poll',
+      riding: null,
+    };
+  }
+  const { ridingNumber } = target;
+  const riding = await prisma.riding.findUnique({ where: { ridingNumber } });
+  if (!riding)
+    throw new SweepTargetError(
+      'UNKNOWN_RIDING',
+      `no riding ${ridingNumber} on file`,
+    );
+  if (!riding.active)
+    throw new SweepTargetError(
+      'INACTIVE_RIDING',
+      `riding ${ridingNumber} is inactive`,
+    );
+  if (!riding.qomonApiKey.trim())
+    throw new SweepTargetError(
+      'MISSING_API_KEY',
+      `riding ${ridingNumber} has no Qomon API key configured`,
+    );
+  const settings =
+    riding.qomonApiBase === null
+      ? await prisma.qomonSettings.findUnique({ where: { id: 'singleton' } })
+      : null;
+  return {
+    apiKey: riding.qomonApiKey,
+    apiBase: riding.qomonApiBase ?? settings?.apiBase ?? DEFAULT_QOMON_API_BASE,
+    feedKind: `qomon-poll:riding-${ridingNumber}`,
+    riding,
+  };
+}
+
 /** Resolve current target configuration and execute without an HTTP or worker lifecycle. */
 export async function executeSweepTarget(
   deps: ExecuteSweepTargetDeps,
@@ -56,8 +114,6 @@ export async function executeSweepTarget(
     deps.buildQomon ??
     ((config) =>
       new QomonClient({ apiKey: config.apiKey, baseUrl: config.apiBase }));
-  // Retain keys only inside this boundary, including for warning redaction.
-  const secrets: string[] = [];
   try {
     let qomon: QomonApi;
     let feedKind = 'qomon-poll';
@@ -70,58 +126,13 @@ export async function executeSweepTarget(
         );
       }
       qomon = client;
-    } else if (input.target.kind === 'party') {
-      const settings = await prisma.qomonSettings.findUnique({
-        where: { id: 'singleton' },
-      });
-      if (!settings?.enabled) {
-        throw new SweepTargetError(
-          'QOMON_DISABLED',
-          'Qomon is not enabled (Admin > Qomon); cannot sweep',
-        );
-      }
-      if (!settings.apiKey.trim()) {
-        throw new SweepTargetError(
-          'MISSING_API_KEY',
-          'Qomon is not enabled (Admin > Qomon); cannot sweep',
-        );
-      }
-      secrets.push(settings.apiKey);
-      qomon = build({ apiKey: settings.apiKey, apiBase: settings.apiBase });
     } else {
-      const { ridingNumber } = input.target;
-      const riding = await prisma.riding.findUnique({
-        where: { ridingNumber },
-      });
-      if (!riding)
-        throw new SweepTargetError(
-          'UNKNOWN_RIDING',
-          `no riding ${ridingNumber} on file`,
-        );
-      if (!riding.active)
-        throw new SweepTargetError(
-          'INACTIVE_RIDING',
-          `riding ${ridingNumber} is inactive`,
-        );
-      if (!riding.qomonApiKey.trim()) {
-        throw new SweepTargetError(
-          'MISSING_API_KEY',
-          `riding ${ridingNumber} has no Qomon API key configured`,
-        );
-      }
-      secrets.push(riding.qomonApiKey);
-      const settings =
-        riding.qomonApiBase === null
-          ? await prisma.qomonSettings.findUnique({
-              where: { id: 'singleton' },
-            })
-          : null;
-      const apiBase =
-        riding.qomonApiBase ?? settings?.apiBase ?? DEFAULT_QOMON_API_BASE;
-      qomon = deps.buildRidingQomon
-        ? deps.buildRidingQomon(riding)
-        : build({ apiKey: riding.qomonApiKey, apiBase });
-      feedKind = `qomon-poll:riding-${ridingNumber}`;
+      const config = await resolveSweepTarget(prisma, input.target);
+      qomon =
+        config.riding && deps.buildRidingQomon
+          ? deps.buildRidingQomon(config.riding)
+          : build({ apiKey: config.apiKey, apiBase: config.apiBase });
+      feedKind = config.feedKind;
     }
     const result = await runPagedMirrorSweep(
       {
@@ -135,10 +146,7 @@ export async function executeSweepTarget(
       ...result,
       contactFetchFailures: result.contactFetchFailures.map((failure) => ({
         ...failure,
-        message: secrets.reduce(
-          (message, secret) => message.split(secret).join('[redacted]'),
-          failure.message,
-        ),
+        message: CONTACT_FETCH_WARNING,
       })),
     };
   } catch (error) {

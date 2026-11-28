@@ -1057,25 +1057,40 @@ export interface SentRtdFiling {
   submittedAt: string;
 }
 
+export type SweepTarget = { kind: 'party' } | { kind: 'riding'; ridingNumber: number };
+export interface SweepHistoryFilters {
+  status?: SweepRun['status'];
+  mode?: SweepRun['mode'];
+  triggerSource?: SweepRun['triggerSource'];
+  target?: string;
+  cursor?: string;
+}
+
 export interface SweepRun {
   id: string;
-  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'SUCCEEDED_WITH_WARNINGS' | 'FAILED';
-  target: { kind: 'party' };
+  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'SUCCEEDED_WITH_WARNINGS' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
+  target: SweepTarget;
+  attemptCount: number;
+  durationMs: number | null;
   mode: 'incremental' | 'full';
-  triggerSource: 'MANUAL';
+  triggerSource: 'MANUAL' | 'SCHEDULED';
   requestedByUserId: string;
   createdAt: string;
   queuedAt: string;
   startedAt: string | null;
   completedAt: string | null;
-  result: SweepResult | null;
+  result: (SweepResult & { cursor: { since?: string; [key: string]: unknown } }) | null;
   error: string | null;
 }
 
 export const api = {
-  queuePartySweep: () => request<SweepRun>('/admin/sweeps', {
-    method: 'POST', body: JSON.stringify({ target: { kind: 'party' }, mode: 'incremental' }),
+  queueSweep: (input: { target: SweepTarget; mode: SweepRun['mode'] }) => request<SweepRun>('/admin/sweeps', {
+    method: 'POST', body: JSON.stringify(input),
   }),
+  sweepHistory: (filters: SweepHistoryFilters) => {
+    const query = new URLSearchParams(Object.entries(filters).filter((entry): entry is [string, string] => !!entry[1]));
+    return request<{ data: SweepRun[]; nextCursor: string | null }>(`/admin/sweeps?${query}`);
+  },
   sweepRun: (id: string) => request<SweepRun>(`/admin/sweeps/${encodeURIComponent(id)}`),
   health: () => request<Health>('/health'),
   me: () => request<Me>('/auth/me'),

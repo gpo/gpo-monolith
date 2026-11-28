@@ -1120,6 +1120,8 @@ enum SweepRunStatus {
   SUCCEEDED
   SUCCEEDED_WITH_WARNINGS
   FAILED
+  CANCELLED
+  SKIPPED
 }
 
 model SweepRun {
@@ -1127,6 +1129,9 @@ model SweepRun {
   status            SweepRunStatus @default(QUEUED)
   mode              String         @default("incremental")
   target            String         @default("party")
+  ridingNumber      Int?
+  attemptCount      Int            @default(0)
+  durationMs        Int?
   triggerSource     String         @default("MANUAL")
   requestedByUserId  String
   requestedBy       User           @relation(fields: [requestedByUserId], references: [id])
